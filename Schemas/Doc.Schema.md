@@ -155,6 +155,23 @@ Quick summary: This is the minimal markdown document schema for this repository.
 | Required | `no` |
 | Rule | Repo-relative paths to directly related documents. |
 
+## canonical_section_order
+
+| Order | Section ID | Requirement |
+| --- | --- | --- |
+| 1 | `doc_type` | required |
+| 2 | `file_name` | required |
+| 3 | `topic_key` | conditional |
+| 4 | `phase_key` | conditional |
+| 5 | `title` | required |
+| 6 | `status` | conditional |
+| 7 | `summary` | conditional |
+| 8 | `section_menu` | required |
+| 9 | `sections` | required |
+| 10 | `change_log` | conditional |
+| 11 | `verification` | conditional |
+| 12 | `status_normalization` | conditional |
+
 ## workflow_lifecycle_roles
 | Artifact | Lifecycle Role |
 | --- | --- |

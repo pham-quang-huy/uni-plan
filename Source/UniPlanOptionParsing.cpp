@@ -316,8 +316,8 @@ EvidenceOptions ParseEvidenceOptions(const std::vector<std::string> &InTokens,
   return Options;
 }
 
-SchemeOptions ParseSchemeOptions(const std::vector<std::string> &InTokens) {
-  SchemeOptions Options;
+SchemaOptions ParseSchemaOptions(const std::vector<std::string> &InTokens) {
+  SchemaOptions Options;
   const std::vector<std::string> Remaining =
       ConsumeCommonOptions(InTokens, Options);
 
@@ -327,7 +327,7 @@ SchemeOptions ParseSchemeOptions(const std::vector<std::string> &InTokens) {
       Options.mType = ToLower(ConsumeValuedOption(Remaining, Index, "--type"));
       continue;
     }
-    throw UsageError("Unknown option for scheme: " + Token);
+    throw UsageError("Unknown option for schema: " + Token);
   }
 
   if (!IsSupportedSchemaType(Options.mType)) {

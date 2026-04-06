@@ -232,17 +232,17 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  uni-plan verification --topic DOC-TOOL-CLI-SCHEMA --for plan\n"
      "  uni-plan verification --topic DOC-TOOL-CLI-SCHEMA --for playbook "
      "--phase P8\n"},
-    {"scheme",
-     "Usage: uni-plan scheme --type <doc|plan|playbook|implementation> "
+    {"schema",
+     "Usage: uni-plan schema --type <doc|plan|playbook|implementation> "
      "[options]\n\n",
      "Show the expected section schema for a document type.\n\n",
      "Required:\n"
      "  --type <type>           Schema type: doc, plan, playbook\n\n",
      nullptr, kHumanList,
      "Examples:\n"
-     "  uni-plan scheme --type plan\n"
-     "  uni-plan scheme --type playbook --human\n"
-     "  uni-plan scheme --type doc\n"},
+     "  uni-plan schema --type plan\n"
+     "  uni-plan schema --type playbook --human\n"
+     "  uni-plan schema --type doc\n"},
     {"rules", "Usage: uni-plan rules [options]\n\n",
      "List documentation governance rules with provenance.\n\n", nullptr,
      nullptr, kHumanTable,
@@ -647,17 +647,9 @@ fs::path ResolveSchemaFilePath(const std::string &InType,
   return RelPath;
 }
 
-std::vector<std::string> BuildSchemaExamples(const std::string &InType) {
-  if (InType == "doc") {
-    return {"Docs/Plans/RepositoryCrossPlatformLogicParity.Plan.md",
-            "Tools/Doc/Docs/Playbooks/DocToolCliSchema.P4.Playbook.md",
-            "Tools/Doc/Docs/Implementation/DocToolCliSchema.Impl.md"};
-  }
-  if (InType == "playbook") {
-    return {"Tools/Doc/Docs/Playbooks/DocToolCliSchema.P13.Playbook.md"};
-  }
-
-  return {"Tools/Doc/Docs/Plans/DocToolCliSchema.Plan.md"};
+std::vector<std::string> BuildSchemaExamples(const std::string & /*InType*/) {
+  // Examples are repo-specific; return empty to avoid hardcoding paths
+  return {};
 }
 
 std::string JoinMarkdownRowCells(const std::vector<std::string> &InRow) {
@@ -1073,17 +1065,14 @@ EvaluatePlaybookSchema(const fs::path &InRepoRoot,
                        const std::vector<DocumentRecord> &InPlaybooks,
                        std::vector<std::string> &OutWarnings) {
   PlaybookSchemaResult Result;
-  static const std::vector<std::string> RequiredSectionIds = {
-      "section_menu",
-      "linked_plan",
-      "phase_binding",
-      "target_file_manifest",
-      "linked_implementation",
-      "detached_evidence_documents",
-      "execution_lanes",
-      "handoff_points",
-      "change_log",
-      "verification"};
+  const std::vector<SectionSchemaEntry> SchemaEntries =
+      BuildSectionSchemaEntries("playbook", InRepoRoot);
+  std::vector<std::string> RequiredSectionIds;
+  for (const SectionSchemaEntry &Entry : SchemaEntries) {
+    if (Entry.mbRequired) {
+      RequiredSectionIds.push_back(Entry.mSectionId);
+    }
+  }
 
   Result.mPlaybookCount = static_cast<int>(InPlaybooks.size());
   for (const DocumentRecord &Playbook : InPlaybooks) {
@@ -1131,155 +1120,17 @@ EvaluatePlaybookSchema(const fs::path &InRepoRoot,
 std::vector<SectionSchemaEntry>
 BuildSectionSchemaEntries(const std::string &InType,
                           const fs::path &InRepoRoot) {
-  // Try runtime parsing from schema file first
-  if (!InRepoRoot.empty()) {
-    const fs::path SchemaPath = ResolveSchemaFilePath(InType, InRepoRoot);
-    if (fs::exists(SchemaPath)) {
-      std::vector<SectionSchemaEntry> Parsed =
-          TryParseSectionSchemaFromFile(SchemaPath);
-      if (!Parsed.empty()) {
-        return Parsed;
-      }
+  // Resolve schema file: repo-local first, then bundled next to executable
+  const fs::path SchemaPath = ResolveSchemaFilePath(InType, InRepoRoot);
+  if (fs::exists(SchemaPath)) {
+    std::vector<SectionSchemaEntry> Parsed =
+        TryParseSectionSchemaFromFile(SchemaPath);
+    if (!Parsed.empty()) {
+      return Parsed;
     }
   }
 
-  // Hardcoded fallback
-  std::vector<SectionSchemaEntry> Entries;
-
-  if (InType == "plan") {
-    static const std::vector<std::string> CanonicalOrder = {
-        "section_menu",        "summary",
-        "problem_statement",   "baseline_audit",
-        "execution_strategy",  "risks_and_mitigations",
-        "acceptance_criteria", "validation_commands",
-        "next_actions"};
-    static const std::set<std::string> Required = {
-        "section_menu",        "summary",
-        "execution_strategy",  "risks_and_mitigations",
-        "acceptance_criteria", "next_actions"};
-    for (size_t Index = 0; Index < CanonicalOrder.size(); ++Index) {
-      SectionSchemaEntry Entry;
-      Entry.mSectionId = CanonicalOrder[Index];
-      Entry.mbRequired = Required.count(CanonicalOrder[Index]) > 0;
-      Entry.mOrder = static_cast<int>(Index) + 1;
-      Entries.push_back(std::move(Entry));
-    }
-  } else if (InType == "playbook") {
-    static const std::vector<std::string> CanonicalOrder = {
-        "section_menu",
-        "summary",
-        "linked_plan",
-        "phase_binding",
-        "investigation_baseline",
-        "phase_entry_readiness_gate",
-        "internet_best_practice_investigation",
-        "code_entity_draft_contract",
-        "code_reference_snippets",
-        "solid_coding",
-        "domain_classes",
-        "non_anti_patterns",
-        "abstract_coding",
-        "no_runtime_monolith_files",
-        "no_monolith_files",
-        "target_file_manifest",
-        "linked_implementation",
-        "detached_evidence_documents",
-        "execution_lanes",
-        "wave_lane_job_board",
-        "job_task_checklist",
-        "dependencies",
-        "validation_commands",
-        "testing",
-        "handoff_points",
-        "change_log",
-        "verification"};
-    static const std::set<std::string> Required = {
-        "section_menu",
-        "linked_plan",
-        "phase_binding",
-        "target_file_manifest",
-        "linked_implementation",
-        "detached_evidence_documents",
-        "execution_lanes",
-        "handoff_points",
-        "change_log",
-        "verification"};
-    for (size_t Index = 0; Index < CanonicalOrder.size(); ++Index) {
-      SectionSchemaEntry Entry;
-      Entry.mSectionId = CanonicalOrder[Index];
-      Entry.mbRequired = Required.count(CanonicalOrder[Index]) > 0;
-      Entry.mOrder = static_cast<int>(Index) + 1;
-      Entries.push_back(std::move(Entry));
-    }
-  } else if (InType == "implementation") {
-    static const std::vector<std::string> CanonicalOrder = {
-        "section_menu", "linked_plan",  "progress_summary", "phase_tracking",
-        "change_log",   "next_actions", "verification"};
-    static const std::set<std::string> Required = {
-        "section_menu", "linked_plan",  "progress_summary", "phase_tracking",
-        "change_log",   "next_actions", "verification"};
-    for (size_t Index = 0; Index < CanonicalOrder.size(); ++Index) {
-      SectionSchemaEntry Entry;
-      Entry.mSectionId = CanonicalOrder[Index];
-      Entry.mbRequired = Required.count(CanonicalOrder[Index]) > 0;
-      Entry.mOrder = static_cast<int>(Index) + 1;
-      Entries.push_back(std::move(Entry));
-    }
-  } else if (InType == "plan_changelog" || InType == "impl_changelog" ||
-             InType == "playbook_changelog") {
-    static const std::vector<std::string> CanonicalOrder = {
-        "section_menu", "linked_document", "entries"};
-    static const std::set<std::string> Required = {
-        "section_menu", "linked_document", "entries"};
-    for (size_t Index = 0; Index < CanonicalOrder.size(); ++Index) {
-      SectionSchemaEntry Entry;
-      Entry.mSectionId = CanonicalOrder[Index];
-      Entry.mbRequired = Required.count(CanonicalOrder[Index]) > 0;
-      Entry.mOrder = static_cast<int>(Index) + 1;
-      Entries.push_back(std::move(Entry));
-    }
-  } else if (InType == "plan_verification" || InType == "impl_verification") {
-    static const std::vector<std::string> CanonicalOrder = {
-        "section_menu", "linked_document", "verification_entries"};
-    static const std::set<std::string> Required = {
-        "section_menu", "linked_document", "verification_entries"};
-    for (size_t Index = 0; Index < CanonicalOrder.size(); ++Index) {
-      SectionSchemaEntry Entry;
-      Entry.mSectionId = CanonicalOrder[Index];
-      Entry.mbRequired = Required.count(CanonicalOrder[Index]) > 0;
-      Entry.mOrder = static_cast<int>(Index) + 1;
-      Entries.push_back(std::move(Entry));
-    }
-  } else if (InType == "playbook_verification") {
-    static const std::vector<std::string> CanonicalOrder = {
-        "section_menu", "linked_document", "verification_entries",
-        "code_delta_vs_proposal"};
-    static const std::set<std::string> Required = {
-        "section_menu", "linked_document", "verification_entries"};
-    for (size_t Index = 0; Index < CanonicalOrder.size(); ++Index) {
-      SectionSchemaEntry Entry;
-      Entry.mSectionId = CanonicalOrder[Index];
-      Entry.mbRequired = Required.count(CanonicalOrder[Index]) > 0;
-      Entry.mOrder = static_cast<int>(Index) + 1;
-      Entries.push_back(std::move(Entry));
-    }
-  } else {
-    static const std::vector<std::string> DocSections = {
-        "doc_type", "file_name",  "topic_key",    "phase_key",
-        "title",    "status",     "summary",      "section_menu",
-        "sections", "change_log", "verification", "status_normalization"};
-    static const std::set<std::string> Required = {
-        "doc_type", "file_name", "title", "status", "section_menu"};
-    for (size_t Index = 0; Index < DocSections.size(); ++Index) {
-      SectionSchemaEntry Entry;
-      Entry.mSectionId = DocSections[Index];
-      Entry.mbRequired = Required.count(DocSections[Index]) > 0;
-      Entry.mOrder = static_cast<int>(Index) + 1;
-      Entries.push_back(std::move(Entry));
-    }
-  }
-
-  return Entries;
+  return {};
 }
 
 void AppendGraphEdgeUnique(std::vector<GraphEdge> &InOutEdges,
@@ -1593,13 +1444,13 @@ int RunMain(const int InArgc, char *InArgv[]) {
                              Options.mDocClass, Entries, Warnings);
     }
 
-    if (Command == "scheme") {
+    if (Command == "schema") {
       const std::vector<std::string> Args(Tokens.begin() + 1, Tokens.end());
       if (ContainsHelpFlag(Args)) {
-        PrintCommandUsage("scheme");
+        PrintCommandUsage("schema");
         return 0;
       }
-      const SchemeOptions Options = ParseSchemeOptions(Args);
+      const SchemaOptions Options = ParseSchemaOptions(Args);
       const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
       const fs::path SchemaPath =
           ResolveSchemaFilePath(Options.mType, RepoRoot);
@@ -1613,12 +1464,12 @@ int RunMain(const int InArgc, char *InArgv[]) {
       const std::string GeneratedUtc = GetUtcNow();
       const std::string RepoRootPath = ToGenericPath(RepoRoot);
       if (Options.mbHuman) {
-        return RunSchemeHuman(Options.mType, Fields, Examples, Warnings);
+        return RunSchemaHuman(Options.mType, Fields, Examples, Warnings);
       }
       if (!Options.mbJson) {
-        return RunSchemeText(Options.mType, Fields, Examples, Warnings);
+        return RunSchemaText(Options.mType, Fields, Examples, Warnings);
       }
-      return RunSchemeJson(GeneratedUtc, RepoRootPath, Options.mType, Fields,
+      return RunSchemaJson(GeneratedUtc, RepoRootPath, Options.mType, Fields,
                            Examples, Warnings);
     }
 

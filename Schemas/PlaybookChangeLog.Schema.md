@@ -45,9 +45,9 @@ Quick summary: This schema specializes `doc_schema` for playbook changelog sidec
 | Rule | `Evidence` contains repo-relative file paths or artifact references. |
 
 ## canonical_section_order
-| Property | Value |
-| --- | --- |
-| Type | `list<string>` |
-| Required | `yes` |
-| Order | `section_menu`, `linked_document`, `entries` |
-| Rule | All three sections are required. No optional sections defined for this schema. |
+
+| Order | Section ID | Requirement |
+| --- | --- | --- |
+| 1 | `section_menu` | required |
+| 2 | `linked_document` | required |
+| 3 | `entries` | required |

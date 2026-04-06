@@ -108,7 +108,7 @@ ArtifactsOptions
 ParseArtifactsOptions(const std::vector<std::string> &InTokens);
 EvidenceOptions ParseEvidenceOptions(const std::vector<std::string> &InTokens,
                                      const std::string &InCommandName);
-SchemeOptions ParseSchemeOptions(const std::vector<std::string> &InTokens);
+SchemaOptions ParseSchemaOptions(const std::vector<std::string> &InTokens);
 RulesOptions ParseRulesOptions(const std::vector<std::string> &InTokens);
 ValidateOptions ParseValidateOptions(const std::vector<std::string> &InTokens);
 SectionResolveOptions
@@ -151,7 +151,7 @@ int RunEvidenceHuman(const std::string &InLabel, const std::string &InTopicKey,
                      const std::string &InDocClass,
                      const std::vector<EvidenceEntry> &InEntries,
                      const std::vector<std::string> &InWarnings);
-int RunSchemeHuman(const std::string &InType,
+int RunSchemaHuman(const std::string &InType,
                    const std::vector<SchemaField> &InFields,
                    const std::vector<std::string> &InExamples,
                    const std::vector<std::string> &InWarnings);
@@ -213,7 +213,7 @@ int RunInventoryJson(const InventoryResult &InResult);
 int RunOrphanCheckJson(const OrphanCheckResult &InResult);
 int RunArtifactsJson(const Inventory &InInventory,
                      const std::string &InTopicKey, const std::string &InKind);
-int RunSchemeJson(const std::string &InGeneratedUtc,
+int RunSchemaJson(const std::string &InGeneratedUtc,
                   const std::string &InRepoRoot, const std::string &InType,
                   const std::vector<SchemaField> &InFields,
                   const std::vector<std::string> &InExamples,
@@ -286,7 +286,7 @@ int RunEvidenceText(const std::string &InLabel, const std::string &InTopicKey,
                     const std::string &InDocClass,
                     const std::vector<EvidenceEntry> &InEntries,
                     const std::vector<std::string> &InWarnings);
-int RunSchemeText(const std::string &InType,
+int RunSchemaText(const std::string &InType,
                   const std::vector<SchemaField> &InFields,
                   const std::vector<std::string> &InExamples,
                   const std::vector<std::string> &InWarnings);

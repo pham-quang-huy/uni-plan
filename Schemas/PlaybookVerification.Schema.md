@@ -56,9 +56,10 @@ Quick summary: This schema specializes `doc_schema` for playbook verification si
 | Rule | The owning playbook stays forward-looking — actual post-implementation code goes here only. |
 
 ## canonical_section_order
-| Property | Value |
-| --- | --- |
-| Type | `list<string>` |
-| Required | `yes` |
-| Order | `section_menu`, `linked_document`, `verification_entries`, `code_delta_vs_proposal` |
-| Rule | First three sections are required. `code_delta_vs_proposal` is conditional per trigger rule above. |
+
+| Order | Section ID | Requirement |
+| --- | --- | --- |
+| 1 | `section_menu` | required |
+| 2 | `linked_document` | required |
+| 3 | `verification_entries` | required |
+| 4 | `code_delta_vs_proposal` | conditional (required when playbook has code_reference_snippets and phase is completed) |

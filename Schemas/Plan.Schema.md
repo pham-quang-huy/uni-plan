@@ -160,9 +160,15 @@ Quick summary: This schema specializes `doc_schema` for plan documents named `<T
 | Rule | Repo-relative path when verification evidence is detached. |
 
 ## canonical_section_order
-| Property | Value |
-| --- | --- |
-| Type | `list<string>` |
-| Required | `yes` |
-| Order | `section_menu`, `summary`, `problem_statement`, `baseline_audit`, `execution_strategy`, `risks_and_mitigations`, `acceptance_criteria`, `validation_commands`, `next_actions` |
-| Rule | Canonical plans must keep this order. |
+
+| Order | Section ID | Requirement |
+| --- | --- | --- |
+| 1 | `section_menu` | required |
+| 2 | `summary` | required |
+| 3 | `problem_statement` | conditional (required when plan needs explicit scope framing) |
+| 4 | `baseline_audit` | conditional (required when plan depends on repository baselines) |
+| 5 | `execution_strategy` | required |
+| 6 | `risks_and_mitigations` | required |
+| 7 | `acceptance_criteria` | required |
+| 8 | `validation_commands` | conditional (required when executable verification commands exist) |
+| 9 | `next_actions` | required |

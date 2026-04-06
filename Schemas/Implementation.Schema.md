@@ -99,12 +99,16 @@ Quick summary: This schema specializes `doc_schema` for implementation tracker d
 | Rule | Do not use plan-style aliases such as `validation_commands`, `validation_matrix`, or `validation_plan_and_checklist`. |
 
 ## canonical_section_order
-| Property | Value |
-| --- | --- |
-| Type | `list<string>` |
-| Required | `yes` |
-| Order | `section_menu`, `linked_plan`, `progress_summary`, `phase_tracking`, `change_log`, `next_actions`, `verification` |
-| Rule | Canonical implementation trackers must keep this order. |
+
+| Order | Section ID | Requirement |
+| --- | --- | --- |
+| 1 | `section_menu` | required |
+| 2 | `linked_plan` | required |
+| 3 | `progress_summary` | required |
+| 4 | `phase_tracking` | required |
+| 5 | `change_log` | required |
+| 6 | `next_actions` | required |
+| 7 | `verification` | required |
 
 ## extension_section_policy
 | Rule | Guidance |

@@ -46,9 +46,9 @@ Quick summary: This schema specializes `doc_schema` for plan verification sideca
 | Rule | `Result` contains pass/fail outcome with narrative evidence. |
 
 ## canonical_section_order
-| Property | Value |
-| --- | --- |
-| Type | `list<string>` |
-| Required | `yes` |
-| Order | `section_menu`, `linked_document`, `verification_entries` |
-| Rule | All three sections are required. No optional sections defined for this schema. |
+
+| Order | Section ID | Requirement |
+| --- | --- | --- |
+| 1 | `section_menu` | required |
+| 2 | `linked_document` | required |
+| 3 | `verification_entries` | required |
