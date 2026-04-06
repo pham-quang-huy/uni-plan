@@ -9,13 +9,14 @@
 
 namespace fs = std::filesystem;
 
-namespace UniPlan {
+namespace UniPlan
+{
 
 // ---------------------------------------------------------------------------
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "2.3.0";
+static constexpr const char *kCliVersion = "2.4.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -94,570 +95,660 @@ using IniData = std::map<std::string, std::map<std::string, std::string>>;
 // Enum classes
 // ---------------------------------------------------------------------------
 
-enum class EDocumentKind { Plan, Playbook, Implementation };
+enum class EDocumentKind
+{
+    Plan,
+    Playbook,
+    Implementation
+};
 
 // ---------------------------------------------------------------------------
 // Core domain structs
 // ---------------------------------------------------------------------------
 
-struct DocConfig {
-  std::string mCacheDir;       // [cache] dir — empty means use built-in default
-  bool mbCacheEnabled = true;  // [cache] enabled — global toggle
-  bool mbCacheVerbose = false; // [cache] verbose — print hit/miss to stderr
+struct DocConfig
+{
+    std::string mCacheDir; // [cache] dir — empty means use built-in default
+    bool mbCacheEnabled = true;  // [cache] enabled — global toggle
+    bool mbCacheVerbose = false; // [cache] verbose — print hit/miss to stderr
 };
 
-struct DocumentRecord {
-  EDocumentKind mKind = EDocumentKind::Plan;
-  std::string mTopicKey;
-  std::string mPhaseKey;
-  std::string mStatusRaw;
-  std::string mStatus;
-  std::string mPath;
+struct DocumentRecord
+{
+    EDocumentKind mKind = EDocumentKind::Plan;
+    std::string mTopicKey;
+    std::string mPhaseKey;
+    std::string mStatusRaw;
+    std::string mStatus;
+    std::string mPath;
 };
 
-struct SidecarRecord {
-  std::string mTopicKey;
-  std::string mPhaseKey;
-  std::string mOwnerKind;
-  std::string mDocKind;
-  std::string mPath;
+struct SidecarRecord
+{
+    std::string mTopicKey;
+    std::string mPhaseKey;
+    std::string mOwnerKind;
+    std::string mDocKind;
+    std::string mPath;
 };
 
-struct TopicPairRecord {
-  std::string mTopicKey;
-  std::string mPlanPath;
-  std::string mPlanStatus;
-  std::string mImplementationPath;
-  std::string mImplementationStatus;
-  std::string mOverallStatus;
-  std::vector<DocumentRecord> mPlaybooks;
-  std::string mPairState;
+struct TopicPairRecord
+{
+    std::string mTopicKey;
+    std::string mPlanPath;
+    std::string mPlanStatus;
+    std::string mImplementationPath;
+    std::string mImplementationStatus;
+    std::string mOverallStatus;
+    std::vector<DocumentRecord> mPlaybooks;
+    std::string mPairState;
 };
 
-struct Inventory {
-  std::string mGeneratedUtc;
-  std::string mRepoRoot;
-  std::vector<DocumentRecord> mPlans;
-  std::vector<DocumentRecord> mPlaybooks;
-  std::vector<DocumentRecord> mImplementations;
-  std::vector<SidecarRecord> mSidecars;
-  std::vector<TopicPairRecord> mPairs;
-  std::vector<std::string> mWarnings;
+struct Inventory
+{
+    std::string mGeneratedUtc;
+    std::string mRepoRoot;
+    std::vector<DocumentRecord> mPlans;
+    std::vector<DocumentRecord> mPlaybooks;
+    std::vector<DocumentRecord> mImplementations;
+    std::vector<SidecarRecord> mSidecars;
+    std::vector<TopicPairRecord> mPairs;
+    std::vector<std::string> mWarnings;
 };
 
-struct MarkdownSignatureEntry {
-  std::string mPath;
-  uint64_t mWriteTime = 0;
-  uint64_t mFileSize = 0;
+struct MarkdownSignatureEntry
+{
+    std::string mPath;
+    uint64_t mWriteTime = 0;
+    uint64_t mFileSize = 0;
 };
 
 // ---------------------------------------------------------------------------
 // CLI options structs
 // ---------------------------------------------------------------------------
 
-struct BaseOptions {
-  std::string mRepoRoot;
-  bool mbJson = true;
-  bool mbHuman = false;
+struct BaseOptions
+{
+    std::string mRepoRoot;
+    bool mbJson = true;
+    bool mbHuman = false;
 };
 
-struct ListOptions : BaseOptions {
-  std::string mKind;
-  std::string mStatus = "all";
+struct ListOptions : BaseOptions
+{
+    std::string mKind;
+    std::string mStatus = "all";
 };
 
-struct LintOptions : BaseOptions {
-  bool mbFailOnWarning = false;
+struct LintOptions : BaseOptions
+{
+    bool mbFailOnWarning = false;
 };
 
-struct InventoryOptions : BaseOptions {};
-
-struct OrphanCheckOptions : BaseOptions {};
-
-struct ArtifactsOptions : BaseOptions {
-  std::string mTopic;
-  std::string mKind = "all";
+struct InventoryOptions : BaseOptions
+{
 };
 
-struct PhaseOptions : BaseOptions {
-  std::string mTopic;
-  std::string mStatus = "all";
+struct OrphanCheckOptions : BaseOptions
+{
 };
 
-struct EvidenceOptions : BaseOptions {
-  std::string mTopic;
-  std::string mDocClass;
-  std::string mPhaseKey;
+struct ArtifactsOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mKind = "all";
 };
 
-struct SchemaOptions : BaseOptions {
-  std::string mType;
+struct PhaseOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mStatus = "all";
 };
 
-struct RulesOptions : BaseOptions {};
-
-struct ValidateOptions : BaseOptions {
-  bool mbStrict = false;
+struct EvidenceOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mDocClass;
+    std::string mPhaseKey;
 };
 
-struct SectionResolveOptions : BaseOptions {
-  std::string mDocPath;
-  std::string mSection;
+struct SchemaOptions : BaseOptions
+{
+    std::string mType;
 };
 
-struct SectionSchemaOptions : BaseOptions {
-  std::string mType = "doc";
+struct RulesOptions : BaseOptions
+{
 };
 
-struct SectionListOptions : BaseOptions {
-  std::string mDocPath;
-  bool mbCount = false;
+struct ValidateOptions : BaseOptions
+{
+    bool mbStrict = false;
 };
 
-struct SectionContentOptions : BaseOptions {
-  std::string mDocPath;
-  std::string mSection;
-  int mLineCharLimit = 0;
+struct SectionResolveOptions : BaseOptions
+{
+    std::string mDocPath;
+    std::string mSection;
 };
 
-struct ExcerptOptions : BaseOptions {
-  std::string mDocPath;
-  std::string mSection;
-  int mContextLines = 2;
+struct SectionSchemaOptions : BaseOptions
+{
+    std::string mType = "doc";
 };
 
-struct TableListOptions : BaseOptions {
-  std::string mDocPath;
+struct SectionListOptions : BaseOptions
+{
+    std::string mDocPath;
+    bool mbCount = false;
 };
 
-struct TableGetOptions : BaseOptions {
-  std::string mDocPath;
-  int mTableId = 0;
+struct SectionContentOptions : BaseOptions
+{
+    std::string mDocPath;
+    std::string mSection;
+    int mLineCharLimit = 0;
 };
 
-struct GraphOptions : BaseOptions {
-  std::string mTopic;
-  int mDepth = 2;
+struct ExcerptOptions : BaseOptions
+{
+    std::string mDocPath;
+    std::string mSection;
+    int mContextLines = 2;
 };
 
-struct DiagnoseDriftOptions : BaseOptions {};
-
-struct TimelineOptions : BaseOptions {
-  std::string mTopic;
-  std::string mSince;
+struct TableListOptions : BaseOptions
+{
+    std::string mDocPath;
 };
 
-struct BlockersOptions : BaseOptions {
-  std::string mStatus = "open";
+struct TableGetOptions : BaseOptions
+{
+    std::string mDocPath;
+    int mTableId = 0;
 };
 
-struct CacheInfoOptions : BaseOptions {};
+struct GraphOptions : BaseOptions
+{
+    std::string mTopic;
+    int mDepth = 2;
+};
 
-struct CacheClearOptions : BaseOptions {};
+struct DiagnoseDriftOptions : BaseOptions
+{
+};
 
-struct CacheConfigOptions : BaseOptions {
-  std::string mDir;
-  bool mbDirSet = false;
-  std::string mEnabled;
-  std::string mVerbose;
+struct TimelineOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mSince;
+};
+
+struct BlockersOptions : BaseOptions
+{
+    std::string mStatus = "open";
+};
+
+struct CacheInfoOptions : BaseOptions
+{
+};
+
+struct CacheClearOptions : BaseOptions
+{
+};
+
+struct CacheConfigOptions : BaseOptions
+{
+    std::string mDir;
+    bool mbDirSet = false;
+    std::string mEnabled;
+    std::string mVerbose;
 };
 
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
 
-struct UsageError : public std::runtime_error {
-  using std::runtime_error::runtime_error;
+struct UsageError : public std::runtime_error
+{
+    using std::runtime_error::runtime_error;
 };
 
 // ---------------------------------------------------------------------------
 // Result and data structs
 // ---------------------------------------------------------------------------
 
-struct StatusCounters {
-  int mNotStarted = 0;
-  int mInProgress = 0;
-  int mCompleted = 0;
-  int mClosed = 0;
-  int mBlocked = 0;
-  int mCanceled = 0;
-  std::string mFirstRaw;
+struct StatusCounters
+{
+    int mNotStarted = 0;
+    int mInProgress = 0;
+    int mCompleted = 0;
+    int mClosed = 0;
+    int mBlocked = 0;
+    int mCanceled = 0;
+    std::string mFirstRaw;
 };
 
-struct StatusInference {
-  std::string mRaw;
-  std::string mNormalized = "unknown";
+struct StatusInference
+{
+    std::string mRaw;
+    std::string mNormalized = "unknown";
 };
 
-struct MarkdownDocument {
-  fs::path mAbsolutePath;
-  std::string mRelativePath;
+struct MarkdownDocument
+{
+    fs::path mAbsolutePath;
+    std::string mRelativePath;
 };
 
-struct FBaseResult {
-  std::string mGeneratedUtc;
-  std::string mRepoRoot;
-  std::vector<std::string> mWarnings;
+struct FBaseResult
+{
+    std::string mGeneratedUtc;
+    std::string mRepoRoot;
+    std::vector<std::string> mWarnings;
 };
 
-struct LintResult : FBaseResult {
-  int mWarningCount = 0;
-  int mNamePatternWarningCount = 0;
-  int mMissingH1WarningCount = 0;
+struct LintResult : FBaseResult
+{
+    int mWarningCount = 0;
+    int mNamePatternWarningCount = 0;
+    int mMissingH1WarningCount = 0;
 };
 
-struct InventoryItem {
-  std::string mPath;
-  int mLineCount = 0;
-  std::string mLastCommit;
+struct InventoryItem
+{
+    std::string mPath;
+    int mLineCount = 0;
+    std::string mLastCommit;
 };
 
-struct InventoryResult : FBaseResult {
-  std::vector<InventoryItem> mItems;
+struct InventoryResult : FBaseResult
+{
+    std::vector<InventoryItem> mItems;
 };
 
-struct OrphanCheckResult : FBaseResult {
-  std::vector<std::string> mOrphans;
-  std::vector<std::string> mIgnoredRoots;
+struct OrphanCheckResult : FBaseResult
+{
+    std::vector<std::string> mOrphans;
+    std::vector<std::string> mIgnoredRoots;
 };
 
-struct CacheInfoResult {
-  std::string mGeneratedUtc;
-  std::string mCacheDir;
-  std::string mConfigCacheDir;
-  std::string mIniPath;
-  bool mbCacheEnabled = true;
-  bool mbCacheVerbose = false;
-  bool mbCacheExists = false;
-  uint64_t mCacheSizeBytes = 0;
-  int mCacheEntryCount = 0;
-  std::string mCurrentRepoCachePath;
-  bool mbCurrentRepoCacheExists = false;
-  std::vector<std::string> mWarnings;
+struct CacheInfoResult
+{
+    std::string mGeneratedUtc;
+    std::string mCacheDir;
+    std::string mConfigCacheDir;
+    std::string mIniPath;
+    bool mbCacheEnabled = true;
+    bool mbCacheVerbose = false;
+    bool mbCacheExists = false;
+    uint64_t mCacheSizeBytes = 0;
+    int mCacheEntryCount = 0;
+    std::string mCurrentRepoCachePath;
+    bool mbCurrentRepoCacheExists = false;
+    std::vector<std::string> mWarnings;
 };
 
-struct CacheClearResult {
-  std::string mGeneratedUtc;
-  std::string mCacheDir;
-  int mEntriesRemoved = 0;
-  uint64_t mBytesFreed = 0;
-  bool mbSuccess = true;
-  std::string mError;
-  std::vector<std::string> mWarnings;
+struct CacheClearResult
+{
+    std::string mGeneratedUtc;
+    std::string mCacheDir;
+    int mEntriesRemoved = 0;
+    uint64_t mBytesFreed = 0;
+    bool mbSuccess = true;
+    std::string mError;
+    std::vector<std::string> mWarnings;
 };
 
-struct CacheConfigResult {
-  std::string mGeneratedUtc;
-  std::string mIniPath;
-  bool mbSuccess = true;
-  std::string mError;
-  std::string mDir;
-  bool mbEnabled = true;
-  bool mbVerbose = false;
-  std::vector<std::string> mWarnings;
+struct CacheConfigResult
+{
+    std::string mGeneratedUtc;
+    std::string mIniPath;
+    bool mbSuccess = true;
+    std::string mError;
+    std::string mDir;
+    bool mbEnabled = true;
+    bool mbVerbose = false;
+    std::vector<std::string> mWarnings;
 };
 
-struct HeadingRecord {
-  int mLine = 0;
-  int mLevel = 0;
-  std::string mText;
-  std::string mSectionId;
+struct HeadingRecord
+{
+    int mLine = 0;
+    int mLevel = 0;
+    std::string mText;
+    std::string mSectionId;
 };
 
-struct MarkdownTableRecord {
-  int mTableId = 0;
-  int mStartLine = 0;
-  int mEndLine = 0;
-  std::string mSectionId;
-  std::string mSectionHeading;
-  std::vector<std::string> mHeaders;
-  std::vector<std::vector<std::string>> mRows;
+struct MarkdownTableRecord
+{
+    int mTableId = 0;
+    int mStartLine = 0;
+    int mEndLine = 0;
+    std::string mSectionId;
+    std::string mSectionHeading;
+    std::vector<std::string> mHeaders;
+    std::vector<std::vector<std::string>> mRows;
 };
 
-struct SectionResolution {
-  bool mbFound = false;
-  std::string mSectionQuery;
-  std::string mSectionId;
-  std::string mSectionHeading;
-  int mLevel = 0;
-  int mStartLine = 0;
-  int mEndLine = 0;
+struct SectionResolution
+{
+    bool mbFound = false;
+    std::string mSectionQuery;
+    std::string mSectionId;
+    std::string mSectionHeading;
+    int mLevel = 0;
+    int mStartLine = 0;
+    int mEndLine = 0;
 };
 
-struct EvidenceEntry {
-  std::string mSourcePath;
-  std::string mPhaseKey;
-  int mTableId = 0;
-  int mRowIndex = 0;
-  std::vector<std::pair<std::string, std::string>> mFields;
+struct EvidenceEntry
+{
+    std::string mSourcePath;
+    std::string mPhaseKey;
+    int mTableId = 0;
+    int mRowIndex = 0;
+    std::vector<std::pair<std::string, std::string>> mFields;
 };
 
-struct RuleEntry {
-  std::string mId;
-  std::string mDescription;
-  std::string mSource;
-  std::string mSourcePath;
-  std::string mSourceSectionId;
-  int mSourceTableId = 0;
-  int mSourceRowIndex = 0;
-  std::string mSourceEvidence;
-  bool mbSourceResolved = false;
+struct RuleEntry
+{
+    std::string mId;
+    std::string mDescription;
+    std::string mSource;
+    std::string mSourcePath;
+    std::string mSourceSectionId;
+    int mSourceTableId = 0;
+    int mSourceRowIndex = 0;
+    std::string mSourceEvidence;
+    bool mbSourceResolved = false;
 };
 
-struct RuleProvenanceProbe {
-  std::string mPath;
-  std::string mSectionId;
-  std::vector<std::string> mRowTerms;
+struct RuleProvenanceProbe
+{
+    std::string mPath;
+    std::string mSectionId;
+    std::vector<std::string> mRowTerms;
 };
 
-struct SchemaField {
-  std::string mSectionId;
-  std::string mProperty;
-  std::string mValue;
+struct SchemaField
+{
+    std::string mSectionId;
+    std::string mProperty;
+    std::string mValue;
 };
 
-struct ValidateCheck {
-  std::string mId;
-  bool mbOk = true;
-  bool mbCritical = false;
-  std::string mDetail;
-  std::string mRuleId;
-  std::vector<std::string> mDiagnostics;
+struct ValidateCheck
+{
+    std::string mId;
+    bool mbOk = true;
+    bool mbCritical = false;
+    std::string mDetail;
+    std::string mRuleId;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct GraphNode {
-  std::string mId;
-  std::string mType;
-  std::string mPath;
-  std::string mTopicKey;
-  std::string mPhaseKey;
-  std::string mOwnerKind;
-  std::string mDocKind;
+struct GraphNode
+{
+    std::string mId;
+    std::string mType;
+    std::string mPath;
+    std::string mTopicKey;
+    std::string mPhaseKey;
+    std::string mOwnerKind;
+    std::string mDocKind;
 };
 
-struct GraphEdge {
-  std::string mFromNodeId;
-  std::string mToNodeId;
-  std::string mKind;
-  int mDepth = 0;
+struct GraphEdge
+{
+    std::string mFromNodeId;
+    std::string mToNodeId;
+    std::string mKind;
+    int mDepth = 0;
 };
 
-struct DriftItem {
-  std::string mId;
-  std::string mSeverity;
-  std::string mTopicKey;
-  std::string mPath;
-  std::string mMessage;
+struct DriftItem
+{
+    std::string mId;
+    std::string mSeverity;
+    std::string mTopicKey;
+    std::string mPath;
+    std::string mMessage;
 };
 
-struct TimelineItem {
-  std::string mDate;
-  std::string mDocClass;
-  std::string mPhaseKey;
-  std::string mSourcePath;
-  std::string mUpdate;
-  std::string mEvidence;
+struct TimelineItem
+{
+    std::string mDate;
+    std::string mDocClass;
+    std::string mPhaseKey;
+    std::string mSourcePath;
+    std::string mUpdate;
+    std::string mEvidence;
 };
 
-struct BlockerItem {
-  std::string mTopicKey;
-  std::string mSourcePath;
-  std::string mKind;
-  std::string mStatus;
-  std::string mPhaseKey;
-  std::string mPriority;
-  std::string mAction;
-  std::string mOwner;
-  std::string mNotes;
+struct BlockerItem
+{
+    std::string mTopicKey;
+    std::string mSourcePath;
+    std::string mKind;
+    std::string mStatus;
+    std::string mPhaseKey;
+    std::string mPriority;
+    std::string mAction;
+    std::string mOwner;
+    std::string mNotes;
 };
 
-struct PhaseItem {
-  std::string mPhaseKey;
-  std::string mStatusRaw;
-  std::string mStatus;
-  std::string mPlaybookPath;
-  std::string mDescription;
-  std::string mNextAction;
-  int mTableId = 0;
-  int mRowIndex = 0;
-  std::vector<std::pair<std::string, std::string>> mFields;
+struct PhaseItem
+{
+    std::string mPhaseKey;
+    std::string mStatusRaw;
+    std::string mStatus;
+    std::string mPlaybookPath;
+    std::string mDescription;
+    std::string mNextAction;
+    int mTableId = 0;
+    int mRowIndex = 0;
+    std::vector<std::pair<std::string, std::string>> mFields;
 };
 
-struct PhaseListAllEntry {
-  std::string mTopicKey;
-  std::string mPlanPath;
-  std::string mPlanStatus;
-  std::vector<PhaseItem> mPhases;
+struct PhaseListAllEntry
+{
+    std::string mTopicKey;
+    std::string mPlanPath;
+    std::string mPlanStatus;
+    std::vector<PhaseItem> mPhases;
 };
 
-struct FCommandHelpEntry {
-  const char *mName;
-  const char *mUsageLine;
-  const char *mDescription;
-  const char *mRequiredOptions;
-  const char *mSpecificOptions;
-  const char *mHumanLabel;
-  const char *mExamples;
+struct FCommandHelpEntry
+{
+    const char *mName;
+    const char *mUsageLine;
+    const char *mDescription;
+    const char *mRequiredOptions;
+    const char *mSpecificOptions;
+    const char *mHumanLabel;
+    const char *mExamples;
 };
 
 // ---------------------------------------------------------------------------
 // Validation result structs
 // ---------------------------------------------------------------------------
 
-struct ActivePhaseRecord {
-  std::string mTopicKey;
-  std::string mPlanPath;
-  std::string mPhaseKey;
-  std::string mStatusRaw;
-  std::string mStatus;
+struct ActivePhaseRecord
+{
+    std::string mTopicKey;
+    std::string mPlanPath;
+    std::string mPhaseKey;
+    std::string mStatusRaw;
+    std::string mStatus;
 };
 
-struct PhaseEntryGateResult {
-  int mActivePhaseCount = 0;
-  int mMissingPlaybookCount = 0;
-  int mUnpreparedPlaybookCount = 0;
+struct PhaseEntryGateResult
+{
+    int mActivePhaseCount = 0;
+    int mMissingPlaybookCount = 0;
+    int mUnpreparedPlaybookCount = 0;
 };
 
-struct ArtifactRoleBoundaryResult {
-  int mPlaybookViolationCount = 0;
-  int mImplementationViolationCount = 0;
+struct ArtifactRoleBoundaryResult
+{
+    int mPlaybookViolationCount = 0;
+    int mImplementationViolationCount = 0;
 };
 
-struct PlanSchemaValidationResult {
-  int mPlanCount = 0;
-  int mReadFailureCount = 0;
-  int mMissingRequiredPlanCount = 0;
-  int mOrderDriftPlanCount = 0;
-  int mLiteralMismatchPlanCount = 0;
-  int mHeadingCheckedCount = 0;
-  int mHeadingNonCompliantCount = 0;
-  int mHeadingIndexedPrefixCount = 0;
-  int mHeadingNamingDriftPlanCount = 0;
-  int mHeadingIndexedPrefixPlanCount = 0;
-  std::vector<std::string> mMissingRequiredDiagnostics;
-  std::vector<std::string> mOrderDriftDiagnostics;
-  std::vector<std::string> mLiteralMismatchDiagnostics;
-  std::vector<std::string> mHeadingNamingDiagnostics;
-  std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
+struct PlanSchemaValidationResult
+{
+    int mPlanCount = 0;
+    int mReadFailureCount = 0;
+    int mMissingRequiredPlanCount = 0;
+    int mOrderDriftPlanCount = 0;
+    int mLiteralMismatchPlanCount = 0;
+    int mHeadingCheckedCount = 0;
+    int mHeadingNonCompliantCount = 0;
+    int mHeadingIndexedPrefixCount = 0;
+    int mHeadingNamingDriftPlanCount = 0;
+    int mHeadingIndexedPrefixPlanCount = 0;
+    std::vector<std::string> mMissingRequiredDiagnostics;
+    std::vector<std::string> mOrderDriftDiagnostics;
+    std::vector<std::string> mLiteralMismatchDiagnostics;
+    std::vector<std::string> mHeadingNamingDiagnostics;
+    std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
 };
 
-struct BlankSectionsResult {
-  int mPlanCount = 0;
-  int mReadFailureCount = 0;
-  int mBlankSectionPlanCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct BlankSectionsResult
+{
+    int mPlanCount = 0;
+    int mReadFailureCount = 0;
+    int mBlankSectionPlanCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct CrossStatusResult {
-  int mTopicCount = 0;
-  int mMismatchCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct CrossStatusResult
+{
+    int mTopicCount = 0;
+    int mMismatchCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct PlaybookSchemaResult {
-  int mPlaybookCount = 0;
-  int mReadFailureCount = 0;
-  int mMissingSectionPlaybookCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct PlaybookSchemaResult
+{
+    int mPlaybookCount = 0;
+    int mReadFailureCount = 0;
+    int mMissingSectionPlaybookCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct LinkIntegrityResult {
-  int mDocCount = 0;
-  int mBrokenLinkCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct LinkIntegrityResult
+{
+    int mDocCount = 0;
+    int mBrokenLinkCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct TaxonomyJobCompletenessResult {
-  int mPlaybookCount = 0;
-  int mIncompleteJobCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct TaxonomyJobCompletenessResult
+{
+    int mPlaybookCount = 0;
+    int mIncompleteJobCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct TaxonomyTaskTraceabilityResult {
-  int mPlaybookCount = 0;
-  int mUntraceableTaskCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct TaxonomyTaskTraceabilityResult
+{
+    int mPlaybookCount = 0;
+    int mUntraceableTaskCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct ValidationHeadingOwnershipResult {
-  int mPlanViolationCount = 0;
-  int mImplViolationCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct ValidationHeadingOwnershipResult
+{
+    int mPlanViolationCount = 0;
+    int mImplViolationCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct TestingActorCoverageResult {
-  int mPlaybookCount = 0;
-  int mMissingActorPlaybookCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct TestingActorCoverageResult
+{
+    int mPlaybookCount = 0;
+    int mMissingActorPlaybookCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct HeadingAliasResult {
-  int mDocCount = 0;
-  int mAliasDocCount = 0;
-  int mAliasHeadingCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct HeadingAliasResult
+{
+    int mDocCount = 0;
+    int mAliasDocCount = 0;
+    int mAliasHeadingCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct ImplSchemaValidationResult {
-  int mImplCount = 0;
-  int mReadFailureCount = 0;
-  int mMissingRequiredImplCount = 0;
-  std::vector<std::string> mMissingRequiredDiagnostics;
-  int mOrderDriftImplCount = 0;
-  std::vector<std::string> mOrderDriftDiagnostics;
-  int mHeadingCheckedCount = 0;
-  int mHeadingNonCompliantCount = 0;
-  int mHeadingNamingDriftImplCount = 0;
-  std::vector<std::string> mHeadingNamingDiagnostics;
-  int mHeadingIndexedPrefixCount = 0;
-  int mHeadingIndexedPrefixImplCount = 0;
-  std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
+struct ImplSchemaValidationResult
+{
+    int mImplCount = 0;
+    int mReadFailureCount = 0;
+    int mMissingRequiredImplCount = 0;
+    std::vector<std::string> mMissingRequiredDiagnostics;
+    int mOrderDriftImplCount = 0;
+    std::vector<std::string> mOrderDriftDiagnostics;
+    int mHeadingCheckedCount = 0;
+    int mHeadingNonCompliantCount = 0;
+    int mHeadingNamingDriftImplCount = 0;
+    std::vector<std::string> mHeadingNamingDiagnostics;
+    int mHeadingIndexedPrefixCount = 0;
+    int mHeadingIndexedPrefixImplCount = 0;
+    std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
 };
 
-struct PlaybookOrderResult {
-  int mPlaybookCount = 0;
-  int mReadFailureCount = 0;
-  int mOrderDriftPlaybookCount = 0;
-  std::vector<std::string> mOrderDriftDiagnostics;
+struct PlaybookOrderResult
+{
+    int mPlaybookCount = 0;
+    int mReadFailureCount = 0;
+    int mOrderDriftPlaybookCount = 0;
+    std::vector<std::string> mOrderDriftDiagnostics;
 };
 
-struct PlaybookHeadingNamingResult {
-  int mPlaybookCount = 0;
-  int mReadFailureCount = 0;
-  int mHeadingCheckedCount = 0;
-  int mHeadingNonCompliantCount = 0;
-  int mHeadingNamingDriftPlaybookCount = 0;
-  std::vector<std::string> mHeadingNamingDiagnostics;
-  int mHeadingIndexedPrefixCount = 0;
-  int mHeadingIndexedPrefixPlaybookCount = 0;
-  std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
+struct PlaybookHeadingNamingResult
+{
+    int mPlaybookCount = 0;
+    int mReadFailureCount = 0;
+    int mHeadingCheckedCount = 0;
+    int mHeadingNonCompliantCount = 0;
+    int mHeadingNamingDriftPlaybookCount = 0;
+    std::vector<std::string> mHeadingNamingDiagnostics;
+    int mHeadingIndexedPrefixCount = 0;
+    int mHeadingIndexedPrefixPlaybookCount = 0;
+    std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
 };
 
-struct PlaybookBlankSectionsResult {
-  int mPlaybookCount = 0;
-  int mReadFailureCount = 0;
-  int mBlankSectionPlaybookCount = 0;
-  std::vector<std::string> mDiagnostics;
+struct PlaybookBlankSectionsResult
+{
+    int mPlaybookCount = 0;
+    int mReadFailureCount = 0;
+    int mBlankSectionPlaybookCount = 0;
+    std::vector<std::string> mDiagnostics;
 };
 
-struct SectionSchemaEntry {
-  std::string mSectionId;
-  bool mbRequired = false;
-  int mOrder = 0;
+struct SectionSchemaEntry
+{
+    std::string mSectionId;
+    bool mbRequired = false;
+    int mOrder = 0;
 };
 
-struct SectionCount {
-  std::string mHeading;
-  std::string mSectionId;
-  int mCount = 0;
+struct SectionCount
+{
+    std::string mHeading;
+    std::string mSectionId;
+    int mCount = 0;
 };
 
-struct ResolvedDocument {
-  fs::path mRepoRoot;
-  fs::path mAbsolutePath;
-  std::string mRelativePath;
-  std::vector<std::string> mLines;
-  std::vector<HeadingRecord> mHeadings;
+struct ResolvedDocument
+{
+    fs::path mRepoRoot;
+    fs::path mAbsolutePath;
+    std::string mRelativePath;
+    std::vector<std::string> mLines;
+    std::vector<HeadingRecord> mHeadings;
 };
 
 } // namespace UniPlan
