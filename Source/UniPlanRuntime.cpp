@@ -771,8 +771,7 @@ std::vector<RuleEntry> BuildRules(const fs::path &InRepoRoot,
        "keep core docs concise.",
        "PATTERNS.md#pattern-p-doc-plan-artifact-bundle"},
       {"doc_lint_required",
-       "Run doc lint after documentation tasks "
-       "(`Build/macOS-arm64/Debug/Tools/FIE_Doc/doc lint` on macOS/Linux).",
+       "Run uni-plan lint after documentation tasks (`uni-plan lint`).",
        "AGENTS.md#lintinventory-commands-after-documentation-tasks"}};
 
   const std::vector<RuleProvenanceProbe> Probes = {
@@ -800,7 +799,7 @@ std::vector<RuleEntry> BuildRules(const fs::path &InRepoRoot,
        {"detached sidecars"}},
       {"AGENTS.md",
        "lint_inventory_commands_after_documentation_tasks",
-       {"build/macos-arm64/debug/tools/fie_doc/doc lint", "required"}}};
+       {"uni-plan lint", "required"}}};
 
   if (Rules.size() != Probes.size()) {
     AddWarning(
