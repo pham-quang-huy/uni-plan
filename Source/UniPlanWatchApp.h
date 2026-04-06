@@ -1,0 +1,48 @@
+#pragma once
+
+#include "UniPlanTypes.h"
+#include "UniPlanWatchSnapshot.h"
+
+#include <atomic>
+#include <string>
+#include <thread>
+
+namespace UniPlan
+{
+
+class DocWatchApp
+{
+public:
+    explicit DocWatchApp(const std::string& InRepoRoot, const DocConfig& InConfig);
+    ~DocWatchApp();
+
+    DocWatchApp(const DocWatchApp&) = delete;
+    DocWatchApp& operator=(const DocWatchApp&) = delete;
+
+    int Run();
+
+private:
+    std::string mRepoRoot;
+    DocConfig mConfig;
+    bool mbUseCache = true;
+
+    FDocWatchSnapshot mSnapshot{};
+    std::atomic<bool> mRunning{false};
+    std::thread mDataThread;
+    int mTickCount = 0;
+    int mSelectedPlanIndex = 0;
+    int mSelectedNonActiveIndex = -1;
+    bool mbActiveBlockFocused = true;
+    int mSelectedPhaseIndex = -1;
+    int mSelectedWaveIndex = -1;
+    int mSelectedLaneIndex = -1;
+    bool mbShowSchemaPane = false;
+    bool mbShowImplPane = false;
+    int mFilePageIndex = 0;
+    uint64_t mLastSignature = 0;
+    bool mbForceRefresh = false;
+};
+
+int RunDocWatch(const std::string& InRepoRoot, const DocConfig& InConfig);
+
+} // namespace UniPlan
