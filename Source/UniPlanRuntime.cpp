@@ -114,7 +114,7 @@ void PrintUsage() {
   std::cout << "  uni-plan verification --topic <topic|path> --for "
                "<plan|implementation|playbook> [--phase <phase-key>] "
                "[--repo-root <path>]\n";
-  std::cout << "  uni-plan scheme --type <doc|plan|playbook|implementation> "
+  std::cout << "  uni-plan schema --type <doc|plan|playbook|implementation> "
                "[--repo-root <path>]\n";
   std::cout << "  uni-plan rules [--repo-root <path>]\n";
   std::cout << "  uni-plan validate [--repo-root <path>] [--strict]\n";
@@ -237,7 +237,8 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "[options]\n\n",
      "Show the expected section schema for a document type.\n\n",
      "Required:\n"
-     "  --type <type>           Schema type: doc, plan, playbook\n\n",
+     "  --type <type>           Schema type: doc, plan, playbook, "
+     "implementation\n\n",
      nullptr, kHumanList,
      "Examples:\n"
      "  uni-plan schema --type plan\n"
@@ -419,7 +420,7 @@ void PrintCommandUsage(const std::string &InCommand) {
   if (InCommand == "cache") {
     std::cout
         << "Manage the persisted inventory cache.\n\n"
-           "The doc tool scans the repository for all plans, playbooks, "
+           "uni-plan scans the repository for all plans, playbooks, "
            "implementations,\n"
            "and sidecar documents to build a documentation inventory. This "
            "scan is cached\n"
@@ -1273,8 +1274,8 @@ int RunMain(const int InArgc, char *InArgv[]) {
 
       // Single-plan mode: requires --topic
       if (Options.mTopic.empty()) {
-        throw UsageError("Missing required option --topic (or use 'doc phase "
-                         "list' for all plans)");
+        throw UsageError("Missing required option --topic (or use 'uni-plan "
+                         "phase list' for all plans)");
       }
 
       const std::string TopicKey =

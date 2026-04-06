@@ -450,6 +450,12 @@ fs::path NormalizeRepoRootPath(const std::string &InRepoRoot) {
                              AbsoluteRoot.string() + "': " + Error.message());
   }
 
+  static bool bPrinted = false;
+  if (!bPrinted) {
+    PrintRepoInfo(CanonicalRoot);
+    bPrinted = true;
+  }
+
   return CanonicalRoot;
 }
 

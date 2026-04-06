@@ -243,6 +243,10 @@ inline bool TryReadFileLines(const fs::path &InPath,
   return true;
 }
 
+inline void PrintRepoInfo(const fs::path &InRepoRoot) {
+  std::cerr << "[repo: " << InRepoRoot.string() << "]\n";
+}
+
 inline void PrintScanInfo(size_t InDocCount) {
   std::cerr << "[scanned " << InDocCount << " docs]\n";
 }
