@@ -124,6 +124,7 @@
 | `abstract_coding` | conditional (required for code-bearing phases) | Must describe interfaces, shared logic, reusable functions, and composition patterns used in this phase. |
 | `no_runtime_monolith_files` | conditional (required for code-bearing phases) | Must confirm no `*Runtime.h/cpp` monolith files — name files by specific domain (Service, Renderer, UpdateStages). |
 | `no_monolith_files` | conditional (required for code-bearing phases) | Must confirm no source files >1000 lines — split by responsibility into same `Private/` directory. |
+| `multi_platforming` | conditional (required for code-bearing phases) | Must declare phase platform scope, shared/reusable logic approach (portable C++ vs platform-specific split, abstraction pattern), remote build/smoke/compare targets, and parity evidence requirements. Reference `fie-peerbridge-workflow` for orchestration, `PARITY.md` for policy, and `MultiPlatforming.Plan.md` for shared code patterns. |
 | `target_file_manifest` | required | Must list all files the phase plans to create, modify, or remove. Use `N/A` row when no file changes are planned. |
 | `linked_implementation` | required | Must point to paired `<TopicPascalCase>.Impl.md`. |
 | `detached_evidence_documents` | required | Must point to phase playbook sidecars (`ChangeLog`, `Verification`). |
@@ -183,18 +184,19 @@
 | 13 | `abstract_coding` | conditional (required for code-bearing phases) |
 | 14 | `no_runtime_monolith_files` | conditional (required for code-bearing phases) |
 | 15 | `no_monolith_files` | conditional (required for code-bearing phases) |
-| 16 | `target_file_manifest` | required |
-| 17 | `linked_implementation` | required |
-| 18 | `detached_evidence_documents` | required |
-| 19 | `execution_lanes` | required |
-| 20 | `wave_lane_job_board` | conditional |
-| 21 | `job_task_checklist` | conditional |
-| 22 | `dependencies` | required for active-phase preparation |
-| 23 | `validation_commands` | conditional |
-| 24 | `testing` | conditional |
-| 25 | `handoff_points` | required |
-| 26 | `change_log` | required |
-| 27 | `verification` | required |
+| 16 | `multi_platforming` | conditional (required for code-bearing phases) |
+| 17 | `target_file_manifest` | required |
+| 18 | `linked_implementation` | required |
+| 19 | `detached_evidence_documents` | required |
+| 20 | `execution_lanes` | required |
+| 21 | `wave_lane_job_board` | conditional |
+| 22 | `job_task_checklist` | conditional |
+| 23 | `dependencies` | required for active-phase preparation |
+| 24 | `validation_commands` | conditional |
+| 25 | `testing` | conditional |
+| 26 | `handoff_points` | required |
+| 27 | `change_log` | required |
+| 28 | `verification` | required |
 
 ## extension_section_policy
 

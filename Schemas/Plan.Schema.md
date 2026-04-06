@@ -61,6 +61,15 @@ Quick summary: This schema specializes `doc_schema` for plan documents named `<T
 | Required | `conditional` |
 | Rule | Required when the plan depends on repository inventory, pairing, parity, or migration baselines. |
 
+## multi_platforming
+| Property | Value |
+| --- | --- |
+| Type | `section` |
+| Required | `conditional` |
+| Rule | Required for code-bearing plans. Must declare target platforms, parity scope, and verification strategy. |
+| Rule | Must identify shared/reusable logic opportunities: what code can be portable C++ vs platform-specific, which abstraction pattern applies (GenericPlatform HAL, virtual dispatch, compile-time selection), and where shared code lives. |
+| Rule | Reference `fie-peerbridge-workflow` for remote verification, `PARITY.md` for policy, and `MultiPlatforming.Plan.md` for shared code extraction patterns. |
+
 ## execution_strategy
 | Property | Value |
 | --- | --- |
@@ -167,8 +176,9 @@ Quick summary: This schema specializes `doc_schema` for plan documents named `<T
 | 2 | `summary` | required |
 | 3 | `problem_statement` | conditional (required when plan needs explicit scope framing) |
 | 4 | `baseline_audit` | conditional (required when plan depends on repository baselines) |
-| 5 | `execution_strategy` | required |
-| 6 | `risks_and_mitigations` | required |
-| 7 | `acceptance_criteria` | required |
-| 8 | `validation_commands` | conditional (required when executable verification commands exist) |
-| 9 | `next_actions` | required |
+| 5 | `multi_platforming` | conditional (required for code-bearing plans) |
+| 6 | `execution_strategy` | required |
+| 7 | `risks_and_mitigations` | required |
+| 8 | `acceptance_criteria` | required |
+| 9 | `validation_commands` | conditional (required when executable verification commands exist) |
+| 10 | `next_actions` | required |
