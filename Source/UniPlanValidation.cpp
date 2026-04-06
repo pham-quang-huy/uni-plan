@@ -814,6 +814,313 @@ HeadingAliasResult EvaluateHeadingAliasNormalization(
   return Result;
 }
 
+ImplSchemaValidationResult
+EvaluateImplSchemaConformance(const fs::path &InRepoRoot,
+                              const std::vector<DocumentRecord> &InImpls,
+                              std::vector<std::string> &OutWarnings) {
+  ImplSchemaValidationResult Result;
+  const std::vector<SectionSchemaEntry> SchemaEntries =
+      BuildSectionSchemaEntries("implementation", InRepoRoot);
+  std::vector<std::string> RequiredSectionIds;
+  std::vector<std::string> CanonicalSectionOrder;
+  for (const SectionSchemaEntry &Entry : SchemaEntries) {
+    CanonicalSectionOrder.push_back(Entry.mSectionId);
+    if (Entry.mbRequired) {
+      RequiredSectionIds.push_back(Entry.mSectionId);
+    }
+  }
+
+  Result.mImplCount = static_cast<int>(InImpls.size());
+  for (const DocumentRecord &Impl : InImpls) {
+    const fs::path AbsolutePath = InRepoRoot / fs::path(Impl.mPath);
+    std::vector<std::string> Lines;
+    std::string ReadError;
+    if (!TryReadFileLines(AbsolutePath, Lines, ReadError)) {
+      Result.mReadFailureCount += 1;
+      AddWarning(OutWarnings, "Impl-schema validation skipped for '" +
+                                  Impl.mPath + "': " + ReadError);
+      continue;
+    }
+
+    const std::vector<HeadingRecord> Headings = ParseHeadingRecords(Lines);
+    std::map<std::string, std::vector<const HeadingRecord *>> H2HeadingsById;
+    for (const HeadingRecord &Heading : Headings) {
+      if (Heading.mLevel == 2) {
+        H2HeadingsById[Heading.mSectionId].push_back(&Heading);
+      }
+    }
+
+    // Required sections
+    std::vector<std::string> MissingRequired;
+    for (const std::string &Required : RequiredSectionIds) {
+      if (H2HeadingsById.count(Required) == 0) {
+        MissingRequired.push_back(Required);
+      }
+    }
+    if (!MissingRequired.empty()) {
+      Result.mMissingRequiredImplCount += 1;
+      Result.mMissingRequiredDiagnostics.push_back(
+          "impl=" + Impl.mPath +
+          " missing_required_sections=" + JoinCommaSeparated(MissingRequired));
+    }
+
+    // Canonical order
+    std::map<std::string, int> FirstLineBySectionId;
+    for (const auto &Entry : H2HeadingsById) {
+      if (!Entry.second.empty()) {
+        FirstLineBySectionId[Entry.first] = Entry.second.front()->mLine;
+      }
+    }
+    std::vector<std::string> OrderDrifts;
+    std::string PreviousSectionId;
+    int PreviousLine = 0;
+    for (const std::string &CanonicalId : CanonicalSectionOrder) {
+      const auto FoundLine = FirstLineBySectionId.find(CanonicalId);
+      if (FoundLine == FirstLineBySectionId.end()) {
+        continue;
+      }
+      if (!PreviousSectionId.empty() && FoundLine->second < PreviousLine) {
+        OrderDrifts.push_back(PreviousSectionId + "@L" +
+                              std::to_string(PreviousLine) + ">" + CanonicalId +
+                              "@L" + std::to_string(FoundLine->second));
+      }
+      PreviousSectionId = CanonicalId;
+      PreviousLine = FoundLine->second;
+    }
+    if (!OrderDrifts.empty()) {
+      Result.mOrderDriftImplCount += 1;
+      Result.mOrderDriftDiagnostics.push_back(
+          "impl=" + Impl.mPath +
+          " canonical_order_drift=" + JoinCommaSeparated(OrderDrifts));
+    }
+
+    // Heading naming (snake_case + indexed prefix)
+    bool bImplHasHeadingNamingDrift = false;
+    bool bImplHasIndexedHeadingPrefix = false;
+    for (const HeadingRecord &Heading : Headings) {
+      if (Heading.mLevel < 2 || Heading.mLevel > 6) {
+        continue;
+      }
+      Result.mHeadingCheckedCount += 1;
+      const std::string ExpectedId = NormalizeSectionId(Heading.mText);
+      if (!IsSnakeCaseHeadingLiteral(Heading.mText)) {
+        Result.mHeadingNonCompliantCount += 1;
+        bImplHasHeadingNamingDrift = true;
+        Result.mHeadingNamingDiagnostics.push_back(
+            "impl=" + Impl.mPath + " line=" + std::to_string(Heading.mLine) +
+            " level=H" + std::to_string(Heading.mLevel) +
+            " heading=" + Heading.mText + " expected=" + ExpectedId);
+      }
+      if (HasIndexedHeadingPrefix(Heading.mText)) {
+        Result.mHeadingIndexedPrefixCount += 1;
+        bImplHasIndexedHeadingPrefix = true;
+        Result.mHeadingIndexedPrefixDiagnostics.push_back(
+            "impl=" + Impl.mPath + " line=" + std::to_string(Heading.mLine) +
+            " level=H" + std::to_string(Heading.mLevel) +
+            " heading=" + Heading.mText + " expected=" + ExpectedId);
+      }
+    }
+    if (bImplHasHeadingNamingDrift) {
+      Result.mHeadingNamingDriftImplCount += 1;
+    }
+    if (bImplHasIndexedHeadingPrefix) {
+      Result.mHeadingIndexedPrefixImplCount += 1;
+    }
+  }
+
+  return Result;
+}
+
+PlaybookOrderResult
+EvaluatePlaybookCanonicalOrder(const fs::path &InRepoRoot,
+                               const std::vector<DocumentRecord> &InPlaybooks,
+                               std::vector<std::string> &OutWarnings) {
+  PlaybookOrderResult Result;
+  const std::vector<SectionSchemaEntry> SchemaEntries =
+      BuildSectionSchemaEntries("playbook", InRepoRoot);
+  std::vector<std::string> CanonicalSectionOrder;
+  for (const SectionSchemaEntry &Entry : SchemaEntries) {
+    CanonicalSectionOrder.push_back(Entry.mSectionId);
+  }
+
+  Result.mPlaybookCount = static_cast<int>(InPlaybooks.size());
+  for (const DocumentRecord &Playbook : InPlaybooks) {
+    const fs::path AbsolutePath = InRepoRoot / fs::path(Playbook.mPath);
+    std::vector<std::string> Lines;
+    std::string ReadError;
+    if (!TryReadFileLines(AbsolutePath, Lines, ReadError)) {
+      Result.mReadFailureCount += 1;
+      AddWarning(OutWarnings, "Playbook-order check skipped for '" +
+                                  Playbook.mPath + "': " + ReadError);
+      continue;
+    }
+
+    const std::vector<HeadingRecord> Headings = ParseHeadingRecords(Lines);
+    std::map<std::string, int> FirstLineBySectionId;
+    for (const HeadingRecord &Heading : Headings) {
+      if (Heading.mLevel == 2 &&
+          FirstLineBySectionId.count(Heading.mSectionId) == 0) {
+        FirstLineBySectionId[Heading.mSectionId] = Heading.mLine;
+      }
+    }
+
+    std::vector<std::string> OrderDrifts;
+    std::string PreviousSectionId;
+    int PreviousLine = 0;
+    for (const std::string &CanonicalId : CanonicalSectionOrder) {
+      const auto FoundLine = FirstLineBySectionId.find(CanonicalId);
+      if (FoundLine == FirstLineBySectionId.end()) {
+        continue;
+      }
+      if (!PreviousSectionId.empty() && FoundLine->second < PreviousLine) {
+        OrderDrifts.push_back(PreviousSectionId + "@L" +
+                              std::to_string(PreviousLine) + ">" + CanonicalId +
+                              "@L" + std::to_string(FoundLine->second));
+      }
+      PreviousSectionId = CanonicalId;
+      PreviousLine = FoundLine->second;
+    }
+    if (!OrderDrifts.empty()) {
+      Result.mOrderDriftPlaybookCount += 1;
+      Result.mOrderDriftDiagnostics.push_back(
+          "playbook=" + Playbook.mPath +
+          " canonical_order_drift=" + JoinCommaSeparated(OrderDrifts));
+    }
+  }
+
+  return Result;
+}
+
+PlaybookHeadingNamingResult
+EvaluatePlaybookHeadingNaming(const fs::path &InRepoRoot,
+                              const std::vector<DocumentRecord> &InPlaybooks,
+                              std::vector<std::string> &OutWarnings) {
+  PlaybookHeadingNamingResult Result;
+  Result.mPlaybookCount = static_cast<int>(InPlaybooks.size());
+
+  for (const DocumentRecord &Playbook : InPlaybooks) {
+    const fs::path AbsolutePath = InRepoRoot / fs::path(Playbook.mPath);
+    std::vector<std::string> Lines;
+    std::string ReadError;
+    if (!TryReadFileLines(AbsolutePath, Lines, ReadError)) {
+      Result.mReadFailureCount += 1;
+      AddWarning(OutWarnings, "Playbook-heading check skipped for '" +
+                                  Playbook.mPath + "': " + ReadError);
+      continue;
+    }
+
+    const std::vector<HeadingRecord> Headings = ParseHeadingRecords(Lines);
+    bool bHasNamingDrift = false;
+    bool bHasIndexedPrefix = false;
+    for (const HeadingRecord &Heading : Headings) {
+      if (Heading.mLevel < 2 || Heading.mLevel > 6) {
+        continue;
+      }
+      Result.mHeadingCheckedCount += 1;
+      const std::string ExpectedId = NormalizeSectionId(Heading.mText);
+      if (!IsSnakeCaseHeadingLiteral(Heading.mText)) {
+        Result.mHeadingNonCompliantCount += 1;
+        bHasNamingDrift = true;
+        Result.mHeadingNamingDiagnostics.push_back(
+            "playbook=" + Playbook.mPath +
+            " line=" + std::to_string(Heading.mLine) + " level=H" +
+            std::to_string(Heading.mLevel) + " heading=" + Heading.mText +
+            " expected=" + ExpectedId);
+      }
+      if (HasIndexedHeadingPrefix(Heading.mText)) {
+        Result.mHeadingIndexedPrefixCount += 1;
+        bHasIndexedPrefix = true;
+        Result.mHeadingIndexedPrefixDiagnostics.push_back(
+            "playbook=" + Playbook.mPath +
+            " line=" + std::to_string(Heading.mLine) + " level=H" +
+            std::to_string(Heading.mLevel) + " heading=" + Heading.mText +
+            " expected=" + ExpectedId);
+      }
+    }
+    if (bHasNamingDrift) {
+      Result.mHeadingNamingDriftPlaybookCount += 1;
+    }
+    if (bHasIndexedPrefix) {
+      Result.mHeadingIndexedPrefixPlaybookCount += 1;
+    }
+  }
+
+  return Result;
+}
+
+PlaybookBlankSectionsResult
+EvaluatePlaybookBlankSections(const fs::path &InRepoRoot,
+                              const std::vector<DocumentRecord> &InPlaybooks,
+                              std::vector<std::string> &OutWarnings) {
+  PlaybookBlankSectionsResult Result;
+  const std::vector<SectionSchemaEntry> SchemaEntries =
+      BuildSectionSchemaEntries("playbook", InRepoRoot);
+  std::vector<std::string> RequiredSectionIds;
+  for (const SectionSchemaEntry &Entry : SchemaEntries) {
+    if (Entry.mbRequired) {
+      RequiredSectionIds.push_back(Entry.mSectionId);
+    }
+  }
+
+  Result.mPlaybookCount = static_cast<int>(InPlaybooks.size());
+  for (const DocumentRecord &Playbook : InPlaybooks) {
+    const fs::path AbsolutePath = InRepoRoot / fs::path(Playbook.mPath);
+    std::vector<std::string> Lines;
+    std::string ReadError;
+    if (!TryReadFileLines(AbsolutePath, Lines, ReadError)) {
+      Result.mReadFailureCount += 1;
+      AddWarning(OutWarnings, "Playbook blank-section check skipped for '" +
+                                  Playbook.mPath + "': " + ReadError);
+      continue;
+    }
+
+    const std::vector<HeadingRecord> Headings = ParseHeadingRecords(Lines);
+    std::vector<std::string> BlankSections;
+    for (const std::string &RequiredId : RequiredSectionIds) {
+      int SectionStart = -1;
+      int SectionEnd = static_cast<int>(Lines.size());
+      for (size_t HeadingIndex = 0; HeadingIndex < Headings.size();
+           ++HeadingIndex) {
+        if (Headings[HeadingIndex].mLevel == 2 &&
+            Headings[HeadingIndex].mSectionId == RequiredId) {
+          SectionStart = Headings[HeadingIndex].mLine;
+          for (size_t NextIndex = HeadingIndex + 1; NextIndex < Headings.size();
+               ++NextIndex) {
+            if (Headings[NextIndex].mLevel <= 2) {
+              SectionEnd = Headings[NextIndex].mLine;
+              break;
+            }
+          }
+          break;
+        }
+      }
+      if (SectionStart < 0) {
+        continue;
+      }
+      bool bHasContent = false;
+      for (int LineIndex = SectionStart + 1;
+           LineIndex < SectionEnd && LineIndex < static_cast<int>(Lines.size());
+           ++LineIndex) {
+        if (!Trim(Lines[static_cast<size_t>(LineIndex)]).empty()) {
+          bHasContent = true;
+          break;
+        }
+      }
+      if (!bHasContent) {
+        BlankSections.push_back(RequiredId);
+      }
+    }
+    if (!BlankSections.empty()) {
+      Result.mBlankSectionPlaybookCount += 1;
+      Result.mDiagnostics.push_back(
+          "playbook=" + Playbook.mPath +
+          " blank_sections=" + JoinCommaSeparated(BlankSections));
+    }
+  }
+
+  return Result;
+}
+
 std::vector<ValidateCheck>
 BuildValidateChecks(const Inventory &InInventory, const fs::path &InRepoRoot,
                     const bool InStrict, std::vector<std::string> &OutErrors,
@@ -909,6 +1216,20 @@ BuildValidateChecks(const Inventory &InInventory, const fs::path &InRepoRoot,
   const HeadingAliasResult HeadingAlias = EvaluateHeadingAliasNormalization(
       InRepoRoot, InInventory.mPlans, InInventory.mPlaybooks,
       InInventory.mImplementations, HeadingAliasWarnings);
+  std::vector<std::string> ImplSchemaWarnings;
+  const ImplSchemaValidationResult ImplSchema = EvaluateImplSchemaConformance(
+      InRepoRoot, InInventory.mImplementations, ImplSchemaWarnings);
+  std::vector<std::string> PlaybookOrderWarnings;
+  const PlaybookOrderResult PlaybookOrder = EvaluatePlaybookCanonicalOrder(
+      InRepoRoot, InInventory.mPlaybooks, PlaybookOrderWarnings);
+  std::vector<std::string> PlaybookHeadingWarnings;
+  const PlaybookHeadingNamingResult PlaybookHeading =
+      EvaluatePlaybookHeadingNaming(InRepoRoot, InInventory.mPlaybooks,
+                                    PlaybookHeadingWarnings);
+  std::vector<std::string> PlaybookBlankWarnings;
+  const PlaybookBlankSectionsResult PlaybookBlank =
+      EvaluatePlaybookBlankSections(InRepoRoot, InInventory.mPlaybooks,
+                                    PlaybookBlankWarnings);
 
   std::vector<ValidateCheck> Checks;
   Checks.push_back(
@@ -1097,6 +1418,77 @@ BuildValidateChecks(const Inventory &InInventory, const fs::path &InRepoRoot,
                         ", alias_headings=" +
                         std::to_string(HeadingAlias.mAliasHeadingCount),
                     "heading_alias_normalization", HeadingAlias.mDiagnostics});
+  Checks.push_back(
+      {"impl_required_sections",
+       ImplSchema.mMissingRequiredImplCount == 0 &&
+           ImplSchema.mReadFailureCount == 0,
+       InStrict,
+       "impls_checked=" + std::to_string(ImplSchema.mImplCount) +
+           ", impls_with_missing_required_sections=" +
+           std::to_string(ImplSchema.mMissingRequiredImplCount) +
+           ", read_failures=" + std::to_string(ImplSchema.mReadFailureCount),
+       "impl_schema_required_sections",
+       ImplSchema.mMissingRequiredDiagnostics});
+  Checks.push_back(
+      {"impl_canonical_section_order",
+       ImplSchema.mOrderDriftImplCount == 0 &&
+           ImplSchema.mReadFailureCount == 0,
+       InStrict,
+       "impls_checked=" + std::to_string(ImplSchema.mImplCount) +
+           ", impls_with_order_drift=" +
+           std::to_string(ImplSchema.mOrderDriftImplCount) +
+           ", read_failures=" + std::to_string(ImplSchema.mReadFailureCount),
+       "impl_schema_canonical_order", ImplSchema.mOrderDriftDiagnostics});
+  Checks.push_back(
+      {"playbook_canonical_section_order",
+       PlaybookOrder.mOrderDriftPlaybookCount == 0 &&
+           PlaybookOrder.mReadFailureCount == 0,
+       InStrict,
+       "playbooks_checked=" + std::to_string(PlaybookOrder.mPlaybookCount) +
+           ", playbooks_with_order_drift=" +
+           std::to_string(PlaybookOrder.mOrderDriftPlaybookCount) +
+           ", read_failures=" + std::to_string(PlaybookOrder.mReadFailureCount),
+       "playbook_schema_canonical_order",
+       PlaybookOrder.mOrderDriftDiagnostics});
+  Checks.push_back(
+      {"playbook_heading_naming",
+       PlaybookHeading.mHeadingNonCompliantCount == 0 &&
+           PlaybookHeading.mHeadingIndexedPrefixCount == 0 &&
+           PlaybookHeading.mReadFailureCount == 0,
+       InStrict,
+       "playbooks_checked=" + std::to_string(PlaybookHeading.mPlaybookCount) +
+           ", headings_checked=" +
+           std::to_string(PlaybookHeading.mHeadingCheckedCount) +
+           ", non_snake_case=" +
+           std::to_string(PlaybookHeading.mHeadingNonCompliantCount) +
+           ", indexed_prefix=" +
+           std::to_string(PlaybookHeading.mHeadingIndexedPrefixCount),
+       "playbook_schema_heading_naming",
+       PlaybookHeading.mHeadingNamingDiagnostics});
+  Checks.push_back({"impl_heading_naming",
+                    ImplSchema.mHeadingNonCompliantCount == 0 &&
+                        ImplSchema.mHeadingIndexedPrefixCount == 0 &&
+                        ImplSchema.mReadFailureCount == 0,
+                    InStrict,
+                    "impls_checked=" + std::to_string(ImplSchema.mImplCount) +
+                        ", headings_checked=" +
+                        std::to_string(ImplSchema.mHeadingCheckedCount) +
+                        ", non_snake_case=" +
+                        std::to_string(ImplSchema.mHeadingNonCompliantCount) +
+                        ", indexed_prefix=" +
+                        std::to_string(ImplSchema.mHeadingIndexedPrefixCount),
+                    "impl_schema_heading_naming",
+                    ImplSchema.mHeadingNamingDiagnostics});
+  Checks.push_back(
+      {"playbook_blank_sections",
+       PlaybookBlank.mBlankSectionPlaybookCount == 0 &&
+           PlaybookBlank.mReadFailureCount == 0,
+       InStrict,
+       "playbooks_checked=" + std::to_string(PlaybookBlank.mPlaybookCount) +
+           ", playbooks_with_blank_sections=" +
+           std::to_string(PlaybookBlank.mBlankSectionPlaybookCount) +
+           ", read_failures=" + std::to_string(PlaybookBlank.mReadFailureCount),
+       "playbook_schema_blank_sections", PlaybookBlank.mDiagnostics});
 
   OutWarnings = InInventory.mWarnings;
   OutWarnings.insert(OutWarnings.end(), GovernanceWarnings.begin(),
@@ -1123,6 +1515,14 @@ BuildValidateChecks(const Inventory &InInventory, const fs::path &InRepoRoot,
                      TestingActorWarnings.end());
   OutWarnings.insert(OutWarnings.end(), HeadingAliasWarnings.begin(),
                      HeadingAliasWarnings.end());
+  OutWarnings.insert(OutWarnings.end(), ImplSchemaWarnings.begin(),
+                     ImplSchemaWarnings.end());
+  OutWarnings.insert(OutWarnings.end(), PlaybookOrderWarnings.begin(),
+                     PlaybookOrderWarnings.end());
+  OutWarnings.insert(OutWarnings.end(), PlaybookHeadingWarnings.begin(),
+                     PlaybookHeadingWarnings.end());
+  OutWarnings.insert(OutWarnings.end(), PlaybookBlankWarnings.begin(),
+                     PlaybookBlankWarnings.end());
   if (MissingPhasePlaybookCount > 0) {
     AddWarning(OutWarnings, "Topics with `missing_phase_playbook`: " +
                                 std::to_string(MissingPhasePlaybookCount));

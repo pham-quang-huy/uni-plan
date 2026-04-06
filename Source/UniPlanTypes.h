@@ -15,7 +15,7 @@ namespace UniPlan {
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "2.0.0";
+static constexpr const char *kCliVersion = "2.1.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -595,6 +595,48 @@ struct HeadingAliasResult {
   int mDocCount = 0;
   int mAliasDocCount = 0;
   int mAliasHeadingCount = 0;
+  std::vector<std::string> mDiagnostics;
+};
+
+struct ImplSchemaValidationResult {
+  int mImplCount = 0;
+  int mReadFailureCount = 0;
+  int mMissingRequiredImplCount = 0;
+  std::vector<std::string> mMissingRequiredDiagnostics;
+  int mOrderDriftImplCount = 0;
+  std::vector<std::string> mOrderDriftDiagnostics;
+  int mHeadingCheckedCount = 0;
+  int mHeadingNonCompliantCount = 0;
+  int mHeadingNamingDriftImplCount = 0;
+  std::vector<std::string> mHeadingNamingDiagnostics;
+  int mHeadingIndexedPrefixCount = 0;
+  int mHeadingIndexedPrefixImplCount = 0;
+  std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
+};
+
+struct PlaybookOrderResult {
+  int mPlaybookCount = 0;
+  int mReadFailureCount = 0;
+  int mOrderDriftPlaybookCount = 0;
+  std::vector<std::string> mOrderDriftDiagnostics;
+};
+
+struct PlaybookHeadingNamingResult {
+  int mPlaybookCount = 0;
+  int mReadFailureCount = 0;
+  int mHeadingCheckedCount = 0;
+  int mHeadingNonCompliantCount = 0;
+  int mHeadingNamingDriftPlaybookCount = 0;
+  std::vector<std::string> mHeadingNamingDiagnostics;
+  int mHeadingIndexedPrefixCount = 0;
+  int mHeadingIndexedPrefixPlaybookCount = 0;
+  std::vector<std::string> mHeadingIndexedPrefixDiagnostics;
+};
+
+struct PlaybookBlankSectionsResult {
+  int mPlaybookCount = 0;
+  int mReadFailureCount = 0;
+  int mBlankSectionPlaybookCount = 0;
   std::vector<std::string> mDiagnostics;
 };
 

@@ -736,24 +736,24 @@ std::vector<RuleEntry> BuildRules(const fs::path &InRepoRoot,
       {"plan_impl_pairing",
        "Active `<TopicPascalCase>.Plan.md` docs must have paired "
        "`<TopicPascalCase>.Impl.md` trackers.",
-       "AGENTS.md#planplaybookimplementation-pairing-rules"},
+       "CLAUDE.md#pairing_rules"},
       {"active_phase_playbook_required",
        "Every active plan phase must have a dedicated "
        "`<TopicPascalCase>.<PhaseKey>.Playbook.md`.",
-       "AGENTS.md#planplaybookimplementation-pairing-rules"},
+       "CLAUDE.md#pairing_rules"},
       {"phase_entry_gate",
        "Before a phase is marked in progress, complete investigation and "
        "prepare the phase playbook execution lanes (and `testing` for testable "
        "phases).",
-       "AGENTS.md#planplaybookimplementation-pairing-rules"},
+       "CLAUDE.md#pairing_rules"},
       {"artifact_role_boundary",
        "Keep artifact ownership explicit: playbook is procedure, "
        "implementation is outcomes, sidecars are evidence history.",
-       "AGENTS.md#planplaybookimplementation-pairing-rules"},
+       "CLAUDE.md#pairing_rules"},
       {"canonical_naming",
        "Use canonical naming for plan, implementation, playbook, and sidecar "
        "docs.",
-       "Schemas/Doc.Schema.md#file_name"},
+       "CLAUDE.md#document_type_naming"},
       {"canonical_placement",
        "Keep lifecycle artifacts in canonical scope folders (`Docs/Plans`, "
        "`Docs/Playbooks`, `Docs/Implementation`).",
@@ -764,34 +764,21 @@ std::vector<RuleEntry> BuildRules(const fs::path &InRepoRoot,
        "PATTERNS.md#pattern-p-doc-plan-artifact-bundle"},
       {"doc_lint_required",
        "Run uni-plan lint after documentation tasks (`uni-plan lint`).",
-       "AGENTS.md#lintinventory-commands-after-documentation-tasks"}};
+       "CLAUDE.md#doc_lint_commands"}};
 
   const std::vector<RuleProvenanceProbe> Probes = {
-      {"AGENTS.md",
-       "plan_playbook_implementation_pairing_rules",
-       {"active plan pairing"}},
-      {"AGENTS.md",
-       "plan_playbook_implementation_pairing_rules",
-       {"active playbook requirement"}},
-      {"AGENTS.md",
-       "plan_playbook_implementation_pairing_rules",
-       {"phase entry gate"}},
-      {"AGENTS.md",
-       "plan_playbook_implementation_pairing_rules",
-       {"execution record ownership"}},
-      {"Schemas/Doc.Schema.md",
-       "file_name",
-       {"pattern (plan/implementation core docs)",
-        "<topicpascalcase>.<dockind>.md"}},
+      {"CLAUDE.md", "pairing_rules", {"paired artifacts"}},
+      {"CLAUDE.md", "pairing_rules", {"playbook-first"}},
+      {"CLAUDE.md", "pairing_rules", {"phase entry gates"}},
+      {"CLAUDE.md", "pairing_rules", {"artifact boundary"}},
+      {"CLAUDE.md", "document_type_naming", {"plan", ".plan.md"}},
       {"PATTERNS.md",
        "pattern_p_doc_plan_artifact_bundle",
        {"canonical scope folders"}},
       {"PATTERNS.md",
        "pattern_p_doc_plan_artifact_bundle",
        {"detached sidecars"}},
-      {"AGENTS.md",
-       "lint_inventory_commands_after_documentation_tasks",
-       {"uni-plan lint", "required"}}};
+      {"CLAUDE.md", "doc_lint_commands", {"uni-plan lint", "yes"}}};
 
   if (Rules.size() != Probes.size()) {
     AddWarning(

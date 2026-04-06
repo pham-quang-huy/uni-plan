@@ -497,6 +497,22 @@ TestingActorCoverageResult
 EvaluateTestingActorCoverage(const fs::path &InRepoRoot,
                              const std::vector<DocumentRecord> &InPlaybooks,
                              std::vector<std::string> &OutWarnings);
+ImplSchemaValidationResult
+EvaluateImplSchemaConformance(const fs::path &InRepoRoot,
+                              const std::vector<DocumentRecord> &InImpls,
+                              std::vector<std::string> &OutWarnings);
+PlaybookOrderResult
+EvaluatePlaybookCanonicalOrder(const fs::path &InRepoRoot,
+                               const std::vector<DocumentRecord> &InPlaybooks,
+                               std::vector<std::string> &OutWarnings);
+PlaybookHeadingNamingResult
+EvaluatePlaybookHeadingNaming(const fs::path &InRepoRoot,
+                              const std::vector<DocumentRecord> &InPlaybooks,
+                              std::vector<std::string> &OutWarnings);
+PlaybookBlankSectionsResult
+EvaluatePlaybookBlankSections(const fs::path &InRepoRoot,
+                              const std::vector<DocumentRecord> &InPlaybooks,
+                              std::vector<std::string> &OutWarnings);
 std::vector<ValidateCheck>
 BuildValidateChecks(const Inventory &InInventory, const fs::path &InRepoRoot,
                     const bool InStrict, std::vector<std::string> &OutErrors,
