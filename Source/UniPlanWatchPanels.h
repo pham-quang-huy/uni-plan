@@ -119,6 +119,12 @@ public:
     ftxui::Element Render(const FWatchPlanSummary& InPlan) const;
 };
 
+class PlanDetailPanel
+{
+public:
+    ftxui::Element Render(const FWatchPlanSummary& InPlan) const;
+};
+
 class WatchStatusBar
 {
 public:

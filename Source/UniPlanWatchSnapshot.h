@@ -123,6 +123,9 @@ struct FWatchPlanSummary
     int mBlockerCount = 0;
     std::vector<PhaseItem> mPhases;
     std::vector<BlockerItem> mBlockers;
+    std::vector<std::string> mSummaryLines;
+    std::vector<std::string> mGoalStatements;
+    std::vector<std::string> mNonGoalStatements;
     std::vector<FWatchPhaseTaxonomy> mPhaseTaxonomies;
     std::vector<FWatchSidecarSummary> mSidecarSummaries;
     FWatchTopicSchemaResult mSchemaResult;

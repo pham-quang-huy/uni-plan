@@ -53,6 +53,7 @@ int DocWatchApp::Run() {
   PlanVerificationPanel PanelPlanVerification;
   ImplChangeLogPanel PanelImplChangeLog;
   ImplVerificationPanel PanelImplVerification;
+  PlanDetailPanel PanelPlanDetail;
   WatchStatusBar PanelStatusBar;
 
   auto dashboard = Renderer([&] {
@@ -128,7 +129,10 @@ int DocWatchApp::Run() {
     auto rightRow5 =
         PanelValidationFail.Render(mSnapshot.mValidation.mFailedCheckDetails);
 
+    auto rightRow0 = PanelPlanDetail.Render(SelectedPlan);
+
     auto rightPane = vbox({
+        rightRow0,
         rightRow1,
         rightRow2,
         rightRow3,

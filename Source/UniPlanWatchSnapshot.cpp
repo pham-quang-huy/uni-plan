@@ -456,6 +456,107 @@ BuildPlanSummary(const PhaseListAllEntry &InEntry, const fs::path &InRepoRoot,
     }
   }
 
+  // Extract plan summary, goals, and non-goals from plan document
+  {
+    const fs::path PlanAbsPath = InRepoRoot / fs::path(InEntry.mPlanPath);
+    std::vector<std::string> PlanLines;
+    std::string PlanReadError;
+    if (TryReadFileLines(PlanAbsPath, PlanLines, PlanReadError)) {
+      const std::vector<HeadingRecord> PlanHeadings =
+          ParseHeadingRecords(PlanLines);
+
+      // Extract summary section text (lines between ## summary and next H2)
+      for (size_t HIdx = 0; HIdx < PlanHeadings.size(); ++HIdx) {
+        if (PlanHeadings[HIdx].mSectionId != "summary" ||
+            PlanHeadings[HIdx].mLevel != 2) {
+          continue;
+        }
+        const int StartLine = PlanHeadings[HIdx].mLine + 1;
+        // Find the next H2 heading (skip H3+ children)
+        int EndLine = static_cast<int>(PlanLines.size());
+        for (size_t NextIdx = HIdx + 1; NextIdx < PlanHeadings.size();
+             ++NextIdx) {
+          if (PlanHeadings[NextIdx].mLevel <= 2) {
+            EndLine = PlanHeadings[NextIdx].mLine;
+            break;
+          }
+        }
+        for (int LineIdx = StartLine;
+             LineIdx < EndLine &&
+             static_cast<int>(Summary.mSummaryLines.size()) < 10;
+             ++LineIdx) {
+          const std::string Trimmed =
+              Trim(PlanLines[static_cast<size_t>(LineIdx)]);
+          if (Trimmed.empty() || Trimmed.front() == '|' ||
+              Trimmed.front() == '#' || Trimmed.find("---") == 0) {
+            continue;
+          }
+          // Strip leading markdown bullets
+          std::string Clean = Trimmed;
+          if (Clean.size() >= 2 && Clean[0] == '-' && Clean[1] == ' ') {
+            Clean = Clean.substr(2);
+          }
+          Summary.mSummaryLines.push_back(Clean);
+        }
+        break;
+      }
+
+      // Extract goals and non-goals
+      const std::vector<MarkdownTableRecord> PlanTables =
+          ParseMarkdownTables(PlanLines, PlanHeadings);
+
+      // Strategy 1: goals_and_non_goals section table (Type/Statement cols)
+      for (const MarkdownTableRecord &Table : PlanTables) {
+        if (Table.mSectionId != "goals_and_non_goals") {
+          continue;
+        }
+        int TypeCol = -1;
+        int StatementCol = -1;
+        int AreaCol = -1;
+        for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size());
+             ++Col) {
+          const std::string Lower =
+              ToLower(Trim(Table.mHeaders[static_cast<size_t>(Col)]));
+          if (Lower == "type") {
+            TypeCol = Col;
+          } else if (Lower == "statement") {
+            StatementCol = Col;
+          } else if (Lower == "area") {
+            AreaCol = Col;
+          }
+        }
+        if (TypeCol < 0) {
+          break;
+        }
+        for (const std::vector<std::string> &Row : Table.mRows) {
+          const std::string TypeVal =
+              (TypeCol < static_cast<int>(Row.size()))
+                  ? ToLower(Trim(Row[static_cast<size_t>(TypeCol)]))
+                  : "";
+          std::string Statement =
+              (StatementCol >= 0 &&
+               StatementCol < static_cast<int>(Row.size()))
+                  ? Trim(Row[static_cast<size_t>(StatementCol)])
+                  : "";
+          if (Statement.empty() && AreaCol >= 0 &&
+              AreaCol < static_cast<int>(Row.size())) {
+            Statement = Trim(Row[static_cast<size_t>(AreaCol)]);
+          }
+          if (Statement.empty()) {
+            continue;
+          }
+          if (TypeVal.find("non") != std::string::npos) {
+            Summary.mNonGoalStatements.push_back(Statement);
+          } else if (TypeVal.find("goal") != std::string::npos) {
+            Summary.mGoalStatements.push_back(Statement);
+          }
+        }
+        break;
+      }
+
+    }
+  }
+
   // Count playbooks for this topic
   for (const DocumentRecord &Playbook : InPlaybooks) {
     if (Playbook.mTopicKey == InEntry.mTopicKey) {

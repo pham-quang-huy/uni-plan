@@ -1288,6 +1288,68 @@ Element FileManifestPanel::Render(const FWatchPhaseTaxonomy& InTaxonomy, int InF
 }
 
 // ---------------------------------------------------------------------------
+// PlanDetailPanel
+// ---------------------------------------------------------------------------
+
+Element PlanDetailPanel::Render(const FWatchPlanSummary& InPlan) const
+{
+    if (InPlan.mTopicKey.empty())
+    {
+        return window(text(" PLAN DETAIL ") | bold | dim, text("  No plan selected") | dim);
+    }
+
+    Elements Rows;
+
+    // Summary sub-section
+    Rows.push_back(text("  Summary") | bold);
+    if (InPlan.mSummaryLines.empty())
+    {
+        Rows.push_back(text("    (none)") | dim);
+    }
+    else
+    {
+        for (const std::string& Line : InPlan.mSummaryLines)
+        {
+            Rows.push_back(text("    " + Line) | dim);
+        }
+    }
+
+    Rows.push_back(text(""));
+
+    // Scope sub-section (goals)
+    Rows.push_back(text("  Scope") | bold);
+    if (InPlan.mGoalStatements.empty())
+    {
+        Rows.push_back(text("    (none)") | dim);
+    }
+    else
+    {
+        for (const std::string& Goal : InPlan.mGoalStatements)
+        {
+            Rows.push_back(text("    \xe2\x97\x8f " + Goal) | color(Color::Green));
+        }
+    }
+
+    Rows.push_back(text(""));
+
+    // Non-Scope sub-section (non-goals)
+    Rows.push_back(text("  Non-Scope") | bold);
+    if (InPlan.mNonGoalStatements.empty())
+    {
+        Rows.push_back(text("    (none)") | dim);
+    }
+    else
+    {
+        for (const std::string& NonGoal : InPlan.mNonGoalStatements)
+        {
+            Rows.push_back(text("    \xe2\x97\x8b " + NonGoal) | color(Color::Yellow));
+        }
+    }
+
+    return window(text(" PLAN DETAIL ") | bold | color(Color::Cyan), vbox(Rows));
+}
+
+// ---------------------------------------------------------------------------
 // WatchStatusBar
 // ---------------------------------------------------------------------------
 
