@@ -1028,39 +1028,22 @@ Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhase
         PlaybookBlock = window(text(" PLAYBOOK ") | bold | dim, text("  No playbooks") | dim);
     }
 
-    // Right column: sidecar schemas
+    // Plan sidecar schemas
+    auto PlanCLBlock = RenderSchemaBlock("PLAN CHANGELOG", Schema.mPlanChangeLog);
     auto PlanVerifBlock = RenderSchemaBlock("PLAN VERIFICATION", Schema.mPlanVerification);
-    auto ImplCLBlock = RenderSchemaBlock("IMPL CHANGELOG", Schema.mImplChangeLog);
 
-    // Find playbook verification and changelog for selected phase
-    Element PBVerifBlock;
-    Element PBCLBlock;
+    // Impl sidecar schemas
+    auto ImplCLBlock = RenderSchemaBlock("IMPL CHANGELOG", Schema.mImplChangeLog);
+    auto ImplVerifBlock = RenderSchemaBlock("IMPL VERIFICATION", Schema.mImplVerification);
+
+    // Playbook sidecar schemas for selected phase
     std::string SelectedPhaseKey;
     if (InSelectedPhaseIndex >= 0 && InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
     {
         SelectedPhaseKey = InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
     }
 
-    // Playbook Verification schema for selected phase
-    const FWatchDocSchemaResult* rpPBVerif = nullptr;
-    for (const FWatchDocSchemaResult& PBV : Schema.mPlaybookVerifications)
-    {
-        if (PBV.mPhaseKey == SelectedPhaseKey)
-        {
-            rpPBVerif = &PBV;
-            break;
-        }
-    }
-    if (rpPBVerif != nullptr)
-    {
-        PBVerifBlock = RenderSchemaBlock("PB VERIFICATION " + rpPBVerif->mPhaseKey, *rpPBVerif);
-    }
-    else
-    {
-        PBVerifBlock = window(text(" PB VERIFICATION ") | bold | dim, text("  No sidecar for phase") | dim);
-    }
-
-    // Playbook ChangeLog schema for selected phase
+    Element PBCLBlock;
     const FWatchDocSchemaResult* rpPBCL = nullptr;
     for (const FWatchDocSchemaResult& PBCL : Schema.mPlaybookChangeLogs)
     {
@@ -1079,10 +1062,29 @@ Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhase
         PBCLBlock = window(text(" PB CHANGELOG ") | bold | dim, text("  No sidecar for phase") | dim);
     }
 
-    static constexpr int kSchemaColumnWidth = 55;
+    Element PBVerifBlock;
+    const FWatchDocSchemaResult* rpPBVerif = nullptr;
+    for (const FWatchDocSchemaResult& PBV : Schema.mPlaybookVerifications)
+    {
+        if (PBV.mPhaseKey == SelectedPhaseKey)
+        {
+            rpPBVerif = &PBV;
+            break;
+        }
+    }
+    if (rpPBVerif != nullptr)
+    {
+        PBVerifBlock = RenderSchemaBlock("PB VERIFICATION " + rpPBVerif->mPhaseKey, *rpPBVerif);
+    }
+    else
+    {
+        PBVerifBlock = window(text(" PB VERIFICATION ") | bold | dim, text("  No sidecar for phase") | dim);
+    }
 
-    auto LeftColumn = vbox({PlanBlock, ImplBlock, PlaybookBlock});
-    auto RightColumn = vbox({PlanVerifBlock, ImplCLBlock, PBVerifBlock, PBCLBlock});
+    static constexpr int kSchemaColumnWidth = 60;
+
+    auto LeftColumn = vbox({PlanBlock, PlanCLBlock, PlanVerifBlock, ImplBlock, ImplCLBlock, ImplVerifBlock});
+    auto RightColumn = vbox({PlaybookBlock, PBCLBlock, PBVerifBlock});
 
     return hbox({
         LeftColumn | size(WIDTH, EQUAL, kSchemaColumnWidth),
@@ -1196,6 +1198,36 @@ Element PlanVerificationPanel::Render(const FWatchPlanSummary& InPlan) const
 
     const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Plan", "Verification");
     return RenderSidecarPanel("PLAN VERIFICATION", rpSidecar);
+}
+
+// ---------------------------------------------------------------------------
+// ImplChangeLogPanel
+// ---------------------------------------------------------------------------
+
+Element ImplChangeLogPanel::Render(const FWatchPlanSummary& InPlan) const
+{
+    if (InPlan.mTopicKey.empty())
+    {
+        return window(text(" IMPL CHANGELOG ") | bold | dim, text("  No plan selected") | dim);
+    }
+
+    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Impl", "ChangeLog");
+    return RenderSidecarPanel("IMPL CHANGELOG", rpSidecar);
+}
+
+// ---------------------------------------------------------------------------
+// ImplVerificationPanel
+// ---------------------------------------------------------------------------
+
+Element ImplVerificationPanel::Render(const FWatchPlanSummary& InPlan) const
+{
+    if (InPlan.mTopicKey.empty())
+    {
+        return window(text(" IMPL VERIFICATION ") | bold | dim, text("  No plan selected") | dim);
+    }
+
+    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Impl", "Verification");
+    return RenderSidecarPanel("IMPL VERIFICATION", rpSidecar);
 }
 
 // ---------------------------------------------------------------------------

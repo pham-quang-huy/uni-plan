@@ -51,6 +51,8 @@ int DocWatchApp::Run() {
   PlaybookVerificationPanel PanelPBVerification;
   PlanChangeLogPanel PanelPlanChangeLog;
   PlanVerificationPanel PanelPlanVerification;
+  ImplChangeLogPanel PanelImplChangeLog;
+  ImplVerificationPanel PanelImplVerification;
   WatchStatusBar PanelStatusBar;
 
   auto dashboard = Renderer([&] {
@@ -154,10 +156,12 @@ int DocWatchApp::Run() {
     const int LeftWidth = (bHasSchema && bHasImpl) ? 50 : 80;
 
     auto implPane = vbox({
-        PanelPBChangeLog.Render(SelectedPlan, mSelectedPhaseIndex),
-        PanelPBVerification.Render(SelectedPlan, mSelectedPhaseIndex),
         PanelPlanChangeLog.Render(SelectedPlan),
         PanelPlanVerification.Render(SelectedPlan),
+        PanelImplChangeLog.Render(SelectedPlan),
+        PanelImplVerification.Render(SelectedPlan),
+        PanelPBChangeLog.Render(SelectedPlan, mSelectedPhaseIndex),
+        PanelPBVerification.Render(SelectedPlan, mSelectedPhaseIndex),
     });
 
     if (bHasSchema && bHasImpl) {
@@ -165,9 +169,9 @@ int DocWatchApp::Run() {
       MainContent = hbox({
           leftPane | size(WIDTH, EQUAL, LeftWidth),
           separator(),
-          middlePane | size(WIDTH, EQUAL, 110),
+          middlePane | size(WIDTH, EQUAL, 120),
           separator(),
-          implPane | size(WIDTH, EQUAL, 80),
+          implPane | size(WIDTH, EQUAL, 60),
           separator(),
           rightPane | flex,
       });
@@ -176,7 +180,7 @@ int DocWatchApp::Run() {
       MainContent = hbox({
           leftPane | size(WIDTH, EQUAL, LeftWidth),
           separator(),
-          middlePane | size(WIDTH, EQUAL, 110),
+          middlePane | size(WIDTH, EQUAL, 120),
           separator(),
           rightPane | flex,
       });
@@ -184,7 +188,7 @@ int DocWatchApp::Run() {
       MainContent = hbox({
           leftPane | size(WIDTH, EQUAL, LeftWidth),
           separator(),
-          implPane | size(WIDTH, EQUAL, 80),
+          implPane | size(WIDTH, EQUAL, 60),
           separator(),
           rightPane | flex,
       });

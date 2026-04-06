@@ -107,6 +107,18 @@ public:
     ftxui::Element Render(const FWatchPlanSummary& InPlan) const;
 };
 
+class ImplChangeLogPanel
+{
+public:
+    ftxui::Element Render(const FWatchPlanSummary& InPlan) const;
+};
+
+class ImplVerificationPanel
+{
+public:
+    ftxui::Element Render(const FWatchPlanSummary& InPlan) const;
+};
+
 class WatchStatusBar
 {
 public:
