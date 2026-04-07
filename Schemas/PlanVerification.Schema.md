@@ -45,6 +45,18 @@ Quick summary: This schema specializes `doc_schema` for plan verification sideca
 | Rule | `Command` contains the actual shell command or check description. |
 | Rule | `Result` contains pass/fail outcome with narrative evidence. |
 
+## per_phase_loc_tracker
+| Property | Value |
+| --- | --- |
+| Type | `section` |
+| Required | `conditional` |
+| Rule | Required for code-bearing plans with quantitative LOC reduction or deduplication goals in their acceptance criteria. |
+| Rule | Must contain a per-phase tracking table with minimum columns: `Phase`, `Scope`, `Type`, `Est. LOC`, `Actual LOC`, `Delta`, `Running Total`. |
+| Rule | `Actual LOC`, `Delta`, and `Running Total` are filled via `wc -l` re-audit after each phase completion. Use `—` for not-yet-completed phases. |
+| Rule | Completed phases must have empirical `Actual LOC` values — estimates alone are insufficient once a phase is done. |
+| Rule | If cumulative delta exceeds ±20% of remaining estimate, flag drift and reassess future phase estimates in the same section. |
+| Rule | Optionally include summary sub-tables: breakdown by impact type, grand total impact (Before/Current/Target), and re-audit procedure. |
+
 ## canonical_section_order
 
 | Order | Section ID | Requirement |
@@ -52,3 +64,4 @@ Quick summary: This schema specializes `doc_schema` for plan verification sideca
 | 1 | `section_menu` | required |
 | 2 | `linked_document` | required |
 | 3 | `verification_entries` | required |
+| 4 | `per_phase_loc_tracker` | conditional (required for code-bearing plans with LOC reduction goals) |
