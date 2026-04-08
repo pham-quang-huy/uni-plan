@@ -40,6 +40,7 @@ int DocWatchApp::Run()
     using namespace ftxui;
 
     auto screen = ScreenInteractive::Fullscreen();
+    screen.TrackMouse(false);
 
     // Panels
     InventoryPanel PanelInventory;
