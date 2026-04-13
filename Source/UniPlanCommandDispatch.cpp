@@ -563,6 +563,20 @@ int RunMain(const int InArgc, char *InArgv[])
                 return 0;
             }
 
+            // Check for extended phase subcommands (detail, transition)
+            if (Tokens.size() > 1)
+            {
+                const std::string Sub = ToLower(Tokens[1]);
+                if (Sub == "detail" || Sub == "transition")
+                {
+                    const std::vector<std::string> SubArgs(Tokens.begin() + 1,
+                                                           Tokens.end());
+                    const PhaseCommandOptions PhaseOpts =
+                        ParsePhaseCommandOptions(SubArgs);
+                    return RunPhaseExtendedCommand(PhaseOpts, UseCache, Config);
+                }
+            }
+
             bool bListAll = false;
             size_t ArgsStartIndex = 1;
             if (Tokens.size() > 1)
@@ -2136,6 +2150,25 @@ int RunMain(const int InArgc, char *InArgv[])
             }
 
             throw UsageError("Unknown cache subcommand: " + Subcommand);
+        }
+
+        if (Command == "plan")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            if (ContainsHelpFlag(Args))
+            {
+                std::cout << "Usage:\n"
+                          << "  uni-plan plan info --topic <topic>\n"
+                          << "  uni-plan plan field --topic <topic> "
+                             "--section <id> --field <name>\n"
+                          << "  uni-plan plan field --topic <topic> "
+                             "--section <id> --field <name> "
+                             "--value <val>\n";
+                return 0;
+            }
+            const PlanCommandOptions Options = ParsePlanCommandOptions(Args);
+            return RunPlanCommand(Options, UseCache, Config);
         }
 
         if (Command == "migrate")

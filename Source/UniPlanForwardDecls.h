@@ -671,6 +671,16 @@ MigrateOptions ParseMigrateOptions(const std::vector<std::string> &InTokens);
 int RunMigrateJson(const MigrateOptions &InOptions, const bool InUseCache,
                    const DocConfig &InConfig);
 
+// From UniPlanCommandPlan.cpp
+PlanCommandOptions
+ParsePlanCommandOptions(const std::vector<std::string> &InTokens);
+PhaseCommandOptions
+ParsePhaseCommandOptions(const std::vector<std::string> &InTokens);
+int RunPlanCommand(const PlanCommandOptions &InOptions, const bool InUseCache,
+                   const DocConfig &InConfig);
+int RunPhaseExtendedCommand(const PhaseCommandOptions &InOptions,
+                            const bool InUseCache, const DocConfig &InConfig);
+
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>
 TryParseSectionSchemaFromFile(const fs::path &InSchemaPath);

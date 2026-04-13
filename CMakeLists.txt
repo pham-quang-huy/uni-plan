@@ -39,6 +39,7 @@ add_executable(uni-plan
     Source/UniPlanCommandMigrate.cpp
     Source/UniPlanDocumentStore.cpp
     Source/UniPlanMutation.cpp
+    Source/UniPlanCommandPlan.cpp
 )
 
 target_include_directories(uni-plan PRIVATE

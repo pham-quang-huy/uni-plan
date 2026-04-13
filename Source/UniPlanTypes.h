@@ -16,7 +16,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.31.0";
+static constexpr const char *kCliVersion = "0.32.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -317,6 +317,39 @@ struct MigrateOptions : BaseOptions
     bool mbAll = false;          // --all
     bool mbDeleteSource = false; // --delete-source
 };
+
+struct PlanCommandOptions : BaseOptions
+{
+    std::string mSubcommand; // "info", "field", "update",
+                             // "create", "init", "archive"
+    std::string mTopic;
+    std::string mSection;
+    std::string mField;
+    std::string mValue;
+    std::string mContent;
+    std::string mTitle;
+    std::string mPhases;
+    std::string mReason;
+    std::string mTemplate = "minimal";
+};
+
+struct PhaseCommandOptions : BaseOptions
+{
+    std::string mSubcommand; // "detail", "transition",
+                             // "add", "remove"
+    std::string mTopic;
+    std::string mPhaseKey;
+    std::string mToStatus;
+    std::string mScope;
+    bool mbForce = false;
+};
+
+static constexpr const char *kPlanInfoSchema = "uni-plan-plan-info-v1";
+static constexpr const char *kPlanFieldSchema = "uni-plan-plan-field-v1";
+static constexpr const char *kPlanMutationSchema = "uni-plan-plan-mutation-v1";
+static constexpr const char *kPhaseDetailSchema = "uni-plan-phase-detail-v1";
+static constexpr const char *kPhaseTransitionSchema =
+    "uni-plan-phase-transition-v1";
 
 // ---------------------------------------------------------------------------
 // Error types
