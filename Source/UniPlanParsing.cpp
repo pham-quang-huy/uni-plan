@@ -596,14 +596,48 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
                 // Create DocumentRecords from bundle
                 const std::string TopicKey = Bundle.mTopicKey;
 
+                // Derive plan status — try bundle level, then
+                // scan plan summary table for Status row
+                std::string DerivedStatus = Bundle.mStatus;
+                if (DerivedStatus.empty() || DerivedStatus == "unknown")
+                {
+                    DerivedStatus = ToString(Bundle.mPlan.mStatus);
+                }
+                if (DerivedStatus.empty() || DerivedStatus == "unknown")
+                {
+                    // Scan plan tables for Status field
+                    for (const auto &SP : Bundle.mPlan.mSections)
+                    {
+                        for (const FStructuredTable &T : SP.second.mTables)
+                        {
+                            if (T.mHeaders.size() < 2)
+                                continue;
+                            for (const auto &Row : T.mRows)
+                            {
+                                if (Row.size() >= 2 &&
+                                    ToLower(Trim(Row[0].mValue)) == "status")
+                                {
+                                    DerivedStatus =
+                                        NormalizeStatusValue(Row[1].mValue);
+                                    break;
+                                }
+                            }
+                            if (DerivedStatus != "unknown")
+                                break;
+                        }
+                        if (DerivedStatus != "unknown")
+                            break;
+                    }
+                }
+
                 // Plan record
                 {
                     DocumentRecord PlanRecord;
                     PlanRecord.mKind = EDocumentKind::Plan;
                     PlanRecord.mTopicKey = TopicKey;
                     PlanRecord.mPath = Relative + "#plan";
-                    PlanRecord.mStatus = ToString(Bundle.mPlan.mStatus);
-                    PlanRecord.mStatusRaw = Bundle.mPlan.mStatusRaw;
+                    PlanRecord.mStatus = DerivedStatus;
+                    PlanRecord.mStatusRaw = DerivedStatus;
                     Result.mPlans.push_back(std::move(PlanRecord));
                 }
 
