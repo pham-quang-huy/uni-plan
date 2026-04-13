@@ -249,19 +249,25 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
 
         for (size_t HI = 0; HI < Headings.size(); ++HI)
         {
-            if (Headings[HI].mLevel != 2)
+            // Create sections for H2 and H3 headings.
+            // H3 sections like wave_lane_job_board,
+            // target_file_manifest must be addressable
+            // by section ID.
+            if (Headings[HI].mLevel < 2 || Headings[HI].mLevel > 3)
                 continue;
 
             FSectionContent Section;
             Section.mSectionID = Headings[HI].mSectionId;
             Section.mHeading = Headings[HI].mText;
-            Section.mLevel = 2;
+            Section.mLevel = Headings[HI].mLevel;
 
-            // Find section end
+            // Find section end — next heading at same or
+            // higher level
             int SectionEnd = TotalLines - 1;
+            const int CurrentLevel = Headings[HI].mLevel;
             for (size_t NI = HI + 1; NI < Headings.size(); ++NI)
             {
-                if (Headings[NI].mLevel <= 2)
+                if (Headings[NI].mLevel <= CurrentLevel)
                 {
                     SectionEnd = Headings[NI].mLine - 1;
                     break;

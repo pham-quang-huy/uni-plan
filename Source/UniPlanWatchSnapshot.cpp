@@ -13,42 +13,6 @@
 namespace UniPlan
 {
 
-// Identify table type by headers instead of section ID.
-// Tables may be in parent sections due to H3 flattening.
-static bool HasHeader(const FStructuredTable &InTable,
-                      const std::string &InName)
-{
-    for (const std::string &H : InTable.mHeaders)
-    {
-        if (ToLower(Trim(H)) == InName)
-            return true;
-    }
-    return false;
-}
-
-static bool IsLaneTable(const FStructuredTable &InTable)
-{
-    return HasHeader(InTable, "lane") && HasHeader(InTable, "status") &&
-           !HasHeader(InTable, "wave") && !HasHeader(InTable, "job");
-}
-
-static bool IsJobBoardTable(const FStructuredTable &InTable)
-{
-    return HasHeader(InTable, "wave") && HasHeader(InTable, "lane") &&
-           HasHeader(InTable, "job");
-}
-
-static bool IsTaskChecklistTable(const FStructuredTable &InTable)
-{
-    return HasHeader(InTable, "task") &&
-           (HasHeader(InTable, "job") || HasHeader(InTable, "job ref"));
-}
-
-static bool IsFileManifestTable(const FStructuredTable &InTable)
-{
-    return HasHeader(InTable, "file") && HasHeader(InTable, "action");
-}
-
 static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
                                          const fs::path &InRepoRoot)
 {
@@ -89,11 +53,11 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
     // Parse execution_lanes
     for (const FNamedTable &NT : AllTables)
     {
-        const FStructuredTable &Table = *NT.rpTable;
-        if (!IsLaneTable(Table))
+        if (NT.mSectionId != "execution_lanes")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int LaneCol = -1;
         int StatusCol = -1;
         int ScopeCol = -1;
@@ -154,11 +118,11 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
     std::set<std::string> UniqueWaves;
     for (const FNamedTable &NT : AllTables)
     {
-        const FStructuredTable &Table = *NT.rpTable;
-        if (!IsJobBoardTable(Table))
+        if (NT.mSectionId != "wave_lane_job_board")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int WaveCol = -1, LaneCol = -1, JobCol = -1, StatusCol = -1,
             ScopeCol = -1, ExitCol = -1;
         for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size()); ++Col)
@@ -242,11 +206,11 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
     // Parse job_task_checklist
     for (const FNamedTable &NT : AllTables)
     {
-        const FStructuredTable &Table = *NT.rpTable;
-        if (!IsTaskChecklistTable(Table))
+        if (NT.mSectionId != "job_task_checklist")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int JobCol = -1, TaskCol = -1, StatusCol = -1, DescCol = -1,
             EvidenceCol = -1;
         for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size()); ++Col)
@@ -309,11 +273,11 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
     // Parse target_file_manifest
     for (const FNamedTable &NT : AllTables)
     {
-        const FStructuredTable &Table = *NT.rpTable;
-        if (!IsFileManifestTable(Table))
+        if (NT.mSectionId != "target_file_manifest")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int FileCol = -1, ActionCol = -1, DescCol = -1;
         for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size()); ++Col)
         {
