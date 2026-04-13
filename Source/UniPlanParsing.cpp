@@ -1423,11 +1423,15 @@ ParseMarkdownTables(const std::vector<std::string> &InLines,
                 break;
             }
 
-            const std::vector<std::string> RowCells =
-                SplitMarkdownTableRow(RowLine);
+            std::vector<std::string> RowCells = SplitMarkdownTableRow(RowLine);
             if (!IsDividerRow(RowCells))
             {
-                Table.mRows.push_back(RowCells);
+                // Pad short rows to match header count
+                while (RowCells.size() < HeaderCells.size())
+                {
+                    RowCells.emplace_back("");
+                }
+                Table.mRows.push_back(std::move(RowCells));
             }
             ++RowIndex;
         }
