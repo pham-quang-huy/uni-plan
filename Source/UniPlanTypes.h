@@ -16,7 +16,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.28.0";
+static constexpr const char *kCliVersion = "0.29.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -71,6 +71,9 @@ static constexpr const char *kSidecarVerification = "Verification";
 static constexpr const char *kExtPlan = ".Plan.md";
 static constexpr const char *kExtImpl = ".Impl.md";
 static constexpr const char *kExtPlaybook = ".Playbook.md";
+static constexpr const char *kExtPlanJson = ".Plan.json";
+static constexpr const char *kExtImplJson = ".Impl.json";
+static constexpr const char *kExtPlaybookJson = ".Playbook.json";
 
 // ---------------------------------------------------------------------------
 // Human-mode label constants

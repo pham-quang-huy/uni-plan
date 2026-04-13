@@ -26,7 +26,6 @@
 namespace UniPlan
 {
 
-
 fs::path ResolveExecutableDirectory()
 {
 #ifdef __APPLE__
@@ -63,12 +62,11 @@ fs::path ResolveExecutableDirectory()
 #endif
 }
 
-
 // ---------------------------------------------------------------------------
 // INI parser and configuration
 // ---------------------------------------------------------------------------
 
-std::string ExpandEnvVars(const std::string& InValue)
+std::string ExpandEnvVars(const std::string &InValue)
 {
     std::string Result;
     Result.reserve(InValue.size());
@@ -76,13 +74,15 @@ std::string ExpandEnvVars(const std::string& InValue)
 
     while (Pos < InValue.size())
     {
-        if (InValue[Pos] == '$' && Pos + 1 < InValue.size() && InValue[Pos + 1] == '{')
+        if (InValue[Pos] == '$' && Pos + 1 < InValue.size() &&
+            InValue[Pos + 1] == '{')
         {
             const size_t ClosePos = InValue.find('}', Pos + 2);
             if (ClosePos != std::string::npos)
             {
-                const std::string VarName = InValue.substr(Pos + 2, ClosePos - Pos - 2);
-                const char* VarValue = std::getenv(VarName.c_str());
+                const std::string VarName =
+                    InValue.substr(Pos + 2, ClosePos - Pos - 2);
+                const char *VarValue = std::getenv(VarName.c_str());
                 if (VarValue != nullptr)
                 {
                     Result += VarValue;
@@ -98,10 +98,9 @@ std::string ExpandEnvVars(const std::string& InValue)
     return Result;
 }
 
-
 // IniData typedef moved to DocTypes.h
 
-IniData ParseIniFile(const fs::path& InPath)
+IniData ParseIniFile(const fs::path &InPath)
 {
     IniData Sections;
     std::ifstream File(InPath);
@@ -154,9 +153,11 @@ IniData ParseIniFile(const fs::path& InPath)
         Key = (KeyEnd == std::string::npos) ? "" : Key.substr(0, KeyEnd + 1);
 
         const size_t ValueStart = Value.find_first_not_of(" \t");
-        Value = (ValueStart == std::string::npos) ? "" : Value.substr(ValueStart);
+        Value =
+            (ValueStart == std::string::npos) ? "" : Value.substr(ValueStart);
         const size_t ValueEnd = Value.find_last_not_of(" \t\r\n");
-        Value = (ValueEnd == std::string::npos) ? "" : Value.substr(0, ValueEnd + 1);
+        Value = (ValueEnd == std::string::npos) ? ""
+                                                : Value.substr(0, ValueEnd + 1);
 
         if (!Key.empty())
         {
@@ -167,10 +168,9 @@ IniData ParseIniFile(const fs::path& InPath)
     return Sections;
 }
 
-
 // DocConfig moved to DocTypes.h
 
-DocConfig LoadConfig(const fs::path& InExeDir)
+DocConfig LoadConfig(const fs::path &InExeDir)
 {
     DocConfig Config;
     const fs::path IniPath = InExeDir / "uni-plan.ini";
@@ -190,7 +190,8 @@ DocConfig LoadConfig(const fs::path& InExeDir)
         {
             std::string Val = EnabledIt->second;
             std::transform(Val.begin(), Val.end(), Val.begin(), ::tolower);
-            Config.mbCacheEnabled = (Val != "false" && Val != "0" && Val != "no");
+            Config.mbCacheEnabled =
+                (Val != "false" && Val != "0" && Val != "no");
         }
 
         const auto VerboseIt = CacheIt->second.find("verbose");
@@ -198,22 +199,21 @@ DocConfig LoadConfig(const fs::path& InExeDir)
         {
             std::string Val = VerboseIt->second;
             std::transform(Val.begin(), Val.end(), Val.begin(), ::tolower);
-            Config.mbCacheVerbose = (Val == "true" || Val == "1" || Val == "yes");
+            Config.mbCacheVerbose =
+                (Val == "true" || Val == "1" || Val == "yes");
         }
     }
 
     return Config;
 }
 
-
-void Fnv1aUpdateByte(uint64_t& InOutState, const uint8_t InValue)
+void Fnv1aUpdateByte(uint64_t &InOutState, const uint8_t InValue)
 {
     InOutState ^= static_cast<uint64_t>(InValue);
     InOutState *= 1099511628211ull;
 }
 
-
-void Fnv1aUpdateString(uint64_t& InOutState, const std::string& InValue)
+void Fnv1aUpdateString(uint64_t &InOutState, const std::string &InValue)
 {
     for (const char Character : InValue)
     {
@@ -221,8 +221,7 @@ void Fnv1aUpdateString(uint64_t& InOutState, const std::string& InValue)
     }
 }
 
-
-void Fnv1aUpdateUint64(uint64_t& InOutState, uint64_t InValue)
+void Fnv1aUpdateUint64(uint64_t &InOutState, uint64_t InValue)
 {
     for (int ByteIndex = 0; ByteIndex < 8; ++ByteIndex)
     {
@@ -231,16 +230,15 @@ void Fnv1aUpdateUint64(uint64_t& InOutState, uint64_t InValue)
     }
 }
 
-
 std::string ToHexString(const uint64_t InValue)
 {
     std::ostringstream Stream;
-    Stream << std::hex << std::nouppercase << std::setw(16) << std::setfill('0') << InValue;
+    Stream << std::hex << std::nouppercase << std::setw(16) << std::setfill('0')
+           << InValue;
     return Stream.str();
 }
 
-
-std::string EscapeCacheField(const std::string& InValue)
+std::string EscapeCacheField(const std::string &InValue)
 {
     std::string Result;
     Result.reserve(InValue.size());
@@ -271,8 +269,7 @@ std::string EscapeCacheField(const std::string& InValue)
     return Result;
 }
 
-
-std::string UnescapeCacheField(const std::string& InValue)
+std::string UnescapeCacheField(const std::string &InValue)
 {
     std::string Result;
     Result.reserve(InValue.size());
@@ -307,8 +304,7 @@ std::string UnescapeCacheField(const std::string& InValue)
     return Result;
 }
 
-
-std::vector<std::string> SplitCacheFields(const std::string& InLine)
+std::vector<std::string> SplitCacheFields(const std::string &InLine)
 {
     std::vector<std::string> Fields;
     std::string Current;
@@ -324,8 +320,7 @@ std::vector<std::string> SplitCacheFields(const std::string& InLine)
     return Fields;
 }
 
-
-fs::path ResolveCodexCacheRoot(const std::string& InConfigCacheDir = "")
+fs::path ResolveCodexCacheRoot(const std::string &InConfigCacheDir = "")
 {
     if (!InConfigCacheDir.empty())
     {
@@ -338,7 +333,7 @@ fs::path ResolveCodexCacheRoot(const std::string& InConfigCacheDir = "")
         return ResolveExecutableDirectory() / ConfigPath;
     }
 
-    const char* HomeEnv = std::getenv("HOME");
+    const char *HomeEnv = std::getenv("HOME");
 #ifdef _WIN32
     if (HomeEnv == nullptr || *HomeEnv == '\0')
     {
@@ -353,26 +348,31 @@ fs::path ResolveCodexCacheRoot(const std::string& InConfigCacheDir = "")
     return fs::path(HomeEnv) / fs::path(".codex/uni-plan/cache");
 }
 
-
-fs::path BuildInventoryCachePath(const fs::path& InRepoRoot, const std::string& InConfigCacheDir = "")
+fs::path BuildInventoryCachePath(const fs::path &InRepoRoot,
+                                 const std::string &InConfigCacheDir = "")
 {
     uint64_t HashState = 1469598103934665603ull;
     Fnv1aUpdateString(HashState, ToGenericPath(InRepoRoot));
     const std::string RepoKey = ToHexString(HashState);
-    return ResolveCodexCacheRoot(InConfigCacheDir) / fs::path(RepoKey) / fs::path("inventory.cache");
+    return ResolveCodexCacheRoot(InConfigCacheDir) / fs::path(RepoKey) /
+           fs::path("inventory.cache");
 }
 
-
-bool TryComputeMarkdownCorpusSignature(const fs::path& InRepoRoot, uint64_t& OutSignature, std::string& OutError)
+bool TryComputeMarkdownCorpusSignature(const fs::path &InRepoRoot,
+                                       uint64_t &OutSignature,
+                                       std::string &OutError)
 {
     std::vector<MarkdownSignatureEntry> Entries;
-    const fs::directory_options IteratorOptions = fs::directory_options::skip_permission_denied;
+    const fs::directory_options IteratorOptions =
+        fs::directory_options::skip_permission_denied;
     std::error_code Error;
-    fs::recursive_directory_iterator Iterator(InRepoRoot, IteratorOptions, Error);
+    fs::recursive_directory_iterator Iterator(InRepoRoot, IteratorOptions,
+                                              Error);
     fs::recursive_directory_iterator EndIterator;
     if (Error)
     {
-        OutError = "Signature traversal initialization failed: " + Error.message();
+        OutError =
+            "Signature traversal initialization failed: " + Error.message();
         return false;
     }
 
@@ -380,12 +380,16 @@ bool TryComputeMarkdownCorpusSignature(const fs::path& InRepoRoot, uint64_t& Out
     {
         const fs::directory_entry Entry = *Iterator;
         const fs::path AbsolutePath = Entry.path();
-        const auto AdvanceIterator = [&Iterator, &EndIterator, &OutError, &AbsolutePath]() {
+        const auto AdvanceIterator =
+            [&Iterator, &EndIterator, &OutError, &AbsolutePath]()
+        {
             std::error_code AdvanceError;
             Iterator.increment(AdvanceError);
             if (AdvanceError)
             {
-                OutError = "Signature traversal advance failed at '" + AbsolutePath.string() + "': " + AdvanceError.message();
+                OutError = "Signature traversal advance failed at '" +
+                           AbsolutePath.string() +
+                           "': " + AdvanceError.message();
                 Iterator = EndIterator;
             }
         };
@@ -394,7 +398,8 @@ bool TryComputeMarkdownCorpusSignature(const fs::path& InRepoRoot, uint64_t& Out
         const bool IsDirectory = Entry.is_directory(PathTypeError);
         if (PathTypeError)
         {
-            OutError = "Signature traversal directory-type read failed for '" + AbsolutePath.string() + "': " + PathTypeError.message();
+            OutError = "Signature traversal directory-type read failed for '" +
+                       AbsolutePath.string() + "': " + PathTypeError.message();
             return false;
         }
 
@@ -412,11 +417,13 @@ bool TryComputeMarkdownCorpusSignature(const fs::path& InRepoRoot, uint64_t& Out
         const bool IsRegularFile = Entry.is_regular_file(PathTypeError);
         if (PathTypeError)
         {
-            OutError = "Signature traversal file-type read failed for '" + AbsolutePath.string() + "': " + PathTypeError.message();
+            OutError = "Signature traversal file-type read failed for '" +
+                       AbsolutePath.string() + "': " + PathTypeError.message();
             return false;
         }
 
-        if (!IsRegularFile || AbsolutePath.extension() != ".md")
+        const std::string Ext = AbsolutePath.extension().string();
+        if (!IsRegularFile || (Ext != ".md" && Ext != ".json"))
         {
             AdvanceIterator();
             if (!OutError.empty())
@@ -431,31 +438,38 @@ bool TryComputeMarkdownCorpusSignature(const fs::path& InRepoRoot, uint64_t& Out
         {
             RelativePath = fs::relative(AbsolutePath, InRepoRoot);
         }
-        catch (const fs::filesystem_error& InError)
+        catch (const fs::filesystem_error &InError)
         {
-            OutError = "Signature traversal relative-path resolution failed for '" + AbsolutePath.string() + "': " + InError.what();
+            OutError =
+                "Signature traversal relative-path resolution failed for '" +
+                AbsolutePath.string() + "': " + InError.what();
             return false;
         }
 
         std::error_code WriteTimeError;
-        const fs::file_time_type WriteTime = fs::last_write_time(AbsolutePath, WriteTimeError);
+        const fs::file_time_type WriteTime =
+            fs::last_write_time(AbsolutePath, WriteTimeError);
         if (WriteTimeError)
         {
-            OutError = "Signature traversal write-time read failed for '" + AbsolutePath.string() + "': " + WriteTimeError.message();
+            OutError = "Signature traversal write-time read failed for '" +
+                       AbsolutePath.string() + "': " + WriteTimeError.message();
             return false;
         }
 
         std::error_code FileSizeError;
-        const uint64_t FileSize = static_cast<uint64_t>(Entry.file_size(FileSizeError));
+        const uint64_t FileSize =
+            static_cast<uint64_t>(Entry.file_size(FileSizeError));
         if (FileSizeError)
         {
-            OutError = "Signature traversal file-size read failed for '" + AbsolutePath.string() + "': " + FileSizeError.message();
+            OutError = "Signature traversal file-size read failed for '" +
+                       AbsolutePath.string() + "': " + FileSizeError.message();
             return false;
         }
 
         MarkdownSignatureEntry SignatureEntry;
         SignatureEntry.mPath = ToGenericPath(RelativePath);
-        SignatureEntry.mWriteTime = static_cast<uint64_t>(WriteTime.time_since_epoch().count());
+        SignatureEntry.mWriteTime =
+            static_cast<uint64_t>(WriteTime.time_since_epoch().count());
         SignatureEntry.mFileSize = FileSize;
         Entries.push_back(std::move(SignatureEntry));
 
@@ -466,12 +480,15 @@ bool TryComputeMarkdownCorpusSignature(const fs::path& InRepoRoot, uint64_t& Out
         }
     }
 
-    std::sort(Entries.begin(), Entries.end(), [](const MarkdownSignatureEntry& InLeft, const MarkdownSignatureEntry& InRight) { return InLeft.mPath < InRight.mPath; });
+    std::sort(Entries.begin(), Entries.end(),
+              [](const MarkdownSignatureEntry &InLeft,
+                 const MarkdownSignatureEntry &InRight)
+              { return InLeft.mPath < InRight.mPath; });
 
     uint64_t HashState = 1469598103934665603ull;
     Fnv1aUpdateString(HashState, ToGenericPath(InRepoRoot));
     Fnv1aUpdateUint64(HashState, static_cast<uint64_t>(Entries.size()));
-    for (const MarkdownSignatureEntry& Entry : Entries)
+    for (const MarkdownSignatureEntry &Entry : Entries)
     {
         Fnv1aUpdateString(HashState, Entry.mPath);
         Fnv1aUpdateByte(HashState, 0x1F);
@@ -485,15 +502,17 @@ bool TryComputeMarkdownCorpusSignature(const fs::path& InRepoRoot, uint64_t& Out
     return true;
 }
 
-
-bool TryWriteInventoryCache(const fs::path& InCachePath, const Inventory& InInventory, const uint64_t InSignature, std::string& OutError)
+bool TryWriteInventoryCache(const fs::path &InCachePath,
+                            const Inventory &InInventory,
+                            const uint64_t InSignature, std::string &OutError)
 {
     const fs::path ParentDirectory = InCachePath.parent_path();
     std::error_code Error;
     fs::create_directories(ParentDirectory, Error);
     if (Error)
     {
-        OutError = "Failed to create cache directory '" + ParentDirectory.string() + "': " + Error.message();
+        OutError = "Failed to create cache directory '" +
+                   ParentDirectory.string() + "': " + Error.message();
         return false;
     }
 
@@ -501,7 +520,8 @@ bool TryWriteInventoryCache(const fs::path& InCachePath, const Inventory& InInve
     std::ofstream Stream(TempPath);
     if (!Stream.is_open())
     {
-        OutError = "Failed to open temp cache file for write: " + TempPath.string();
+        OutError =
+            "Failed to open temp cache file for write: " + TempPath.string();
         return false;
     }
 
@@ -509,31 +529,46 @@ bool TryWriteInventoryCache(const fs::path& InCachePath, const Inventory& InInve
     Stream << "signature\t" << InSignature << "\n";
     Stream << "repo_root\t" << EscapeCacheField(InInventory.mRepoRoot) << "\n";
     Stream << "[plans]\n";
-    for (const DocumentRecord& Plan : InInventory.mPlans)
+    for (const DocumentRecord &Plan : InInventory.mPlans)
     {
-        Stream << EscapeCacheField(Plan.mTopicKey) << "\t" << EscapeCacheField(Plan.mPhaseKey) << "\t" << EscapeCacheField(Plan.mStatusRaw) << "\t" << EscapeCacheField(Plan.mStatus) << "\t" << EscapeCacheField(Plan.mPath) << "\n";
+        Stream << EscapeCacheField(Plan.mTopicKey) << "\t"
+               << EscapeCacheField(Plan.mPhaseKey) << "\t"
+               << EscapeCacheField(Plan.mStatusRaw) << "\t"
+               << EscapeCacheField(Plan.mStatus) << "\t"
+               << EscapeCacheField(Plan.mPath) << "\n";
     }
     Stream << "[/plans]\n";
 
     Stream << "[playbooks]\n";
-    for (const DocumentRecord& Playbook : InInventory.mPlaybooks)
+    for (const DocumentRecord &Playbook : InInventory.mPlaybooks)
     {
-        Stream << EscapeCacheField(Playbook.mTopicKey) << "\t" << EscapeCacheField(Playbook.mPhaseKey) << "\t" << EscapeCacheField(Playbook.mStatusRaw) << "\t" << EscapeCacheField(Playbook.mStatus) << "\t" << EscapeCacheField(Playbook.mPath) << "\n";
+        Stream << EscapeCacheField(Playbook.mTopicKey) << "\t"
+               << EscapeCacheField(Playbook.mPhaseKey) << "\t"
+               << EscapeCacheField(Playbook.mStatusRaw) << "\t"
+               << EscapeCacheField(Playbook.mStatus) << "\t"
+               << EscapeCacheField(Playbook.mPath) << "\n";
     }
     Stream << "[/playbooks]\n";
 
     Stream << "[implementations]\n";
-    for (const DocumentRecord& Implementation : InInventory.mImplementations)
+    for (const DocumentRecord &Implementation : InInventory.mImplementations)
     {
-        Stream << EscapeCacheField(Implementation.mTopicKey) << "\t" << EscapeCacheField(Implementation.mPhaseKey) << "\t" << EscapeCacheField(Implementation.mStatusRaw) << "\t" << EscapeCacheField(Implementation.mStatus) << "\t"
+        Stream << EscapeCacheField(Implementation.mTopicKey) << "\t"
+               << EscapeCacheField(Implementation.mPhaseKey) << "\t"
+               << EscapeCacheField(Implementation.mStatusRaw) << "\t"
+               << EscapeCacheField(Implementation.mStatus) << "\t"
                << EscapeCacheField(Implementation.mPath) << "\n";
     }
     Stream << "[/implementations]\n";
 
     Stream << "[sidecars]\n";
-    for (const SidecarRecord& Sidecar : InInventory.mSidecars)
+    for (const SidecarRecord &Sidecar : InInventory.mSidecars)
     {
-        Stream << EscapeCacheField(Sidecar.mTopicKey) << "\t" << EscapeCacheField(Sidecar.mPhaseKey) << "\t" << EscapeCacheField(Sidecar.mOwnerKind) << "\t" << EscapeCacheField(Sidecar.mDocKind) << "\t" << EscapeCacheField(Sidecar.mPath) << "\n";
+        Stream << EscapeCacheField(Sidecar.mTopicKey) << "\t"
+               << EscapeCacheField(Sidecar.mPhaseKey) << "\t"
+               << EscapeCacheField(Sidecar.mOwnerKind) << "\t"
+               << EscapeCacheField(Sidecar.mDocKind) << "\t"
+               << EscapeCacheField(Sidecar.mPath) << "\n";
     }
     Stream << "[/sidecars]\n";
 
@@ -557,7 +592,8 @@ bool TryWriteInventoryCache(const fs::path& InCachePath, const Inventory& InInve
         {
             std::error_code CleanupError;
             fs::remove(TempPath, CleanupError);
-            OutError = "Failed to finalize cache file '" + InCachePath.string() + "': " + Error.message();
+            OutError = "Failed to finalize cache file '" +
+                       InCachePath.string() + "': " + Error.message();
             return false;
         }
     }
@@ -565,8 +601,10 @@ bool TryWriteInventoryCache(const fs::path& InCachePath, const Inventory& InInve
     return true;
 }
 
-
-bool TryLoadInventoryCache(const fs::path& InCachePath, const std::string& InRepoRoot, const uint64_t InSignature, Inventory& OutInventory, std::string& OutError)
+bool TryLoadInventoryCache(const fs::path &InCachePath,
+                           const std::string &InRepoRoot,
+                           const uint64_t InSignature, Inventory &OutInventory,
+                           std::string &OutError)
 {
     std::error_code Error;
     if (!fs::exists(InCachePath, Error))
@@ -575,7 +613,8 @@ bool TryLoadInventoryCache(const fs::path& InCachePath, const std::string& InRep
     }
     if (Error)
     {
-        OutError = "Failed to check cache file '" + InCachePath.string() + "': " + Error.message();
+        OutError = "Failed to check cache file '" + InCachePath.string() +
+                   "': " + Error.message();
         return false;
     }
 
@@ -673,9 +712,10 @@ bool TryLoadInventoryCache(const fs::path& InCachePath, const std::string& InRep
                     CachedSignature = static_cast<uint64_t>(std::stoull(Value));
                     HasSignature = true;
                 }
-                catch (const std::exception&)
+                catch (const std::exception &)
                 {
-                    OutError = "Invalid signature value in cache file: " + InCachePath.string();
+                    OutError = "Invalid signature value in cache file: " +
+                               InCachePath.string();
                     return false;
                 }
             }
@@ -686,7 +726,8 @@ bool TryLoadInventoryCache(const fs::path& InCachePath, const std::string& InRep
         {
             if (Fields.size() != 5)
             {
-                OutError = "Invalid sidecar row in cache file: " + InCachePath.string();
+                OutError = "Invalid sidecar row in cache file: " +
+                           InCachePath.string();
                 return false;
             }
 
@@ -702,7 +743,8 @@ bool TryLoadInventoryCache(const fs::path& InCachePath, const std::string& InRep
 
         if (Fields.size() != 5)
         {
-            OutError = "Invalid document row in cache file: " + InCachePath.string();
+            OutError =
+                "Invalid document row in cache file: " + InCachePath.string();
             return false;
         }
 
@@ -750,20 +792,22 @@ bool TryLoadInventoryCache(const fs::path& InCachePath, const std::string& InRep
     SortRecords(Loaded.mPlaybooks);
     SortRecords(Loaded.mImplementations);
     SortSidecars(Loaded.mSidecars);
-    AppendSidecarIntegrityWarnings(Loaded.mPlans, Loaded.mPlaybooks, Loaded.mImplementations, Loaded.mSidecars, Loaded.mWarnings);
-    Loaded.mPairs = BuildTopicPairs(Loaded.mPlans, Loaded.mPlaybooks, Loaded.mImplementations, Loaded.mWarnings);
+    AppendSidecarIntegrityWarnings(Loaded.mPlans, Loaded.mPlaybooks,
+                                   Loaded.mImplementations, Loaded.mSidecars,
+                                   Loaded.mWarnings);
+    Loaded.mPairs = BuildTopicPairs(Loaded.mPlans, Loaded.mPlaybooks,
+                                    Loaded.mImplementations, Loaded.mWarnings);
     NormalizeWarnings(Loaded.mWarnings);
 
     OutInventory = std::move(Loaded);
     return true;
 }
 
-
 // ---------------------------------------------------------------------------
 // Cache utility helpers
 // ---------------------------------------------------------------------------
 
-uint64_t ComputeDirectorySize(const fs::path& InPath)
+uint64_t ComputeDirectorySize(const fs::path &InPath)
 {
     uint64_t Total = 0;
     std::error_code Error;
@@ -771,7 +815,8 @@ uint64_t ComputeDirectorySize(const fs::path& InPath)
     {
         return 0;
     }
-    for (const auto& Entry : fs::recursive_directory_iterator(InPath, fs::directory_options::skip_permission_denied, Error))
+    for (const auto &Entry : fs::recursive_directory_iterator(
+             InPath, fs::directory_options::skip_permission_denied, Error))
     {
         if (Entry.is_regular_file(Error))
         {
@@ -781,8 +826,7 @@ uint64_t ComputeDirectorySize(const fs::path& InPath)
     return Total;
 }
 
-
-int CountCacheEntries(const fs::path& InCacheRoot)
+int CountCacheEntries(const fs::path &InCacheRoot)
 {
     int Count = 0;
     std::error_code Error;
@@ -790,7 +834,8 @@ int CountCacheEntries(const fs::path& InCacheRoot)
     {
         return 0;
     }
-    for (const auto& Entry : fs::directory_iterator(InCacheRoot, fs::directory_options::skip_permission_denied, Error))
+    for (const auto &Entry : fs::directory_iterator(
+             InCacheRoot, fs::directory_options::skip_permission_denied, Error))
     {
         if (Entry.is_directory(Error))
         {
@@ -800,14 +845,13 @@ int CountCacheEntries(const fs::path& InCacheRoot)
     return Count;
 }
 
-
 std::string FormatBytesHuman(uint64_t InBytes)
 {
     if (InBytes < 1024)
     {
         return std::to_string(InBytes) + " B";
     }
-    const char* Units[] = {"KB", "MB", "GB", "TB"};
+    const char *Units[] = {"KB", "MB", "GB", "TB"};
     double Value = static_cast<double>(InBytes);
     int UnitIndex = -1;
     while (Value >= 1024.0 && UnitIndex < 3)
@@ -816,16 +860,17 @@ std::string FormatBytesHuman(uint64_t InBytes)
         ++UnitIndex;
     }
     std::ostringstream Stream;
-    Stream << std::fixed << std::setprecision(1) << Value << " " << Units[UnitIndex];
+    Stream << std::fixed << std::setprecision(1) << Value << " "
+           << Units[UnitIndex];
     return Stream.str();
 }
-
 
 // ---------------------------------------------------------------------------
 // Cache core logic
 // ---------------------------------------------------------------------------
 
-CacheInfoResult BuildCacheInfo(const std::string& InRepoRoot, const DocConfig& InConfig)
+CacheInfoResult BuildCacheInfo(const std::string &InRepoRoot,
+                               const DocConfig &InConfig)
 {
     CacheInfoResult Result;
     Result.mGeneratedUtc = GetUtcNow();
@@ -848,15 +893,16 @@ CacheInfoResult BuildCacheInfo(const std::string& InRepoRoot, const DocConfig& I
     }
 
     const fs::path RepoRoot = NormalizeRepoRootPath(InRepoRoot);
-    const fs::path RepoCachePath = BuildInventoryCachePath(RepoRoot, InConfig.mCacheDir);
+    const fs::path RepoCachePath =
+        BuildInventoryCachePath(RepoRoot, InConfig.mCacheDir);
     Result.mCurrentRepoCachePath = RepoCachePath.string();
     Result.mbCurrentRepoCacheExists = fs::exists(RepoCachePath, Error);
 
     return Result;
 }
 
-
-CacheClearResult ClearCache(const std::string& InRepoRoot, const DocConfig& InConfig)
+CacheClearResult ClearCache(const std::string &InRepoRoot,
+                            const DocConfig &InConfig)
 {
     CacheClearResult Result;
     Result.mGeneratedUtc = GetUtcNow();
@@ -885,8 +931,9 @@ CacheClearResult ClearCache(const std::string& InRepoRoot, const DocConfig& InCo
     return Result;
 }
 
-
-bool TryWriteDocIni(const fs::path& InPath, const std::string& InCacheDir, const std::string& InCacheEnabled, const std::string& InCacheVerbose, std::string& OutError)
+bool TryWriteDocIni(const fs::path &InPath, const std::string &InCacheDir,
+                    const std::string &InCacheEnabled,
+                    const std::string &InCacheVerbose, std::string &OutError)
 {
     const fs::path TmpPath = fs::path(InPath.string() + ".tmp");
     std::ofstream File(TmpPath);
@@ -897,10 +944,12 @@ bool TryWriteDocIni(const fs::path& InPath, const std::string& InCacheDir, const
     }
 
     File << "# Doc CLI tool configuration\n"
-         << "# This file is read from the same directory as the doc executable.\n\n"
+         << "# This file is read from the same directory as the doc "
+            "executable.\n\n"
          << "[cache]\n"
          << "# Inventory cache directory.\n"
-         << "# Supports: absolute paths, paths relative to this ini file's directory,\n"
+         << "# Supports: absolute paths, paths relative to this ini file's "
+            "directory,\n"
          << "#           and ${ENV_VAR} expansion (e.g. ${HOME}).\n"
          << "# Default (if empty or missing): ${HOME}/.codex/uni-plan/cache\n"
          << "dir = " << InCacheDir << "\n\n"
