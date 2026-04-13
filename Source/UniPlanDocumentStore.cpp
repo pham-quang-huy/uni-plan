@@ -1,14 +1,11 @@
 #include "UniPlanDocumentStore.h"
 #include "UniPlanJsonIO.h"
-#include "UniPlanMigrate.h"
-
-#include <algorithm>
 
 namespace UniPlan
 {
 
 // ---------------------------------------------------------------------------
-// TryLoadDocument — format-aware dispatch
+// TryLoadDocument — JSON-only
 // ---------------------------------------------------------------------------
 
 bool TryLoadDocument(const fs::path &InRepoRoot,
@@ -23,35 +20,23 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
         return TryReadDocumentJson(AbsPath, OutDocument, OutError);
     }
 
-    if (Ext == ".md")
-    {
-        return TryMigrateMarkdownToDocument(InRepoRoot, InRelativePath,
-                                            OutDocument, OutError);
-    }
-
-    OutError = "Unsupported document format: " + Ext;
+    OutError = "Unsupported document format (JSON required): " + Ext;
     return false;
 }
 
 // ---------------------------------------------------------------------------
-// TrySaveDocument — always writes JSON (decision #2)
+// TrySaveDocument — writes JSON
 // ---------------------------------------------------------------------------
 
 bool TrySaveDocument(const fs::path &InRepoRoot, const FDocument &InDocument,
                      std::string &OutError)
 {
-    std::string FilePath = InDocument.mIdentity.mFilePath;
+    const std::string &FilePath = InDocument.mIdentity.mFilePath;
 
     if (FilePath.empty())
     {
         OutError = "Document has empty file path";
         return false;
-    }
-
-    // Ensure .json extension
-    if (FilePath.size() > 3 && FilePath.substr(FilePath.size() - 3) == ".md")
-    {
-        FilePath = FilePath.substr(0, FilePath.size() - 3) + ".json";
     }
 
     const fs::path AbsPath = InRepoRoot / FilePath;
@@ -92,7 +77,6 @@ FSectionContent ResolveSectionFromDocument(const FDocument &InDocument,
 FStructuredTable ResolveTableFromDocument(const FDocument &InDocument,
                                           int InTableID)
 {
-    // Search top-level tables
     for (const FStructuredTable &Table : InDocument.mTables)
     {
         if (Table.mTableID == InTableID)
@@ -101,7 +85,6 @@ FStructuredTable ResolveTableFromDocument(const FDocument &InDocument,
         }
     }
 
-    // Search tables within sections
     for (const auto &Pair : InDocument.mSections)
     {
         for (const FStructuredTable &Table : Pair.second.mTables)
@@ -113,7 +96,6 @@ FStructuredTable ResolveTableFromDocument(const FDocument &InDocument,
         }
     }
 
-    // Not found
     FStructuredTable Empty;
     Empty.mTableID = -1;
     return Empty;

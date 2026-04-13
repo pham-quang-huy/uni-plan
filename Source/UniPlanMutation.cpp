@@ -95,15 +95,7 @@ static bool LoadAndValidateSection(const fs::path &InRepoRoot,
 static bool SaveWithHash(const fs::path &InRepoRoot, FDocument &InOutDocument,
                          FMutationResult &OutResult, std::string &OutError)
 {
-    // Ensure identity has .json path
-    std::string &FilePath = InOutDocument.mIdentity.mFilePath;
-    if (FilePath.size() > 3 && FilePath.substr(FilePath.size() - 3) == ".md")
-    {
-        FilePath = FilePath.substr(0, FilePath.size() - 3) + ".json";
-    }
-
-    InOutDocument.mIdentity.mFormat = EDocumentFormat::JSON;
-    OutResult.mTargetPath = FilePath;
+    OutResult.mTargetPath = InOutDocument.mIdentity.mFilePath;
 
     if (!TrySaveDocument(InRepoRoot, InOutDocument, OutError))
     {

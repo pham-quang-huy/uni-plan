@@ -59,28 +59,6 @@ inline EDocumentType DocumentTypeFromString(const std::string &InValue,
 }
 
 // ---------------------------------------------------------------------------
-// EDocumentFormat — dual-format support during .md -> .json migration.
-// ---------------------------------------------------------------------------
-
-enum class EDocumentFormat : uint8_t
-{
-    Markdown,
-    JSON
-};
-
-inline const char *ToString(EDocumentFormat InValue)
-{
-    switch (InValue)
-    {
-    case EDocumentFormat::Markdown:
-        return "markdown";
-    case EDocumentFormat::JSON:
-        return "json";
-    }
-    return "unknown";
-}
-
-// ---------------------------------------------------------------------------
 // EPhaseStatus — normalized phase/document status values.
 // Replaces raw status strings ("not_started", "in_progress", etc.).
 // ---------------------------------------------------------------------------

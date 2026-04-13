@@ -422,8 +422,7 @@ bool TryComputeMarkdownCorpusSignature(const fs::path &InRepoRoot,
             return false;
         }
 
-        const std::string Ext = AbsolutePath.extension().string();
-        if (!IsRegularFile || (Ext != ".md" && Ext != ".json"))
+        if (!IsRegularFile || AbsolutePath.extension() != ".json")
         {
             AdvanceIterator();
             if (!OutError.empty())

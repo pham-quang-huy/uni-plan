@@ -881,45 +881,4 @@ ParseCacheConfigOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
-MigrateOptions ParseMigrateOptions(const std::vector<std::string> &InTokens)
-{
-    MigrateOptions Options;
-    if (InTokens.empty())
-    {
-        throw UsageError("Missing subcommand. Usage: uni-plan migrate "
-                         "<md-to-json|verify|status> [options]");
-    }
-
-    Options.mSubcommand = InTokens[0];
-    std::vector<std::string> Remaining(InTokens.begin() + 1, InTokens.end());
-    ConsumeCommonOptions(Remaining, Options, true);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--doc" && Index + 1 < Remaining.size())
-        {
-            Options.mDocPath = Remaining[++Index];
-        }
-        else if (Token == "--topic" && Index + 1 < Remaining.size())
-        {
-            Options.mTopic = Remaining[++Index];
-        }
-        else if (Token == "--all")
-        {
-            Options.mbAll = true;
-        }
-        else if (Token == "--delete-source")
-        {
-            Options.mbDeleteSource = true;
-        }
-        else if (!Token.empty() && Token[0] != '-' && Options.mRepoRoot.empty())
-        {
-            Options.mRepoRoot = Token;
-        }
-    }
-
-    return Options;
-}
-
 } // namespace UniPlan

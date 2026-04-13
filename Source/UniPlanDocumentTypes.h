@@ -23,7 +23,6 @@ namespace UniPlan
 struct FDocumentIdentity
 {
     EDocumentType mType = EDocumentType::Plan;
-    EDocumentFormat mFormat = EDocumentFormat::Markdown;
     std::string mTopicKey;
     std::string mPhaseKey;
     std::string mFilePath;

@@ -348,9 +348,6 @@ int RunSectionContentText(const std::string &InDocPath,
                           const std::vector<std::string> &InWarnings);
 
 // From DocParsing.cpp
-StatusInference InferDocumentStatus(const EDocumentKind InKind,
-                                    const fs::path &InAbsolutePath,
-                                    std::vector<std::string> &OutWarnings);
 bool PathContainsSegment(const std::string &InRelativePath,
                          const std::string &InSegment);
 bool IsPlanPath(const std::string &InRelativePath);
@@ -663,13 +660,6 @@ void AddDriftItem(std::vector<DriftItem> &InOutDrifts, const std::string &InId,
 int SeverityRank(const std::string &InSeverity);
 void PrintUsage();
 void PrintCommandUsage(const std::string &InCommand);
-
-// From UniPlanOptionParsing.cpp
-MigrateOptions ParseMigrateOptions(const std::vector<std::string> &InTokens);
-
-// From UniPlanCommandMigrate.cpp
-int RunMigrateJson(const MigrateOptions &InOptions, const bool InUseCache,
-                   const DocConfig &InConfig);
 
 // From UniPlanCommandPlan.cpp
 PlanCommandOptions

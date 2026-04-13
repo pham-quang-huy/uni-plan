@@ -16,7 +16,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.37.0";
+static constexpr const char *kCliVersion = "0.38.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -68,12 +68,9 @@ static constexpr const char *kColorOrange = "\033[38;5;208m";
 
 static constexpr const char *kSidecarChangeLog = "ChangeLog";
 static constexpr const char *kSidecarVerification = "Verification";
-static constexpr const char *kExtPlan = ".Plan.md";
-static constexpr const char *kExtImpl = ".Impl.md";
-static constexpr const char *kExtPlaybook = ".Playbook.md";
-static constexpr const char *kExtPlanJson = ".Plan.json";
-static constexpr const char *kExtImplJson = ".Impl.json";
-static constexpr const char *kExtPlaybookJson = ".Playbook.json";
+static constexpr const char *kExtPlan = ".Plan.json";
+static constexpr const char *kExtImpl = ".Impl.json";
+static constexpr const char *kExtPlaybook = ".Playbook.json";
 
 // ---------------------------------------------------------------------------
 // Human-mode label constants
@@ -308,16 +305,6 @@ struct CacheConfigOptions : BaseOptions
     std::string mVerbose;
 };
 
-struct MigrateOptions : BaseOptions
-{
-    std::string mSubcommand;     // "md-to-json", "json-to-md",
-                                 // "verify", "status"
-    std::string mDocPath;        // --doc <path>
-    std::string mTopic;          // --topic <topic>
-    bool mbAll = false;          // --all
-    bool mbDeleteSource = false; // --delete-source
-};
-
 struct PlanCommandOptions : BaseOptions
 {
     std::string mSubcommand; // "info", "field", "update",
@@ -373,12 +360,6 @@ struct StatusCounters
     int mBlocked = 0;
     int mCanceled = 0;
     std::string mFirstRaw;
-};
-
-struct StatusInference
-{
-    std::string mRaw;
-    std::string mNormalized = "unknown";
 };
 
 struct MarkdownDocument

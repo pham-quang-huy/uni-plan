@@ -17,14 +17,12 @@ namespace UniPlan
 // this layer instead of reading files directly.
 // ---------------------------------------------------------------------------
 
-// Load a document from disk. Detects format from extension:
-// .json → TryReadDocumentJson, .md → TryMigrateMarkdownToDocument.
+// Load a document from disk (.json format only).
 bool TryLoadDocument(const fs::path &InRepoRoot,
                      const std::string &InRelativePath, FDocument &OutDocument,
                      std::string &OutError);
 
-// Save a document to disk as JSON (per architectural decision #2).
-// Always writes .json regardless of the original format.
+// Save a document to disk as JSON.
 bool TrySaveDocument(const fs::path &InRepoRoot, const FDocument &InDocument,
                      std::string &OutError);
 

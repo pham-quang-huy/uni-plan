@@ -2223,25 +2223,6 @@ int RunMain(const int InArgc, char *InArgv[])
             return RunSearchCommand(Args);
         }
 
-        if (Command == "migrate")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                std::cout << "Usage:\n"
-                          << "  uni-plan migrate md-to-json --doc "
-                             "<path>\n"
-                          << "  uni-plan migrate md-to-json --topic "
-                             "<topic>\n"
-                          << "  uni-plan migrate md-to-json --all\n"
-                          << "  uni-plan migrate status\n";
-                return 0;
-            }
-            const MigrateOptions Options = ParseMigrateOptions(Args);
-            return RunMigrateJson(Options, UseCache, Config);
-        }
-
 #ifdef UPLAN_WATCH
         if (Command == "watch")
         {

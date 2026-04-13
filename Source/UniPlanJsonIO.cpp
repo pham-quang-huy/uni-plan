@@ -290,7 +290,6 @@ static bool DeserializeDocument(const JsonValue &InRoot, FDocument &OutDocument,
     // Identity
     const std::string DocTypeStr = GetString(InRoot, "doc_type");
     OutDocument.mIdentity.mType = DocumentTypeFromString(DocTypeStr);
-    OutDocument.mIdentity.mFormat = EDocumentFormat::JSON;
     OutDocument.mIdentity.mTopicKey = GetString(InRoot, "topic_key");
     OutDocument.mIdentity.mPhaseKey = GetString(InRoot, "phase_key");
     OutDocument.mIdentity.mFilePath = GetString(InRoot, "file_path");

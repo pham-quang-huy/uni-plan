@@ -35,8 +35,6 @@ add_executable(uni-plan
     Source/UniPlanAnalysis.cpp
     Source/UniPlanOptionParsing.cpp
     Source/UniPlanJsonIO.cpp
-    Source/UniPlanMigrate.cpp
-    Source/UniPlanCommandMigrate.cpp
     Source/UniPlanDocumentStore.cpp
     Source/UniPlanMutation.cpp
     Source/UniPlanCommandPlan.cpp

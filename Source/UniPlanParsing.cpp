@@ -28,92 +28,6 @@ const std::regex kMarkdownPathRegex(R"([A-Za-z0-9_./\\-]+\.md)");
 // Type definitions (EDocumentKind, DocumentRecord, ..., PhaseListAllEntry)
 // moved to DocTypes.h
 
-StatusInference InferDocumentStatus(const EDocumentKind InKind,
-                                    const fs::path &InAbsolutePath,
-                                    std::vector<std::string> &OutWarnings)
-{
-    std::vector<std::string> Lines;
-    std::string ReadError;
-    if (!TryReadFileLines(InAbsolutePath, Lines, ReadError))
-    {
-        AddWarning(OutWarnings, "Status inference skipped for '" +
-                                    InAbsolutePath.string() +
-                                    "': " + ReadError);
-        return {};
-    }
-
-    bool InImplementationPhases = false;
-    bool InExecutionLanes = false;
-    bool InPhaseTracking = false;
-    StatusCounters Counters;
-
-    for (const std::string &Line : Lines)
-    {
-        const std::string Trimmed = Trim(Line);
-        if (Trimmed.empty())
-        {
-            continue;
-        }
-
-        if (!Trimmed.empty() && Trimmed.front() == '#')
-        {
-            const std::string LowerHeading = ToLower(Trimmed);
-            InImplementationPhases =
-                (LowerHeading.find("implementation_phases") !=
-                 std::string::npos);
-            InExecutionLanes =
-                (LowerHeading.find("execution_lanes") != std::string::npos);
-            InPhaseTracking =
-                (LowerHeading.find("phase_tracking") != std::string::npos);
-            continue;
-        }
-
-        if (Trimmed.front() != '|')
-        {
-            continue;
-        }
-
-        const std::vector<std::string> Cells = SplitMarkdownTableRow(Trimmed);
-        if (Cells.size() < 2 || IsDividerRow(Cells))
-        {
-            continue;
-        }
-
-        const std::string FirstCellLower = ToLower(Cells[0]);
-        if (FirstCellLower == "overall status")
-        {
-            AddStatusCandidate(Counters, Cells[1]);
-            continue;
-        }
-
-        if (FirstCellLower == "status")
-        {
-            AddStatusCandidate(Counters, Cells[1]);
-            continue;
-        }
-
-        // Plan implementation_phases and impl phase_tracking no longer carry
-        // Status columns. Phase status is derived from playbook execution_lanes
-        // (single source of truth). Skip these sections for status inference.
-
-        if (InKind == EDocumentKind::Playbook && InExecutionLanes &&
-            FirstCellLower != "lane")
-        {
-            AddStatusCandidate(Counters, Cells[1]);
-            continue;
-        }
-    }
-
-    StatusInference Result;
-    Result.mNormalized = ResolveNormalizedStatus(Counters);
-    if (Result.mNormalized != "unknown")
-    {
-        Result.mRaw = Counters.mFirstRaw.empty() ? Result.mNormalized
-                                                 : Counters.mFirstRaw;
-    }
-    return Result;
-}
-
 bool PathContainsSegment(const std::string &InRelativePath,
                          const std::string &InSegment)
 {
@@ -140,12 +54,11 @@ bool TryClassifyCoreDocument(const std::string &InRelativePath,
                              const std::string &InFilename,
                              DocumentRecord &OutRecord)
 {
-    static const std::regex PlanNameRegex(
-        R"(^([A-Za-z0-9]+)\.Plan\.(md|json)$)");
+    static const std::regex PlanNameRegex(R"(^([A-Za-z0-9]+)\.Plan\.json$)");
     static const std::regex PlaybookNameRegex(
-        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.(md|json)$)");
+        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.json$)");
     static const std::regex ImplementationNameRegex(
-        R"(^([A-Za-z0-9]+)\.Impl\.(md|json)$)");
+        R"(^([A-Za-z0-9]+)\.Impl\.json$)");
 
     std::smatch Match;
     if (IsPlanPath(InRelativePath) &&
@@ -184,11 +97,11 @@ bool TryClassifySidecarDocument(const std::string &InRelativePath,
                                 SidecarRecord &OutRecord)
 {
     static const std::regex PlanSidecarRegex(
-        R"(^([A-Za-z0-9]+)\.Plan\.(ChangeLog|Verification)\.(md|json)$)");
+        R"(^([A-Za-z0-9]+)\.Plan\.(ChangeLog|Verification)\.json$)");
     static const std::regex ImplementationSidecarRegex(
-        R"(^([A-Za-z0-9]+)\.Impl\.(ChangeLog|Verification)\.(md|json)$)");
+        R"(^([A-Za-z0-9]+)\.Impl\.(ChangeLog|Verification)\.json$)");
     static const std::regex PlaybookSidecarRegex(
-        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.(ChangeLog|Verification)\.(md|json)$)");
+        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.(ChangeLog|Verification)\.json$)");
 
     std::smatch Match;
     if (IsPlanPath(InRelativePath) &&
@@ -645,7 +558,7 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
         }
 
         const std::string Ext = AbsolutePath.extension().string();
-        if (Ext != ".md" && Ext != ".json")
+        if (Ext != ".json")
         {
             AdvanceIterator();
             continue;
@@ -668,28 +581,17 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
         DocumentRecord CoreRecord;
         if (TryClassifyCoreDocument(Relative, Filename, CoreRecord))
         {
-            if (Ext == ".json")
+            // Read status from JSON envelope
+            FDocument JsonDoc;
+            std::string JsonError;
+            if (TryReadDocumentJson(AbsolutePath, JsonDoc, JsonError))
             {
-                // JSON path: read status from JSON envelope
-                FDocument JsonDoc;
-                std::string JsonError;
-                if (TryReadDocumentJson(AbsolutePath, JsonDoc, JsonError))
-                {
-                    CoreRecord.mStatusRaw = JsonDoc.mStatusRaw;
-                    CoreRecord.mStatus = ToString(JsonDoc.mStatus);
-                }
-                else
-                {
-                    CoreRecord.mStatus = "unknown";
-                }
+                CoreRecord.mStatusRaw = JsonDoc.mStatusRaw;
+                CoreRecord.mStatus = ToString(JsonDoc.mStatus);
             }
             else
             {
-                // Markdown path: existing status inference
-                const StatusInference Status = InferDocumentStatus(
-                    CoreRecord.mKind, AbsolutePath, Result.mWarnings);
-                CoreRecord.mStatusRaw = Status.mRaw;
-                CoreRecord.mStatus = Status.mNormalized;
+                CoreRecord.mStatus = "unknown";
             }
 
             switch (CoreRecord.mKind)
@@ -715,78 +617,6 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
         }
 
         AdvanceIterator();
-    }
-
-    // Deduplicate: when both .md and .json exist for the same
-    // topic+phase, prefer .json and drop the .md record.
-    const auto DeduplicateRecords =
-        [](std::vector<DocumentRecord> &InOutRecords)
-    {
-        std::set<std::string> JsonKeys;
-        for (const DocumentRecord &Record : InOutRecords)
-        {
-            if (Record.mPath.size() > 5 &&
-                Record.mPath.substr(Record.mPath.size() - 5) == ".json")
-            {
-                JsonKeys.insert(Record.mTopicKey + ":" + Record.mPhaseKey);
-            }
-        }
-        if (JsonKeys.empty())
-        {
-            return;
-        }
-        std::vector<DocumentRecord> Filtered;
-        for (const DocumentRecord &Record : InOutRecords)
-        {
-            const std::string Key = Record.mTopicKey + ":" + Record.mPhaseKey;
-            const bool IsMarkdown =
-                Record.mPath.size() > 3 &&
-                Record.mPath.substr(Record.mPath.size() - 3) == ".md";
-            if (IsMarkdown && JsonKeys.count(Key) > 0)
-            {
-                continue;
-            }
-            Filtered.push_back(Record);
-        }
-        InOutRecords = std::move(Filtered);
-    };
-
-    DeduplicateRecords(Result.mPlans);
-    DeduplicateRecords(Result.mPlaybooks);
-    DeduplicateRecords(Result.mImplementations);
-
-    // Deduplicate sidecars similarly
-    {
-        std::set<std::string> JsonSidecarKeys;
-        for (const UniPlan::SidecarRecord &Record : Result.mSidecars)
-        {
-            if (Record.mPath.size() > 5 &&
-                Record.mPath.substr(Record.mPath.size() - 5) == ".json")
-            {
-                JsonSidecarKeys.insert(
-                    Record.mTopicKey + ":" + Record.mPhaseKey + ":" +
-                    Record.mOwnerKind + ":" + Record.mDocKind);
-            }
-        }
-        if (!JsonSidecarKeys.empty())
-        {
-            std::vector<UniPlan::SidecarRecord> Filtered;
-            for (const UniPlan::SidecarRecord &Record : Result.mSidecars)
-            {
-                const std::string Key =
-                    Record.mTopicKey + ":" + Record.mPhaseKey + ":" +
-                    Record.mOwnerKind + ":" + Record.mDocKind;
-                const bool IsMarkdown =
-                    Record.mPath.size() > 3 &&
-                    Record.mPath.substr(Record.mPath.size() - 3) == ".md";
-                if (IsMarkdown && JsonSidecarKeys.count(Key) > 0)
-                {
-                    continue;
-                }
-                Filtered.push_back(Record);
-            }
-            Result.mSidecars = std::move(Filtered);
-        }
     }
 
     SortRecords(Result.mPlans);
