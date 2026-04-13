@@ -1,4 +1,5 @@
 #include "UniPlanWatchSnapshot.h"
+#include "UniPlanDocumentStore.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanTypes.h"
@@ -23,27 +24,39 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
         return Taxonomy;
     }
 
-    // Read and parse the playbook
-    const fs::path PlaybookAbsPath = InRepoRoot / InPhase.mPlaybookPath;
-    std::vector<std::string> Lines;
-    std::string ReadError;
-    if (!TryReadFileLines(PlaybookAbsPath, Lines, ReadError))
+    // Load playbook via document store (bundle-aware)
+    FDocument PlaybookDoc;
+    std::string LoadError;
+    if (!TryLoadDocument(InRepoRoot, InPhase.mPlaybookPath, PlaybookDoc,
+                         LoadError))
     {
         return Taxonomy;
     }
 
-    Taxonomy.mPlaybookLineCount = static_cast<int>(Lines.size());
-    const std::vector<HeadingRecord> Headings = ParseHeadingRecords(Lines);
-    const std::vector<MarkdownTableRecord> Tables =
-        ParseMarkdownTables(Lines, Headings);
+    // Collect all tables from all sections into a flat list
+    // for the existing table-scanning logic below.
+    struct FNamedTable
+    {
+        std::string mSectionId;
+        const FStructuredTable *rpTable = nullptr;
+    };
+    std::vector<FNamedTable> AllTables;
+    for (const auto &SecPair : PlaybookDoc.mSections)
+    {
+        for (const FStructuredTable &Table : SecPair.second.mTables)
+        {
+            AllTables.push_back({SecPair.first, &Table});
+        }
+    }
 
     // Parse execution_lanes
-    for (const MarkdownTableRecord &Table : Tables)
+    for (const FNamedTable &NT : AllTables)
     {
-        if (Table.mSectionId != "execution_lanes")
+        if (NT.mSectionId != "execution_lanes")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int LaneCol = -1;
         int StatusCol = -1;
         int ScopeCol = -1;
@@ -74,23 +87,24 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
         {
             continue;
         }
-        for (const std::vector<std::string> &Row : Table.mRows)
+        for (const std::vector<FTableCell> &Row : Table.mRows)
         {
             FLaneRecord Lane;
             Lane.mLaneID = (LaneCol < static_cast<int>(Row.size()))
-                               ? Trim(Row[static_cast<size_t>(LaneCol)])
+                               ? Trim(Row[static_cast<size_t>(LaneCol)].mValue)
                                : "";
             Lane.mStatus =
                 (StatusCol >= 0 && StatusCol < static_cast<int>(Row.size()))
-                    ? NormalizeStatusValue(Row[static_cast<size_t>(StatusCol)])
+                    ? NormalizeStatusValue(
+                          Row[static_cast<size_t>(StatusCol)].mValue)
                     : "unknown";
             Lane.mScope =
                 (ScopeCol >= 0 && ScopeCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(ScopeCol)])
+                    ? Trim(Row[static_cast<size_t>(ScopeCol)].mValue)
                     : "";
             Lane.mExitCriteria =
                 (ExitCol >= 0 && ExitCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(ExitCol)])
+                    ? Trim(Row[static_cast<size_t>(ExitCol)].mValue)
                     : "";
             if (!Lane.mLaneID.empty())
             {
@@ -101,12 +115,13 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
 
     // Parse wave_lane_job_board
     std::set<std::string> UniqueWaves;
-    for (const MarkdownTableRecord &Table : Tables)
+    for (const FNamedTable &NT : AllTables)
     {
-        if (Table.mSectionId != "wave_lane_job_board")
+        if (NT.mSectionId != "wave_lane_job_board")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int WaveCol = -1, LaneCol = -1, JobCol = -1, StatusCol = -1,
             ScopeCol = -1, ExitCol = -1;
         for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size()); ++Col)
@@ -139,20 +154,20 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
                 ExitCol = Col;
             }
         }
-        for (const std::vector<std::string> &Row : Table.mRows)
+        for (const std::vector<FTableCell> &Row : Table.mRows)
         {
             FJobRecord Job;
             Job.mWaveID =
                 (WaveCol >= 0 && WaveCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(WaveCol)])
+                    ? Trim(Row[static_cast<size_t>(WaveCol)].mValue)
                     : "";
             Job.mLaneID =
                 (LaneCol >= 0 && LaneCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(LaneCol)])
+                    ? Trim(Row[static_cast<size_t>(LaneCol)].mValue)
                     : "";
             std::string JobCell =
                 (JobCol >= 0 && JobCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(JobCol)])
+                    ? Trim(Row[static_cast<size_t>(JobCol)].mValue)
                     : "";
             // Parse "J1 description" into ID + name
             const size_t SpacePos = JobCell.find(' ');
@@ -167,15 +182,16 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
             }
             Job.mStatus =
                 (StatusCol >= 0 && StatusCol < static_cast<int>(Row.size()))
-                    ? NormalizeStatusValue(Row[static_cast<size_t>(StatusCol)])
+                    ? NormalizeStatusValue(
+                          Row[static_cast<size_t>(StatusCol)].mValue)
                     : "unknown";
             Job.mScope =
                 (ScopeCol >= 0 && ScopeCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(ScopeCol)])
+                    ? Trim(Row[static_cast<size_t>(ScopeCol)].mValue)
                     : "";
             Job.mExitCriteria =
                 (ExitCol >= 0 && ExitCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(ExitCol)])
+                    ? Trim(Row[static_cast<size_t>(ExitCol)].mValue)
                     : "";
             if (!Job.mWaveID.empty() || !Job.mJobID.empty())
             {
@@ -187,12 +203,13 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
     Taxonomy.mWaveCount = static_cast<int>(UniqueWaves.size());
 
     // Parse job_task_checklist
-    for (const MarkdownTableRecord &Table : Tables)
+    for (const FNamedTable &NT : AllTables)
     {
-        if (Table.mSectionId != "job_task_checklist")
+        if (NT.mSectionId != "job_task_checklist")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int JobCol = -1, TaskCol = -1, StatusCol = -1, DescCol = -1,
             EvidenceCol = -1;
         for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size()); ++Col)
@@ -221,28 +238,29 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
                 EvidenceCol = Col;
             }
         }
-        for (const std::vector<std::string> &Row : Table.mRows)
+        for (const std::vector<FTableCell> &Row : Table.mRows)
         {
             FTaskRecord Task;
             Task.mJobRef =
                 (JobCol >= 0 && JobCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(JobCol)])
+                    ? Trim(Row[static_cast<size_t>(JobCol)].mValue)
                     : "";
             Task.mTaskID =
                 (TaskCol >= 0 && TaskCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(TaskCol)])
+                    ? Trim(Row[static_cast<size_t>(TaskCol)].mValue)
                     : "";
             Task.mStatus =
                 (StatusCol >= 0 && StatusCol < static_cast<int>(Row.size()))
-                    ? NormalizeStatusValue(Row[static_cast<size_t>(StatusCol)])
+                    ? NormalizeStatusValue(
+                          Row[static_cast<size_t>(StatusCol)].mValue)
                     : "unknown";
             Task.mDescription =
                 (DescCol >= 0 && DescCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(DescCol)])
+                    ? Trim(Row[static_cast<size_t>(DescCol)].mValue)
                     : "";
             Task.mEvidence =
                 (EvidenceCol >= 0 && EvidenceCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(EvidenceCol)])
+                    ? Trim(Row[static_cast<size_t>(EvidenceCol)].mValue)
                     : "";
             if (!Task.mJobRef.empty() || !Task.mTaskID.empty())
             {
@@ -252,12 +270,13 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
     }
 
     // Parse target_file_manifest
-    for (const MarkdownTableRecord &Table : Tables)
+    for (const FNamedTable &NT : AllTables)
     {
-        if (Table.mSectionId != "target_file_manifest")
+        if (NT.mSectionId != "target_file_manifest")
         {
             continue;
         }
+        const FStructuredTable &Table = *NT.rpTable;
         int FileCol = -1, ActionCol = -1, DescCol = -1;
         for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size()); ++Col)
         {
@@ -280,11 +299,11 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
         {
             continue;
         }
-        for (const std::vector<std::string> &Row : Table.mRows)
+        for (const std::vector<FTableCell> &Row : Table.mRows)
         {
             const std::string FilePath =
                 (FileCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(FileCol)])
+                    ? Trim(Row[static_cast<size_t>(FileCol)].mValue)
                     : "";
             if (FilePath.empty() || FilePath == "N/A")
             {
@@ -297,11 +316,11 @@ static FPhaseTaxonomy BuildPhaseTaxonomy(const PhaseItem &InPhase,
                                  : FilePath;
             Item.mAction =
                 (ActionCol >= 0 && ActionCol < static_cast<int>(Row.size()))
-                    ? ToLower(Trim(Row[static_cast<size_t>(ActionCol)]))
+                    ? ToLower(Trim(Row[static_cast<size_t>(ActionCol)].mValue))
                     : "";
             Item.mDescription =
                 (DescCol >= 0 && DescCol < static_cast<int>(Row.size()))
-                    ? Trim(Row[static_cast<size_t>(DescCol)])
+                    ? Trim(Row[static_cast<size_t>(DescCol)].mValue)
                     : "";
             Taxonomy.mFileManifest.push_back(std::move(Item));
         }
@@ -672,17 +691,20 @@ BuildPlanSummary(const PhaseListAllEntry &InEntry, const fs::path &InRepoRoot,
                 {
                     const std::string TypeVal =
                         (TypeCol < static_cast<int>(Row.size()))
-                            ? ToLower(Trim(Row[static_cast<size_t>(TypeCol)]))
+                            ? ToLower(Trim(
+                                  Row[static_cast<size_t>(TypeCol)]))
                             : "";
                     std::string Statement =
                         (StatementCol >= 0 &&
                          StatementCol < static_cast<int>(Row.size()))
-                            ? Trim(Row[static_cast<size_t>(StatementCol)])
+                            ? Trim(
+                                  Row[static_cast<size_t>(StatementCol)])
                             : "";
                     if (Statement.empty() && AreaCol >= 0 &&
                         AreaCol < static_cast<int>(Row.size()))
                     {
-                        Statement = Trim(Row[static_cast<size_t>(AreaCol)]);
+                        Statement =
+                            Trim(Row[static_cast<size_t>(AreaCol)]);
                     }
                     if (Statement.empty())
                     {
