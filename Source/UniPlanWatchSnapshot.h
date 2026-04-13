@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UniPlanTaxonomyTypes.h"
 #include "UniPlanTypes.h"
 
 #include <string>
@@ -17,53 +18,6 @@ struct FWatchInventoryCounters
     int mPairCount = 0;
     int mActivePlanCount = 0;
     int mNonActivePlanCount = 0;
-};
-
-struct FWatchLaneItem
-{
-    std::string mLaneID;
-    std::string mStatus;
-    std::string mScope;
-    std::string mExitCriteria;
-};
-
-struct FWatchJobItem
-{
-    std::string mWaveID;
-    std::string mLaneID;
-    std::string mJobID;
-    std::string mJobName;
-    std::string mStatus;
-    std::string mScope;
-    std::string mExitCriteria;
-};
-
-struct FWatchTaskItem
-{
-    std::string mJobRef;
-    std::string mTaskID;
-    std::string mStatus;
-    std::string mDescription;
-    std::string mEvidence;
-};
-
-struct FWatchFileManifestItem
-{
-    std::string mFilePath;
-    std::string mAction;
-    std::string mDescription;
-};
-
-struct FWatchPhaseTaxonomy
-{
-    std::string mPhaseKey;
-    std::string mPlaybookPath;
-    std::vector<FWatchLaneItem> mLanes;
-    std::vector<FWatchJobItem> mJobs;
-    std::vector<FWatchTaskItem> mTasks;
-    std::vector<FWatchFileManifestItem> mFileManifest;
-    int mWaveCount = 0;
-    int mPlaybookLineCount = 0;
 };
 
 struct FWatchHeadingCheck
@@ -126,7 +80,7 @@ struct FWatchPlanSummary
     std::vector<std::string> mSummaryLines;
     std::vector<std::string> mGoalStatements;
     std::vector<std::string> mNonGoalStatements;
-    std::vector<FWatchPhaseTaxonomy> mPhaseTaxonomies;
+    std::vector<FPhaseTaxonomy> mPhaseTaxonomies;
     std::vector<FWatchSidecarSummary> mSidecarSummaries;
     FWatchTopicSchemaResult mSchemaResult;
 };
@@ -166,6 +120,9 @@ struct FDocWatchSnapshot
     int mPollDurationMs = 0;
 };
 
-FDocWatchSnapshot BuildWatchSnapshot(const std::string& InRepoRoot, bool InUseCache, const std::string& InCacheDir, bool InCacheVerbose);
+FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
+                                     bool InUseCache,
+                                     const std::string &InCacheDir,
+                                     bool InCacheVerbose);
 
 } // namespace UniPlan

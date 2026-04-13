@@ -130,7 +130,7 @@ int DocWatchApp::Run()
                                      mSelectedWaveIndex, mSelectedLaneIndex);
 
             // Resolve selected phase taxonomy for file manifest
-            FWatchPhaseTaxonomy SelectedTaxonomy;
+            FPhaseTaxonomy SelectedTaxonomy;
             if (mSelectedPhaseIndex >= 0 &&
                 mSelectedPhaseIndex <
                     static_cast<int>(SelectedPlan.mPhases.size()))
@@ -139,8 +139,7 @@ int DocWatchApp::Run()
                     SelectedPlan
                         .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
                         .mPhaseKey;
-                for (const FWatchPhaseTaxonomy &T :
-                     SelectedPlan.mPhaseTaxonomies)
+                for (const FPhaseTaxonomy &T : SelectedPlan.mPhaseTaxonomies)
                 {
                     if (T.mPhaseKey == PhaseKey)
                     {
@@ -381,7 +380,7 @@ int DocWatchApp::Run()
 
             if (InEvent == Event::Character('w'))
             {
-                const FWatchPhaseTaxonomy *rpTax = nullptr;
+                const FPhaseTaxonomy *rpTax = nullptr;
                 if (mSelectedPhaseIndex >= 0 &&
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
@@ -390,7 +389,7 @@ int DocWatchApp::Run()
                         KeySelectedPlan
                             .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
                             .mPhaseKey;
-                    for (const FWatchPhaseTaxonomy &T :
+                    for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
                         if (T.mPhaseKey == PhKey)
@@ -409,7 +408,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('W'))
             {
-                const FWatchPhaseTaxonomy *rpTax = nullptr;
+                const FPhaseTaxonomy *rpTax = nullptr;
                 if (mSelectedPhaseIndex >= 0 &&
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
@@ -418,7 +417,7 @@ int DocWatchApp::Run()
                         KeySelectedPlan
                             .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
                             .mPhaseKey;
-                    for (const FWatchPhaseTaxonomy &T :
+                    for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
                         if (T.mPhaseKey == PhKey)
@@ -438,7 +437,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('l'))
             {
-                const FWatchPhaseTaxonomy *rpTax = nullptr;
+                const FPhaseTaxonomy *rpTax = nullptr;
                 if (mSelectedPhaseIndex >= 0 &&
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
@@ -447,7 +446,7 @@ int DocWatchApp::Run()
                         KeySelectedPlan
                             .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
                             .mPhaseKey;
-                    for (const FWatchPhaseTaxonomy &T :
+                    for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
                         if (T.mPhaseKey == PhKey)
@@ -466,7 +465,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('L'))
             {
-                const FWatchPhaseTaxonomy *rpTax = nullptr;
+                const FPhaseTaxonomy *rpTax = nullptr;
                 if (mSelectedPhaseIndex >= 0 &&
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
@@ -475,7 +474,7 @@ int DocWatchApp::Run()
                         KeySelectedPlan
                             .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
                             .mPhaseKey;
-                    for (const FWatchPhaseTaxonomy &T :
+                    for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
                         if (T.mPhaseKey == PhKey)
@@ -496,7 +495,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('f'))
             {
-                const FWatchPhaseTaxonomy *rpTax = nullptr;
+                const FPhaseTaxonomy *rpTax = nullptr;
                 if (mSelectedPhaseIndex >= 0 &&
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
@@ -505,7 +504,7 @@ int DocWatchApp::Run()
                         KeySelectedPlan
                             .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
                             .mPhaseKey;
-                    for (const FWatchPhaseTaxonomy &T :
+                    for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
                         if (T.mPhaseKey == PhKey)
@@ -526,7 +525,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('F'))
             {
-                const FWatchPhaseTaxonomy *rpTax = nullptr;
+                const FPhaseTaxonomy *rpTax = nullptr;
                 if (mSelectedPhaseIndex >= 0 &&
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
@@ -535,7 +534,7 @@ int DocWatchApp::Run()
                         KeySelectedPlan
                             .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
                             .mPhaseKey;
-                    for (const FWatchPhaseTaxonomy &T :
+                    for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
                         if (T.mPhaseKey == PhKey)

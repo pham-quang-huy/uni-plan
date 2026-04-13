@@ -19,7 +19,7 @@ using namespace ftxui;
 // Color helpers
 // ---------------------------------------------------------------------------
 
-static Element ColorStatus(const std::string& InStatus)
+static Element ColorStatus(const std::string &InStatus)
 {
     if (InStatus == "completed" || InStatus == "closed")
     {
@@ -58,7 +58,8 @@ static Element PhaseProgressBar(int InDone, int InTotal)
             Bar.push_back(text("\xe2\x96\x91") | dim);
         }
     }
-    Bar.push_back(text(" " + std::to_string(InDone) + "/" + std::to_string(InTotal)));
+    Bar.push_back(
+        text(" " + std::to_string(InDone) + "/" + std::to_string(InTotal)));
     return hbox(std::move(Bar));
 }
 
@@ -71,9 +72,12 @@ static Element PBLinesBar(int InLines)
     {
         return text("-") | dim;
     }
-    const int Filled = std::min(kPBLinesBarWidth, (InLines * kPBLinesBarWidth + kPBLinesGlobalMax - 1) / kPBLinesGlobalMax);
+    const int Filled = std::min(
+        kPBLinesBarWidth, (InLines * kPBLinesBarWidth + kPBLinesGlobalMax - 1) /
+                              kPBLinesGlobalMax);
     const int Empty = kPBLinesBarWidth - Filled;
-    const auto BarColor = (InLines > kPBLinesGlobalMax) ? color(Color::Red) : color(Color::Cyan);
+    const auto BarColor =
+        (InLines > kPBLinesGlobalMax) ? color(Color::Red) : color(Color::Cyan);
     Elements Bar;
     for (int Index = 0; Index < Filled; ++Index)
     {
@@ -87,7 +91,7 @@ static Element PBLinesBar(int InLines)
     return hbox(std::move(Bar));
 }
 
-static std::string Truncate(const std::string& InText, size_t InMax)
+static std::string Truncate(const std::string &InText, size_t InMax)
 {
     if (InText.size() <= InMax)
     {
@@ -100,7 +104,8 @@ static std::string Truncate(const std::string& InText, size_t InMax)
     return InText.substr(0, InMax - 2) + "..";
 }
 
-// Insert separatorEmpty() between each cell in a gridbox row for consistent column spacing.
+// Insert separatorEmpty() between each cell in a gridbox row for consistent
+// column spacing.
 static Elements PadGridRow(Elements InCells)
 {
     Elements Result;
@@ -119,14 +124,19 @@ static Elements PadGridRow(Elements InCells)
 // InventoryPanel
 // ---------------------------------------------------------------------------
 
-Element InventoryPanel::Render(const FWatchInventoryCounters& InCounters) const
+Element InventoryPanel::Render(const FWatchInventoryCounters &InCounters) const
 {
     std::vector<std::vector<Element>> Data;
-    Data.push_back({text("Plans") | dim, text(std::to_string(InCounters.mPlanCount))});
-    Data.push_back({text("Playbooks") | dim, text(std::to_string(InCounters.mPlaybookCount))});
-    Data.push_back({text("Impls") | dim, text(std::to_string(InCounters.mImplementationCount))});
-    Data.push_back({text("Pairs") | dim, text(std::to_string(InCounters.mPairCount))});
-    Data.push_back({text("Sidecars") | dim, text(std::to_string(InCounters.mSidecarCount))});
+    Data.push_back(
+        {text("Plans") | dim, text(std::to_string(InCounters.mPlanCount))});
+    Data.push_back({text("Playbooks") | dim,
+                    text(std::to_string(InCounters.mPlaybookCount))});
+    Data.push_back({text("Impls") | dim,
+                    text(std::to_string(InCounters.mImplementationCount))});
+    Data.push_back(
+        {text("Pairs") | dim, text(std::to_string(InCounters.mPairCount))});
+    Data.push_back({text("Sidecars") | dim,
+                    text(std::to_string(InCounters.mSidecarCount))});
 
     auto InvTable = Table(std::move(Data));
 
@@ -135,8 +145,12 @@ Element InventoryPanel::Render(const FWatchInventoryCounters& InCounters) const
         vbox({
             InvTable.Render() | flex,
             separator(),
-            hbox({text("\xe2\x96\x88 ") | color(Color::Green), text(std::to_string(InCounters.mActivePlanCount) + " active")}),
-            hbox({text("\xe2\x96\x88 ") | dim, text(std::to_string(InCounters.mNonActivePlanCount) + " non-active")}),
+            hbox({text("\xe2\x96\x88 ") | color(Color::Green),
+                  text(std::to_string(InCounters.mActivePlanCount) +
+                       " active")}),
+            hbox({text("\xe2\x96\x88 ") | dim,
+                  text(std::to_string(InCounters.mNonActivePlanCount) +
+                       " non-active")}),
         }));
 }
 
@@ -144,13 +158,20 @@ Element InventoryPanel::Render(const FWatchInventoryCounters& InCounters) const
 // ValidationPanel
 // ---------------------------------------------------------------------------
 
-Element ValidationPanel::Render(const FWatchValidationSummary& InValidation) const
+Element
+ValidationPanel::Render(const FWatchValidationSummary &InValidation) const
 {
     auto SummaryLine = hbox({
-        text("\xe2\x9c\x93 " + std::to_string(InValidation.mPassedChecks) + " passed") | color(Color::Green),
+        text("\xe2\x9c\x93 " + std::to_string(InValidation.mPassedChecks) +
+             " passed") |
+            color(Color::Green),
         text("  "),
-        text("\xe2\x9c\x97 " + std::to_string(InValidation.mFailedChecks) + " failed") | color(InValidation.mFailedChecks > 0 ? Color::Red : Color::Green),
-        text("  (" + std::to_string(InValidation.mCriticalFailures) + " critical)") | dim,
+        text("\xe2\x9c\x97 " + std::to_string(InValidation.mFailedChecks) +
+             " failed") |
+            color(InValidation.mFailedChecks > 0 ? Color::Red : Color::Green),
+        text("  (" + std::to_string(InValidation.mCriticalFailures) +
+             " critical)") |
+            dim,
     });
 
     Elements Content;
@@ -159,15 +180,17 @@ Element ValidationPanel::Render(const FWatchValidationSummary& InValidation) con
 
     if (InValidation.mFailedChecks == 0)
     {
-        Content.push_back(text("All checks passed") | color(Color::Green) | bold);
+        Content.push_back(text("All checks passed") | color(Color::Green) |
+                          bold);
     }
     else
     {
         std::vector<std::vector<Element>> CheckData;
         CheckData.push_back({text("Check") | bold, text("Result") | bold});
-        for (const ValidateCheck& Check : InValidation.mFailedCheckDetails)
+        for (const ValidateCheck &Check : InValidation.mFailedCheckDetails)
         {
-            CheckData.push_back({text(Check.mId) | flex, text("FAIL") | color(Color::Red)});
+            CheckData.push_back(
+                {text(Check.mId) | flex, text("FAIL") | color(Color::Red)});
         }
         auto CheckTable = Table(std::move(CheckData));
         CheckTable.SelectAll().SeparatorVertical(EMPTY);
@@ -175,19 +198,27 @@ Element ValidationPanel::Render(const FWatchValidationSummary& InValidation) con
         Content.push_back(CheckTable.Render() | flex);
     }
 
-    return window(text(" VALIDATION  " + std::to_string(InValidation.mTotalChecks) + " checks ") | bold, vbox(std::move(Content)));
+    return window(text(" VALIDATION  " +
+                       std::to_string(InValidation.mTotalChecks) + " checks ") |
+                      bold,
+                  vbox(std::move(Content)));
 }
 
 // ---------------------------------------------------------------------------
 // LintPanel
 // ---------------------------------------------------------------------------
 
-Element LintPanel::Render(const FWatchLintSummary& InLint) const
+Element LintPanel::Render(const FWatchLintSummary &InLint) const
 {
     std::vector<std::vector<Element>> Data;
-    Data.push_back({text("Total warnings") | dim, text(std::to_string(InLint.mWarningCount)) | (InLint.mWarningCount > 0 ? color(Color::Yellow) : dim)});
-    Data.push_back({text("Name pattern") | dim, text(std::to_string(InLint.mNamePatternWarnings))});
-    Data.push_back({text("Missing H1") | dim, text(std::to_string(InLint.mMissingH1Warnings))});
+    Data.push_back(
+        {text("Total warnings") | dim,
+         text(std::to_string(InLint.mWarningCount)) |
+             (InLint.mWarningCount > 0 ? color(Color::Yellow) : dim)});
+    Data.push_back({text("Name pattern") | dim,
+                    text(std::to_string(InLint.mNamePatternWarnings))});
+    Data.push_back({text("Missing H1") | dim,
+                    text(std::to_string(InLint.mMissingH1Warnings))});
 
     auto LintTable = Table(std::move(Data));
 
@@ -197,9 +228,12 @@ Element LintPanel::Render(const FWatchLintSummary& InLint) const
 
     if (InLint.mWarningCount > 0)
     {
-        const float Ratio = std::min(1.0f, static_cast<float>(InLint.mWarningCount) / 200.0f);
+        const float Ratio =
+            std::min(1.0f, static_cast<float>(InLint.mWarningCount) / 200.0f);
         const int LintBarWidth = 15;
-        const int LintFilled = std::min(LintBarWidth, static_cast<int>(Ratio * static_cast<float>(LintBarWidth)));
+        const int LintFilled = std::min(
+            LintBarWidth,
+            static_cast<int>(Ratio * static_cast<float>(LintBarWidth)));
         const int LintEmpty = LintBarWidth - LintFilled;
         Elements LintBar;
         for (int Index = 0; Index < LintFilled; ++Index)
@@ -225,7 +259,8 @@ Element LintPanel::Render(const FWatchLintSummary& InLint) const
 // ActivePlansPanel
 // ---------------------------------------------------------------------------
 
-Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlans, int InSelectedIndex) const
+Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
+                                 int InSelectedIndex) const
 {
     const int MaxVisible = 30;
     const int Count = static_cast<int>(InPlans.size());
@@ -247,18 +282,20 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlans, 
     const int VisibleEnd = std::min(ScrollOffset + MaxVisible, Count);
 
     std::vector<std::vector<Element>> ActiveTableData;
-    ActiveTableData.push_back({text("Topic") | bold | flex, text("Status") | bold, text("Phases") | bold, text("PB") | bold, text("BLK") | bold});
+    ActiveTableData.push_back({text("Topic") | bold | flex,
+                               text("Status") | bold, text("Phases") | bold,
+                               text("PB") | bold, text("BLK") | bold});
     int SelectedActiveRow = -1;
 
     for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
     {
-        const FWatchPlanSummary& Plan = InPlans[static_cast<size_t>(Index)];
+        const FWatchPlanSummary &Plan = InPlans[static_cast<size_t>(Index)];
         const bool Selected = (Index == InSelectedIndex);
         const std::string Marker;
 
         // Find active phase key
         std::string ActivePhase;
-        for (const PhaseItem& Phase : Plan.mPhases)
+        for (const PhaseItem &Phase : Plan.mPhases)
         {
             if (Phase.mStatus == "in_progress")
             {
@@ -268,19 +305,24 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlans, 
         }
 
         Elements PhaseCol;
-        PhaseCol.push_back(PhaseProgressBar(Plan.mPhaseCompleted, Plan.mPhaseCount));
+        PhaseCol.push_back(
+            PhaseProgressBar(Plan.mPhaseCompleted, Plan.mPhaseCount));
         if (!ActivePhase.empty())
         {
             PhaseCol.push_back(text("  "));
-            PhaseCol.push_back(text("\xe2\x96\xb6" + ActivePhase) | color(Color::Cyan));
+            PhaseCol.push_back(text("\xe2\x96\xb6" + ActivePhase) |
+                               color(Color::Cyan));
         }
 
         ActiveTableData.push_back({
             text(Marker + Plan.mTopicKey) | flex | (Selected ? bold : nothing),
             ColorStatus(Plan.mPlanStatus) | (Selected ? bold : nothing),
             hbox(std::move(PhaseCol)) | (Selected ? bold : nothing),
-            text(std::to_string(Plan.mPlaybookCount)) | (Selected ? bold : nothing),
-            text(std::to_string(Plan.mBlockerCount)) | (Plan.mBlockerCount > 0 ? color(Color::Red) : dim) | (Selected ? bold : nothing),
+            text(std::to_string(Plan.mPlaybookCount)) |
+                (Selected ? bold : nothing),
+            text(std::to_string(Plan.mBlockerCount)) |
+                (Plan.mBlockerCount > 0 ? color(Color::Red) : dim) |
+                (Selected ? bold : nothing),
         });
         if (Selected)
         {
@@ -299,27 +341,36 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlans, 
     Elements FinalRows;
     if (ScrollOffset > 0)
     {
-        FinalRows.push_back(text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") | dim);
+        FinalRows.push_back(
+            text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") |
+            dim);
     }
     FinalRows.push_back(ActiveTable.Render() | flex);
     if (VisibleEnd < Count)
     {
-        FinalRows.push_back(text("  \xe2\x86\x93 " + std::to_string(Count - VisibleEnd) + " below") | dim);
+        FinalRows.push_back(text("  \xe2\x86\x93 " +
+                                 std::to_string(Count - VisibleEnd) +
+                                 " below") |
+                            dim);
     }
 
-    const std::string Title = " [A]CTIVE PLANS (" + std::to_string(Count) + ") ";
-    return window(text(Title) | bold | color(Color::Green), vbox(std::move(FinalRows)));
+    const std::string Title =
+        " [A]CTIVE PLANS (" + std::to_string(Count) + ") ";
+    return window(text(Title) | bold | color(Color::Green),
+                  vbox(std::move(FinalRows)));
 }
 
 // ---------------------------------------------------------------------------
 // PhaseDetailPanel
 // ---------------------------------------------------------------------------
 
-Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhaseIndex) const
+Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
+                                 int InSelectedPhaseIndex) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" PHASE DETAIL ") | bold, text("No plan selected") | dim);
+        return window(text(" PHASE DETAIL ") | bold,
+                      text("No plan selected") | dim);
     }
 
     // gridbox layout — auto-aligns columns without Table's flex_shrink override
@@ -355,19 +406,24 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
 
     for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
     {
-        const PhaseItem& Phase = InPlan.mPhases[static_cast<size_t>(Index)];
+        const PhaseItem &Phase = InPlan.mPhases[static_cast<size_t>(Index)];
         const bool Selected = (Index == InSelectedPhaseIndex);
         const std::string Marker;
 
         const bool HasPlaybook = !Phase.mPlaybookPath.empty();
-        const std::string PlaybookMarker = HasPlaybook ? "\xe2\x9c\x93" : "\xe2\x9c\x97";
-        const auto PlaybookColor = HasPlaybook ? color(Color::Green) : color(Color::Red);
+        const std::string PlaybookMarker =
+            HasPlaybook ? "\xe2\x9c\x93" : "\xe2\x9c\x97";
+        const auto PlaybookColor =
+            HasPlaybook ? color(Color::Green) : color(Color::Red);
 
         std::string Desc;
-        for (const auto& Field : Phase.mFields)
+        for (const auto &Field : Phase.mFields)
         {
             const std::string Key = ToLower(Field.first);
-            if (Key == "scope" || Key == "description" || Key == "output" || Key == "goal" || Key == "deliverables" || Key == "deliverable" || Key == "name" || Key == "focus" || Key == "main tasks" || Key == "work")
+            if (Key == "scope" || Key == "description" || Key == "output" ||
+                Key == "goal" || Key == "deliverables" ||
+                Key == "deliverable" || Key == "name" || Key == "focus" ||
+                Key == "main tasks" || Key == "work")
             {
                 Desc = Field.second;
                 break;
@@ -376,10 +432,12 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
 
         // Extract Output field
         std::string Output;
-        for (const auto& Field : Phase.mFields)
+        for (const auto &Field : Phase.mFields)
         {
             const std::string FieldKey = ToLower(Field.first);
-            if (FieldKey == "output" || FieldKey == "deliverables" || FieldKey == "deliverable" || FieldKey == "exit criteria" || FieldKey == "exit_criteria" || FieldKey == "main tasks")
+            if (FieldKey == "output" || FieldKey == "deliverables" ||
+                FieldKey == "deliverable" || FieldKey == "exit criteria" ||
+                FieldKey == "exit_criteria" || FieldKey == "main tasks")
             {
                 Output = Field.second;
                 break;
@@ -392,7 +450,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
         // Taxonomy summary
         std::string TaxSummary = "-";
 
-        for (const FWatchPhaseTaxonomy& Tax : InPlan.mPhaseTaxonomies)
+        for (const FPhaseTaxonomy &Tax : InPlan.mPhaseTaxonomies)
         {
             if (Tax.mPhaseKey == Phase.mPhaseKey)
             {
@@ -400,7 +458,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
                 PBLinesInt = Tax.mPlaybookLineCount;
 
                 int LD = 0, LA = 0, LT = 0;
-                for (const FWatchLaneItem& L : Tax.mLanes)
+                for (const FLaneRecord &L : Tax.mLanes)
                 {
                     if (L.mStatus == "completed" || L.mStatus == "closed")
                     {
@@ -416,7 +474,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
                     }
                 }
                 int JD = 0, JA = 0, JT = 0;
-                for (const FWatchJobItem& J : Tax.mJobs)
+                for (const FJobRecord &J : Tax.mJobs)
                 {
                     if (J.mStatus == "completed" || J.mStatus == "closed")
                     {
@@ -432,7 +490,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
                     }
                 }
                 int TD = 0, TA = 0, TT = 0;
-                for (const FWatchTaskItem& T : Tax.mTasks)
+                for (const FTaskRecord &T : Tax.mTasks)
                 {
                     if (T.mStatus == "completed" || T.mStatus == "closed")
                     {
@@ -451,7 +509,10 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
                 TaxSummary = "";
                 if (!Tax.mLanes.empty())
                 {
-                    TaxSummary += std::to_string(Tax.mLanes.size()) + "L:" + std::to_string(LD) + "d " + std::to_string(LA) + "a " + std::to_string(LT) + "t";
+                    TaxSummary += std::to_string(Tax.mLanes.size()) +
+                                  "L:" + std::to_string(LD) + "d " +
+                                  std::to_string(LA) + "a " +
+                                  std::to_string(LT) + "t";
                 }
                 if (!Tax.mJobs.empty())
                 {
@@ -459,7 +520,10 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
                     {
                         TaxSummary += " ";
                     }
-                    TaxSummary += std::to_string(Tax.mJobs.size()) + "J:" + std::to_string(JD) + "d " + std::to_string(JA) + "a " + std::to_string(JT) + "t";
+                    TaxSummary += std::to_string(Tax.mJobs.size()) +
+                                  "J:" + std::to_string(JD) + "d " +
+                                  std::to_string(JA) + "a " +
+                                  std::to_string(JT) + "t";
                 }
                 if (!Tax.mTasks.empty())
                 {
@@ -467,7 +531,10 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
                     {
                         TaxSummary += " ";
                     }
-                    TaxSummary += std::to_string(Tax.mTasks.size()) + "T:" + std::to_string(TD) + "d " + std::to_string(TA) + "a " + std::to_string(TT) + "t";
+                    TaxSummary += std::to_string(Tax.mTasks.size()) +
+                                  "T:" + std::to_string(TD) + "d " +
+                                  std::to_string(TA) + "a " +
+                                  std::to_string(TT) + "t";
                 }
                 if (TaxSummary.empty())
                 {
@@ -488,7 +555,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
         });
         if (Selected)
         {
-            for (auto& Cell : RowCells)
+            for (auto &Cell : RowCells)
             {
                 Cell = Cell | inverted | bold;
             }
@@ -499,23 +566,31 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary& InPlan, int InSelected
     Elements FinalRows;
     if (ScrollOffset > 0)
     {
-        FinalRows.push_back(text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") | dim);
+        FinalRows.push_back(
+            text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") |
+            dim);
     }
     FinalRows.push_back(gridbox(std::move(GridRows)) | flex);
     if (VisibleEnd < Count)
     {
-        FinalRows.push_back(text("  \xe2\x86\x93 " + std::to_string(Count - VisibleEnd) + " below") | dim);
+        FinalRows.push_back(text("  \xe2\x86\x93 " +
+                                 std::to_string(Count - VisibleEnd) +
+                                 " below") |
+                            dim);
     }
 
-    const std::string Title = " [P]HASE DETAIL: " + Truncate(InPlan.mTopicKey, 30) + " (" + std::to_string(Count) + ") ";
-    return window(text(Title) | bold | color(Color::Cyan), vbox(std::move(FinalRows)));
+    const std::string Title =
+        " [P]HASE DETAIL: " + Truncate(InPlan.mTopicKey, 30) + " (" +
+        std::to_string(Count) + ") ";
+    return window(text(Title) | bold | color(Color::Cyan),
+                  vbox(std::move(FinalRows)));
 }
 
 // ---------------------------------------------------------------------------
 // BlockersPanel
 // ---------------------------------------------------------------------------
 
-Element BlockersPanel::Render(const std::vector<BlockerItem>& InBlockers) const
+Element BlockersPanel::Render(const std::vector<BlockerItem> &InBlockers) const
 {
     Elements Rows;
 
@@ -526,7 +601,8 @@ Element BlockersPanel::Render(const std::vector<BlockerItem>& InBlockers) const
     }
 
     std::vector<std::vector<Element>> BlockerTableData;
-    BlockerTableData.push_back({text("Topic") | bold, text("Kind") | bold, text("Action") | bold | flex});
+    BlockerTableData.push_back({text("Topic") | bold, text("Kind") | bold,
+                                text("Action") | bold | flex});
 
     const int MaxVisible = 10;
     const int Count = static_cast<int>(InBlockers.size());
@@ -534,7 +610,7 @@ Element BlockersPanel::Render(const std::vector<BlockerItem>& InBlockers) const
 
     for (int Index = 0; Index < VisibleCount; ++Index)
     {
-        const BlockerItem& Blocker = InBlockers[static_cast<size_t>(Index)];
+        const BlockerItem &Blocker = InBlockers[static_cast<size_t>(Index)];
         BlockerTableData.push_back({
             text(Blocker.mTopicKey),
             text(Blocker.mKind),
@@ -546,14 +622,18 @@ Element BlockersPanel::Render(const std::vector<BlockerItem>& InBlockers) const
     BlockerTable.SelectAll().SeparatorVertical(EMPTY);
     BlockerTable.SelectRow(0).SeparatorHorizontal(LIGHT);
 
-    return window(text(" BLOCKERS (" + std::to_string(Count) + ") ") | bold | color(Color::Red), BlockerTable.Render() | flex);
+    return window(text(" BLOCKERS (" + std::to_string(Count) + ") ") | bold |
+                      color(Color::Red),
+                  BlockerTable.Render() | flex);
 }
 
 // ---------------------------------------------------------------------------
 // CompletedPlansPanel
 // ---------------------------------------------------------------------------
 
-Element CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlans, int InSelectedIndex) const
+Element
+CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
+                            int InSelectedIndex) const
 {
     const int MaxVisible = 30;
     const int Count = static_cast<int>(InPlans.size());
@@ -575,16 +655,19 @@ Element CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlan
     const int VisibleEnd = std::min(ScrollOffset + MaxVisible, Count);
 
     std::vector<std::vector<Element>> ActiveTableData;
-    ActiveTableData.push_back({text("Topic") | bold | flex, text("Status") | bold, text("Phases") | bold, text("PB") | bold, text("BLK") | bold});
+    ActiveTableData.push_back({text("Topic") | bold | flex,
+                               text("Status") | bold, text("Phases") | bold,
+                               text("PB") | bold, text("BLK") | bold});
     int SelectedActiveRow = -1;
 
     std::vector<std::vector<Element>> NonActiveTableData;
-    NonActiveTableData.push_back({text("Topic") | bold | flex, text("Status") | bold});
+    NonActiveTableData.push_back(
+        {text("Topic") | bold | flex, text("Status") | bold});
     int SelectedNonActiveRow = -1;
 
     for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
     {
-        const FWatchPlanSummary& Plan = InPlans[static_cast<size_t>(Index)];
+        const FWatchPlanSummary &Plan = InPlans[static_cast<size_t>(Index)];
         const bool Selected = (Index == InSelectedIndex);
         const std::string Marker;
 
@@ -594,7 +677,8 @@ Element CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlan
         });
         if (Selected)
         {
-            SelectedNonActiveRow = static_cast<int>(NonActiveTableData.size()) - 1;
+            SelectedNonActiveRow =
+                static_cast<int>(NonActiveTableData.size()) - 1;
         }
     }
 
@@ -609,12 +693,17 @@ Element CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlan
     Elements NonActiveFinal;
     if (ScrollOffset > 0)
     {
-        NonActiveFinal.push_back(text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") | dim);
+        NonActiveFinal.push_back(
+            text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") |
+            dim);
     }
     NonActiveFinal.push_back(NonActiveTable.Render() | flex);
     if (VisibleEnd < Count)
     {
-        NonActiveFinal.push_back(text("  \xe2\x86\x93 " + std::to_string(Count - VisibleEnd) + " below") | dim);
+        NonActiveFinal.push_back(text("  \xe2\x86\x93 " +
+                                      std::to_string(Count - VisibleEnd) +
+                                      " below") |
+                                 dim);
     }
 
     if (Count == 0)
@@ -622,20 +711,24 @@ Element CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlan
         NonActiveFinal.push_back(text("(none)") | dim);
     }
 
-    return window(text(" [N]ON-ACTIVE (" + std::to_string(Count) + ") ") | bold | dim, vbox(std::move(NonActiveFinal)));
+    return window(text(" [N]ON-ACTIVE (" + std::to_string(Count) + ") ") |
+                      bold | dim,
+                  vbox(std::move(NonActiveFinal)));
 }
 
 // ---------------------------------------------------------------------------
 // DeferredPlansPanel
 // ---------------------------------------------------------------------------
 
-Element DeferredPlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlans) const
+Element
+DeferredPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans) const
 {
     const int Count = static_cast<int>(InPlans.size());
 
     if (Count == 0)
     {
-        return window(text(" DEFERRED ") | bold | color(Color::Yellow), text("(none)") | dim);
+        return window(text(" DEFERRED ") | bold | color(Color::Yellow),
+                      text("(none)") | dim);
     }
 
     std::vector<std::vector<Element>> Data;
@@ -643,60 +736,74 @@ Element DeferredPlansPanel::Render(const std::vector<FWatchPlanSummary>& InPlans
 
     for (int Index = 0; Index < std::min(10, Count); ++Index)
     {
-        const FWatchPlanSummary& Plan = InPlans[static_cast<size_t>(Index)];
-        Data.push_back({text(Plan.mTopicKey) | flex, ColorStatus(Plan.mPlanStatus)});
+        const FWatchPlanSummary &Plan = InPlans[static_cast<size_t>(Index)];
+        Data.push_back(
+            {text(Plan.mTopicKey) | flex, ColorStatus(Plan.mPlanStatus)});
     }
 
     auto DefTable = Table(std::move(Data));
     DefTable.SelectAll().SeparatorVertical(EMPTY);
     DefTable.SelectRow(0).SeparatorHorizontal(LIGHT);
 
-    return window(text(" DEFERRED (" + std::to_string(Count) + ") ") | bold | color(Color::Yellow), DefTable.Render() | flex);
+    return window(text(" DEFERRED (" + std::to_string(Count) + ") ") | bold |
+                      color(Color::Yellow),
+                  DefTable.Render() | flex);
 }
 
 // ---------------------------------------------------------------------------
 // ValidationFailPanel
 // ---------------------------------------------------------------------------
 
-Element ValidationFailPanel::Render(const std::vector<ValidateCheck>& InFailedChecks) const
+Element ValidationFailPanel::Render(
+    const std::vector<ValidateCheck> &InFailedChecks) const
 {
     if (InFailedChecks.empty())
     {
-        return window(text(" VALIDATION FAILURES ") | bold, text("All checks passed") | color(Color::Green) | bold);
+        return window(text(" VALIDATION FAILURES ") | bold,
+                      text("All checks passed") | color(Color::Green) | bold);
     }
 
     std::vector<std::vector<Element>> Data;
     Data.push_back({text("Check") | bold, text("Detail") | bold | flex});
 
-    for (const ValidateCheck& Check : InFailedChecks)
+    for (const ValidateCheck &Check : InFailedChecks)
     {
         std::string Detail = Check.mDetail;
         if (Detail.empty() && !Check.mDiagnostics.empty())
         {
             Detail = Check.mDiagnostics[0];
         }
-        Data.push_back({text(Check.mId) | color(Color::Red), text(Detail) | dim | flex});
+        Data.push_back(
+            {text(Check.mId) | color(Color::Red), text(Detail) | dim | flex});
     }
 
     auto FailTable = Table(std::move(Data));
     FailTable.SelectAll().SeparatorVertical(EMPTY);
     FailTable.SelectRow(0).SeparatorHorizontal(LIGHT);
 
-    return window(text(" VALIDATION FAILURES (" + std::to_string(InFailedChecks.size()) + ") ") | bold | color(Color::Red), FailTable.Render() | flex);
+    return window(text(" VALIDATION FAILURES (" +
+                       std::to_string(InFailedChecks.size()) + ") ") |
+                      bold | color(Color::Red),
+                  FailTable.Render() | flex);
 }
 
 // ---------------------------------------------------------------------------
 // ExecutionTaxonomyPanel
 // ---------------------------------------------------------------------------
 
-Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhaseIndex, int InSelectedWaveIndex, int InSelectedLaneIndex) const
+Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
+                                       int InSelectedPhaseIndex,
+                                       int InSelectedWaveIndex,
+                                       int InSelectedLaneIndex) const
 {
     // Find the taxonomy for the selected phase
-    const FWatchPhaseTaxonomy* rpTax = nullptr;
-    if (InSelectedPhaseIndex >= 0 && InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
+    const FPhaseTaxonomy *rpTax = nullptr;
+    if (InSelectedPhaseIndex >= 0 &&
+        InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
     {
-        const std::string& SelectedKey = InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
-        for (const FWatchPhaseTaxonomy& Tax : InPlan.mPhaseTaxonomies)
+        const std::string &SelectedKey =
+            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
+        for (const FPhaseTaxonomy &Tax : InPlan.mPhaseTaxonomies)
         {
             if (Tax.mPhaseKey == SelectedKey)
             {
@@ -706,13 +813,17 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
         }
     }
 
-    if (rpTax == nullptr || (rpTax->mLanes.empty() && rpTax->mJobs.empty() && rpTax->mTasks.empty()))
+    if (rpTax == nullptr || (rpTax->mLanes.empty() && rpTax->mJobs.empty() &&
+                             rpTax->mTasks.empty()))
     {
-        std::string Hint = InPlan.mTopicKey.empty() ? "No plan selected" : "No execution taxonomy for selected phase";
-        return window(text(" EXECUTION TAXONOMY ") | bold | dim, text("  " + Hint) | dim);
+        std::string Hint = InPlan.mTopicKey.empty()
+                               ? "No plan selected"
+                               : "No execution taxonomy for selected phase";
+        return window(text(" EXECUTION TAXONOMY ") | bold | dim,
+                      text("  " + Hint) | dim);
     }
 
-    const FWatchPhaseTaxonomy& Tax = *rpTax;
+    const FPhaseTaxonomy &Tax = *rpTax;
 
     // --- LANES sub-panel (gridbox for fixed column widths) ---
     int LanesDone = 0;
@@ -726,7 +837,7 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
 
     for (int Index = 0; Index < static_cast<int>(Tax.mLanes.size()); ++Index)
     {
-        const FWatchLaneItem& Lane = Tax.mLanes[static_cast<size_t>(Index)];
+        const FLaneRecord &Lane = Tax.mLanes[static_cast<size_t>(Index)];
         if (Lane.mStatus == "completed" || Lane.mStatus == "closed")
         {
             LanesDone++;
@@ -742,7 +853,7 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
         });
         if (LaneSel)
         {
-            for (auto& Cell : RowCells)
+            for (auto &Cell : RowCells)
             {
                 Cell = Cell | inverted | bold;
             }
@@ -750,15 +861,18 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
         LaneGridRows.push_back(std::move(RowCells));
     }
 
-    auto LanesPanel = window(text(" [L]ANES: " + Tax.mPhaseKey + " (" + std::to_string(Tax.mLanes.size()) + ") ") | bold, gridbox(std::move(LaneGridRows)) | flex);
+    auto LanesPanel = window(text(" [L]ANES: " + Tax.mPhaseKey + " (" +
+                                  std::to_string(Tax.mLanes.size()) + ") ") |
+                                 bold,
+                             gridbox(std::move(LaneGridRows)) | flex);
 
     // --- JOB BOARD sub-panel (using ftxui::Table) ---
     // Collect unique waves for filtering
     std::vector<std::string> UniqueWaves;
-    for (const FWatchJobItem& Job : Tax.mJobs)
+    for (const FJobRecord &Job : Tax.mJobs)
     {
         bool Found = false;
-        for (const std::string& W : UniqueWaves)
+        for (const std::string &W : UniqueWaves)
         {
             if (W == Job.mWaveID)
             {
@@ -773,22 +887,27 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
     }
 
     std::string WaveFilter;
-    if (InSelectedWaveIndex >= 0 && InSelectedWaveIndex < static_cast<int>(UniqueWaves.size()))
+    if (InSelectedWaveIndex >= 0 &&
+        InSelectedWaveIndex < static_cast<int>(UniqueWaves.size()))
     {
         WaveFilter = UniqueWaves[static_cast<size_t>(InSelectedWaveIndex)];
     }
     std::string LaneFilter;
-    if (InSelectedLaneIndex >= 0 && InSelectedLaneIndex < static_cast<int>(Tax.mLanes.size()))
+    if (InSelectedLaneIndex >= 0 &&
+        InSelectedLaneIndex < static_cast<int>(Tax.mLanes.size()))
     {
-        LaneFilter = Tax.mLanes[static_cast<size_t>(InSelectedLaneIndex)].mLaneID;
+        LaneFilter =
+            Tax.mLanes[static_cast<size_t>(InSelectedLaneIndex)].mLaneID;
     }
 
     std::vector<std::vector<Element>> JobTableData;
-    JobTableData.push_back({text("Wave") | bold, text("Lane") | bold, text("Job") | bold, text("Status") | bold, text("Scope") | bold | flex});
+    JobTableData.push_back({text("Wave") | bold, text("Lane") | bold,
+                            text("Job") | bold, text("Status") | bold,
+                            text("Scope") | bold | flex});
 
     int JobsDone = 0, JobsActive = 0, JobsTodo = 0;
     int VisibleJobCount = 0;
-    for (const FWatchJobItem& Job : Tax.mJobs)
+    for (const FJobRecord &Job : Tax.mJobs)
     {
         if (Job.mStatus == "completed" || Job.mStatus == "closed")
         {
@@ -843,15 +962,21 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
 
     std::string WaveTitle = WaveFilter.empty() ? "all" : WaveFilter;
     std::string LaneTitle = LaneFilter.empty() ? "all" : LaneFilter;
-    auto JobsPanel = window(text(" [W]AVE/[L]ANE/JOB BOARD: " + Tax.mPhaseKey + " (W=" + WaveTitle + " L=" + LaneTitle + ", " + std::to_string(Tax.mJobs.size()) + " jobs) ") | bold, JobsContent);
+    auto JobsPanel = window(text(" [W]AVE/[L]ANE/JOB BOARD: " + Tax.mPhaseKey +
+                                 " (W=" + WaveTitle + " L=" + LaneTitle + ", " +
+                                 std::to_string(Tax.mJobs.size()) + " jobs) ") |
+                                bold,
+                            JobsContent);
 
     // --- TASKS sub-panel (using ftxui::Table) ---
     std::vector<std::vector<Element>> TaskTableData;
-    TaskTableData.push_back({text("Job") | bold, text("Task") | bold, text("Status") | bold, text("Description") | bold | flex, text("Evidence") | bold | flex});
+    TaskTableData.push_back(
+        {text("Job") | bold, text("Task") | bold, text("Status") | bold,
+         text("Description") | bold | flex, text("Evidence") | bold | flex});
 
     int TasksDone = 0, TasksActive = 0, TasksTodo = 0;
     int VisibleTaskCount = 0;
-    for (const FWatchTaskItem& Task : Tax.mTasks)
+    for (const FTaskRecord &Task : Tax.mTasks)
     {
         if (Task.mStatus == "completed" || Task.mStatus == "closed")
         {
@@ -866,7 +991,9 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
             TasksTodo++;
         }
 
-        if (!LaneFilter.empty() && Task.mJobRef.find("/" + LaneFilter + "/") == std::string::npos && Task.mJobRef.find(LaneFilter + "/") != 0)
+        if (!LaneFilter.empty() &&
+            Task.mJobRef.find("/" + LaneFilter + "/") == std::string::npos &&
+            Task.mJobRef.find(LaneFilter + "/") != 0)
         {
             continue;
         }
@@ -894,12 +1021,17 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
         TasksContent = TaskTable.Render() | flex;
     }
 
-    auto TasksPanel = window(text(" TASKS: " + Tax.mPhaseKey + " (" + std::to_string(Tax.mTasks.size()) + ") ") | bold, TasksContent);
+    auto TasksPanel = window(text(" TASKS: " + Tax.mPhaseKey + " (" +
+                                  std::to_string(Tax.mTasks.size()) + ") ") |
+                                 bold,
+                             TasksContent);
 
     // --- Summary ---
     auto SummaryLine = hbox({
         text(" ") | bold,
-        text(std::to_string(Tax.mLanes.size()) + " lanes (" + std::to_string(LanesDone) + " done)") | dim,
+        text(std::to_string(Tax.mLanes.size()) + " lanes (" +
+             std::to_string(LanesDone) + " done)") |
+            dim,
         text(" | ") | dim,
         text(std::to_string(Tax.mWaveCount) + " waves") | dim,
         text(" | ") | dim,
@@ -926,15 +1058,17 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary& InPlan, int InSe
 // SchemaPanel — merged heading list with color coding
 // ---------------------------------------------------------------------------
 
-static Element RenderSchemaBlock(const std::string& InTitle, const FWatchDocSchemaResult& InResult)
+static Element RenderSchemaBlock(const std::string &InTitle,
+                                 const FWatchDocSchemaResult &InResult)
 {
     if (InResult.mDocPath.empty())
     {
-        return window(text(" " + InTitle + " ") | bold | dim, text("  (no document)") | dim);
+        return window(text(" " + InTitle + " ") | bold | dim,
+                      text("  (no document)") | dim);
     }
 
     Elements Rows;
-    for (const FWatchHeadingCheck& Check : InResult.mHeadings)
+    for (const FWatchHeadingCheck &Check : InResult.mHeadings)
     {
         const std::string Indent = (Check.mLevel == 3) ? " " : "";
         Element Row;
@@ -957,7 +1091,8 @@ static Element RenderSchemaBlock(const std::string& InTitle, const FWatchDocSche
         }
         else if (!Check.mbPresent && Check.mbRequired)
         {
-            Row = text(Indent + Check.mSectionId + " (MISSING)") | color(Color::Red);
+            Row = text(Indent + Check.mSectionId + " (MISSING)") |
+                  color(Color::Red);
         }
         else
         {
@@ -967,23 +1102,27 @@ static Element RenderSchemaBlock(const std::string& InTitle, const FWatchDocSche
         Rows.push_back(Row);
     }
 
-    std::string Summary = std::to_string(InResult.mRequiredPresent) + "/" + std::to_string(InResult.mRequiredCount) + " required";
+    std::string Summary = std::to_string(InResult.mRequiredPresent) + "/" +
+                          std::to_string(InResult.mRequiredCount) + " required";
     if (InResult.mExtraCount > 0)
     {
         Summary += ", " + std::to_string(InResult.mExtraCount) + " extra";
     }
 
-    return window(text(" " + InTitle + " (" + Summary + ") ") | bold, vbox(std::move(Rows)));
+    return window(text(" " + InTitle + " (" + Summary + ") ") | bold,
+                  vbox(std::move(Rows)));
 }
 
-Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhaseIndex) const
+Element SchemaPanel::Render(const FWatchPlanSummary &InPlan,
+                            int InSelectedPhaseIndex) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" SCHEMA ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" SCHEMA ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
-    const FWatchTopicSchemaResult& Schema = InPlan.mSchemaResult;
+    const FWatchTopicSchemaResult &Schema = InPlan.mSchemaResult;
 
     // Block 1: Plan schema
     auto PlanBlock = RenderSchemaBlock("PLAN", Schema.mPlan);
@@ -993,19 +1132,24 @@ Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhase
 
     // Block 3: Playbook schema for selected phase
     Element PlaybookBlock;
-    if (InSelectedPhaseIndex >= 0 && InSelectedPhaseIndex < static_cast<int>(Schema.mPlaybooks.size()))
+    if (InSelectedPhaseIndex >= 0 &&
+        InSelectedPhaseIndex < static_cast<int>(Schema.mPlaybooks.size()))
     {
-        const FWatchDocSchemaResult& PB = Schema.mPlaybooks[static_cast<size_t>(InSelectedPhaseIndex)];
+        const FWatchDocSchemaResult &PB =
+            Schema.mPlaybooks[static_cast<size_t>(InSelectedPhaseIndex)];
         PlaybookBlock = RenderSchemaBlock("PLAYBOOK " + PB.mPhaseKey, PB);
     }
     else if (!Schema.mPlaybooks.empty())
     {
         // Find playbook matching selected phase by key
-        const FWatchDocSchemaResult* rpMatch = nullptr;
-        if (InSelectedPhaseIndex >= 0 && InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
+        const FWatchDocSchemaResult *rpMatch = nullptr;
+        if (InSelectedPhaseIndex >= 0 &&
+            InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
         {
-            const std::string& PhaseKey = InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
-            for (const FWatchDocSchemaResult& PB : Schema.mPlaybooks)
+            const std::string &PhaseKey =
+                InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)]
+                    .mPhaseKey;
+            for (const FWatchDocSchemaResult &PB : Schema.mPlaybooks)
             {
                 if (PB.mPhaseKey == PhaseKey)
                 {
@@ -1016,36 +1160,46 @@ Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhase
         }
         if (rpMatch != nullptr)
         {
-            PlaybookBlock = RenderSchemaBlock("PLAYBOOK " + rpMatch->mPhaseKey, *rpMatch);
+            PlaybookBlock =
+                RenderSchemaBlock("PLAYBOOK " + rpMatch->mPhaseKey, *rpMatch);
         }
         else
         {
-            PlaybookBlock = window(text(" PLAYBOOK ") | bold | dim, text("  No playbook for selected phase") | dim);
+            PlaybookBlock =
+                window(text(" PLAYBOOK ") | bold | dim,
+                       text("  No playbook for selected phase") | dim);
         }
     }
     else
     {
-        PlaybookBlock = window(text(" PLAYBOOK ") | bold | dim, text("  No playbooks") | dim);
+        PlaybookBlock = window(text(" PLAYBOOK ") | bold | dim,
+                               text("  No playbooks") | dim);
     }
 
     // Plan sidecar schemas
-    auto PlanCLBlock = RenderSchemaBlock("PLAN CHANGELOG", Schema.mPlanChangeLog);
-    auto PlanVerifBlock = RenderSchemaBlock("PLAN VERIFICATION", Schema.mPlanVerification);
+    auto PlanCLBlock =
+        RenderSchemaBlock("PLAN CHANGELOG", Schema.mPlanChangeLog);
+    auto PlanVerifBlock =
+        RenderSchemaBlock("PLAN VERIFICATION", Schema.mPlanVerification);
 
     // Impl sidecar schemas
-    auto ImplCLBlock = RenderSchemaBlock("IMPL CHANGELOG", Schema.mImplChangeLog);
-    auto ImplVerifBlock = RenderSchemaBlock("IMPL VERIFICATION", Schema.mImplVerification);
+    auto ImplCLBlock =
+        RenderSchemaBlock("IMPL CHANGELOG", Schema.mImplChangeLog);
+    auto ImplVerifBlock =
+        RenderSchemaBlock("IMPL VERIFICATION", Schema.mImplVerification);
 
     // Playbook sidecar schemas for selected phase
     std::string SelectedPhaseKey;
-    if (InSelectedPhaseIndex >= 0 && InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
+    if (InSelectedPhaseIndex >= 0 &&
+        InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
     {
-        SelectedPhaseKey = InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
+        SelectedPhaseKey =
+            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
     }
 
     Element PBCLBlock;
-    const FWatchDocSchemaResult* rpPBCL = nullptr;
-    for (const FWatchDocSchemaResult& PBCL : Schema.mPlaybookChangeLogs)
+    const FWatchDocSchemaResult *rpPBCL = nullptr;
+    for (const FWatchDocSchemaResult &PBCL : Schema.mPlaybookChangeLogs)
     {
         if (PBCL.mPhaseKey == SelectedPhaseKey)
         {
@@ -1055,16 +1209,18 @@ Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhase
     }
     if (rpPBCL != nullptr)
     {
-        PBCLBlock = RenderSchemaBlock("PB CHANGELOG " + rpPBCL->mPhaseKey, *rpPBCL);
+        PBCLBlock =
+            RenderSchemaBlock("PB CHANGELOG " + rpPBCL->mPhaseKey, *rpPBCL);
     }
     else
     {
-        PBCLBlock = window(text(" PB CHANGELOG ") | bold | dim, text("  No sidecar for phase") | dim);
+        PBCLBlock = window(text(" PB CHANGELOG ") | bold | dim,
+                           text("  No sidecar for phase") | dim);
     }
 
     Element PBVerifBlock;
-    const FWatchDocSchemaResult* rpPBVerif = nullptr;
-    for (const FWatchDocSchemaResult& PBV : Schema.mPlaybookVerifications)
+    const FWatchDocSchemaResult *rpPBVerif = nullptr;
+    for (const FWatchDocSchemaResult &PBV : Schema.mPlaybookVerifications)
     {
         if (PBV.mPhaseKey == SelectedPhaseKey)
         {
@@ -1074,16 +1230,19 @@ Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhase
     }
     if (rpPBVerif != nullptr)
     {
-        PBVerifBlock = RenderSchemaBlock("PB VERIFICATION " + rpPBVerif->mPhaseKey, *rpPBVerif);
+        PBVerifBlock = RenderSchemaBlock(
+            "PB VERIFICATION " + rpPBVerif->mPhaseKey, *rpPBVerif);
     }
     else
     {
-        PBVerifBlock = window(text(" PB VERIFICATION ") | bold | dim, text("  No sidecar for phase") | dim);
+        PBVerifBlock = window(text(" PB VERIFICATION ") | bold | dim,
+                              text("  No sidecar for phase") | dim);
     }
 
     static constexpr int kSchemaColumnWidth = 60;
 
-    auto LeftColumn = vbox({PlanBlock, PlanCLBlock, PlanVerifBlock, ImplBlock, ImplCLBlock, ImplVerifBlock});
+    auto LeftColumn = vbox({PlanBlock, PlanCLBlock, PlanVerifBlock, ImplBlock,
+                            ImplCLBlock, ImplVerifBlock});
     auto RightColumn = vbox({PlaybookBlock, PBCLBlock, PBVerifBlock});
 
     return hbox({
@@ -1096,9 +1255,11 @@ Element SchemaPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhase
 // Sidecar lookup helper
 // ---------------------------------------------------------------------------
 
-static const FWatchSidecarSummary* FindSidecar(const FWatchPlanSummary& InPlan, const std::string& InOwnerKind, const std::string& InDocKind, const std::string& InPhaseKey = "")
+static const FWatchSidecarSummary *
+FindSidecar(const FWatchPlanSummary &InPlan, const std::string &InOwnerKind,
+            const std::string &InDocKind, const std::string &InPhaseKey = "")
 {
-    for (const FWatchSidecarSummary& Sidecar : InPlan.mSidecarSummaries)
+    for (const FWatchSidecarSummary &Sidecar : InPlan.mSidecarSummaries)
     {
         if (Sidecar.mOwnerKind == InOwnerKind && Sidecar.mDocKind == InDocKind)
         {
@@ -1111,16 +1272,20 @@ static const FWatchSidecarSummary* FindSidecar(const FWatchPlanSummary& InPlan, 
     return nullptr;
 }
 
-static Element RenderSidecarPanel(const std::string& InTitle, const FWatchSidecarSummary* InRpSidecar)
+static Element RenderSidecarPanel(const std::string &InTitle,
+                                  const FWatchSidecarSummary *InRpSidecar)
 {
     if (InRpSidecar == nullptr)
     {
-        return window(text(" " + InTitle + " ") | bold | dim, text("  (not found)") | dim);
+        return window(text(" " + InTitle + " ") | bold | dim,
+                      text("  (not found)") | dim);
     }
 
     Elements Rows;
     Rows.push_back(text(" Path: " + InRpSidecar->mPath) | dim);
-    Rows.push_back(text(" Entries: " + std::to_string(InRpSidecar->mEntryCount)) | color(InRpSidecar->mEntryCount > 0 ? Color::Green : Color::Yellow));
+    Rows.push_back(
+        text(" Entries: " + std::to_string(InRpSidecar->mEntryCount)) |
+        color(InRpSidecar->mEntryCount > 0 ? Color::Green : Color::Yellow));
     if (!InRpSidecar->mLatestDate.empty())
     {
         Rows.push_back(text(" Latest: " + InRpSidecar->mLatestDate) | dim);
@@ -1132,20 +1297,25 @@ static Element RenderSidecarPanel(const std::string& InTitle, const FWatchSideca
 // PlaybookChangeLogPanel
 // ---------------------------------------------------------------------------
 
-Element PlaybookChangeLogPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhaseIndex) const
+Element PlaybookChangeLogPanel::Render(const FWatchPlanSummary &InPlan,
+                                       int InSelectedPhaseIndex) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" PB CHANGELOG ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" PB CHANGELOG ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
     std::string PhaseKey;
-    if (InSelectedPhaseIndex >= 0 && InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
+    if (InSelectedPhaseIndex >= 0 &&
+        InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
     {
-        PhaseKey = InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
+        PhaseKey =
+            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
     }
 
-    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Playbook", "ChangeLog", PhaseKey);
+    const FWatchSidecarSummary *rpSidecar =
+        FindSidecar(InPlan, "Playbook", "ChangeLog", PhaseKey);
     return RenderSidecarPanel("PB CHANGELOG " + PhaseKey, rpSidecar);
 }
 
@@ -1153,20 +1323,25 @@ Element PlaybookChangeLogPanel::Render(const FWatchPlanSummary& InPlan, int InSe
 // PlaybookVerificationPanel
 // ---------------------------------------------------------------------------
 
-Element PlaybookVerificationPanel::Render(const FWatchPlanSummary& InPlan, int InSelectedPhaseIndex) const
+Element PlaybookVerificationPanel::Render(const FWatchPlanSummary &InPlan,
+                                          int InSelectedPhaseIndex) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" PB VERIFICATION ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" PB VERIFICATION ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
     std::string PhaseKey;
-    if (InSelectedPhaseIndex >= 0 && InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
+    if (InSelectedPhaseIndex >= 0 &&
+        InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
     {
-        PhaseKey = InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
+        PhaseKey =
+            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
     }
 
-    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Playbook", "Verification", PhaseKey);
+    const FWatchSidecarSummary *rpSidecar =
+        FindSidecar(InPlan, "Playbook", "Verification", PhaseKey);
     return RenderSidecarPanel("PB VERIFICATION " + PhaseKey, rpSidecar);
 }
 
@@ -1174,14 +1349,16 @@ Element PlaybookVerificationPanel::Render(const FWatchPlanSummary& InPlan, int I
 // PlanChangeLogPanel
 // ---------------------------------------------------------------------------
 
-Element PlanChangeLogPanel::Render(const FWatchPlanSummary& InPlan) const
+Element PlanChangeLogPanel::Render(const FWatchPlanSummary &InPlan) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" PLAN CHANGELOG ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" PLAN CHANGELOG ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
-    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Plan", "ChangeLog");
+    const FWatchSidecarSummary *rpSidecar =
+        FindSidecar(InPlan, "Plan", "ChangeLog");
     return RenderSidecarPanel("PLAN CHANGELOG", rpSidecar);
 }
 
@@ -1189,14 +1366,16 @@ Element PlanChangeLogPanel::Render(const FWatchPlanSummary& InPlan) const
 // PlanVerificationPanel
 // ---------------------------------------------------------------------------
 
-Element PlanVerificationPanel::Render(const FWatchPlanSummary& InPlan) const
+Element PlanVerificationPanel::Render(const FWatchPlanSummary &InPlan) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" PLAN VERIFICATION ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" PLAN VERIFICATION ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
-    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Plan", "Verification");
+    const FWatchSidecarSummary *rpSidecar =
+        FindSidecar(InPlan, "Plan", "Verification");
     return RenderSidecarPanel("PLAN VERIFICATION", rpSidecar);
 }
 
@@ -1204,14 +1383,16 @@ Element PlanVerificationPanel::Render(const FWatchPlanSummary& InPlan) const
 // ImplChangeLogPanel
 // ---------------------------------------------------------------------------
 
-Element ImplChangeLogPanel::Render(const FWatchPlanSummary& InPlan) const
+Element ImplChangeLogPanel::Render(const FWatchPlanSummary &InPlan) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" IMPL CHANGELOG ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" IMPL CHANGELOG ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
-    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Impl", "ChangeLog");
+    const FWatchSidecarSummary *rpSidecar =
+        FindSidecar(InPlan, "Impl", "ChangeLog");
     return RenderSidecarPanel("IMPL CHANGELOG", rpSidecar);
 }
 
@@ -1219,14 +1400,16 @@ Element ImplChangeLogPanel::Render(const FWatchPlanSummary& InPlan) const
 // ImplVerificationPanel
 // ---------------------------------------------------------------------------
 
-Element ImplVerificationPanel::Render(const FWatchPlanSummary& InPlan) const
+Element ImplVerificationPanel::Render(const FWatchPlanSummary &InPlan) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" IMPL VERIFICATION ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" IMPL VERIFICATION ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
-    const FWatchSidecarSummary* rpSidecar = FindSidecar(InPlan, "Impl", "Verification");
+    const FWatchSidecarSummary *rpSidecar =
+        FindSidecar(InPlan, "Impl", "Verification");
     return RenderSidecarPanel("IMPL VERIFICATION", rpSidecar);
 }
 
@@ -1234,11 +1417,13 @@ Element ImplVerificationPanel::Render(const FWatchPlanSummary& InPlan) const
 // FileManifestPanel
 // ---------------------------------------------------------------------------
 
-Element FileManifestPanel::Render(const FWatchPhaseTaxonomy& InTaxonomy, int InFilePageIndex) const
+Element FileManifestPanel::Render(const FPhaseTaxonomy &InTaxonomy,
+                                  int InFilePageIndex) const
 {
     if (InTaxonomy.mFileManifest.empty())
     {
-        return window(text(" FILES: " + InTaxonomy.mPhaseKey + " (0) ") | bold, text("  (no file changes planned)") | dim);
+        return window(text(" FILES: " + InTaxonomy.mPhaseKey + " (0) ") | bold,
+                      text("  (no file changes planned)") | dim);
     }
 
     static constexpr int kPageSize = 10;
@@ -1247,11 +1432,13 @@ Element FileManifestPanel::Render(const FWatchPhaseTaxonomy& InTaxonomy, int InF
     const int PageEnd = std::min(PageStart + kPageSize, TotalFiles);
 
     std::vector<std::vector<Element>> TableData;
-    TableData.push_back({text("File") | bold | flex, text("Action") | bold, text("Description") | bold | flex});
+    TableData.push_back({text("File") | bold | flex, text("Action") | bold,
+                         text("Description") | bold | flex});
 
     for (int Index = PageStart; Index < PageEnd; ++Index)
     {
-        const FWatchFileManifestItem& Item = InTaxonomy.mFileManifest[static_cast<size_t>(Index)];
+        const FFileManifestItem &Item =
+            InTaxonomy.mFileManifest[static_cast<size_t>(Index)];
         auto ActionColor = Color::White;
         if (Item.mAction == "create")
         {
@@ -1276,11 +1463,13 @@ Element FileManifestPanel::Render(const FWatchPhaseTaxonomy& InTaxonomy, int InF
     FileTable.SelectAll().SeparatorVertical(EMPTY);
     FileTable.SelectRow(0).SeparatorHorizontal(LIGHT);
 
-    std::string Title = " FILES: " + InTaxonomy.mPhaseKey + " (" + std::to_string(TotalFiles) + ")";
+    std::string Title = " FILES: " + InTaxonomy.mPhaseKey + " (" +
+                        std::to_string(TotalFiles) + ")";
     if (TotalFiles > kPageSize)
     {
         const int PageCount = (TotalFiles + kPageSize - 1) / kPageSize;
-        Title += " [" + std::to_string(InFilePageIndex + 1) + "/" + std::to_string(PageCount) + "]";
+        Title += " [" + std::to_string(InFilePageIndex + 1) + "/" +
+                 std::to_string(PageCount) + "]";
     }
     Title += " ";
 
@@ -1291,11 +1480,12 @@ Element FileManifestPanel::Render(const FWatchPhaseTaxonomy& InTaxonomy, int InF
 // PlanDetailPanel
 // ---------------------------------------------------------------------------
 
-Element PlanDetailPanel::Render(const FWatchPlanSummary& InPlan) const
+Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
 {
     if (InPlan.mTopicKey.empty())
     {
-        return window(text(" PLAN DETAIL ") | bold | dim, text("  No plan selected") | dim);
+        return window(text(" PLAN DETAIL ") | bold | dim,
+                      text("  No plan selected") | dim);
     }
 
     Elements Rows;
@@ -1308,7 +1498,7 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary& InPlan) const
     }
     else
     {
-        for (const std::string& Line : InPlan.mSummaryLines)
+        for (const std::string &Line : InPlan.mSummaryLines)
         {
             Rows.push_back(text("    " + Line) | dim);
         }
@@ -1324,9 +1514,10 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary& InPlan) const
     }
     else
     {
-        for (const std::string& Goal : InPlan.mGoalStatements)
+        for (const std::string &Goal : InPlan.mGoalStatements)
         {
-            Rows.push_back(text("    \xe2\x97\x8f " + Goal) | color(Color::Green));
+            Rows.push_back(text("    \xe2\x97\x8f " + Goal) |
+                           color(Color::Green));
         }
     }
 
@@ -1340,27 +1531,37 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary& InPlan) const
     }
     else
     {
-        for (const std::string& NonGoal : InPlan.mNonGoalStatements)
+        for (const std::string &NonGoal : InPlan.mNonGoalStatements)
         {
-            Rows.push_back(text("    \xe2\x97\x8b " + NonGoal) | color(Color::Yellow));
+            Rows.push_back(text("    \xe2\x97\x8b " + NonGoal) |
+                           color(Color::Yellow));
         }
     }
 
-    return window(text(" PLAN DETAIL ") | bold | color(Color::Cyan), vbox(Rows));
+    return window(text(" PLAN DETAIL ") | bold | color(Color::Cyan),
+                  vbox(Rows));
 }
 
 // ---------------------------------------------------------------------------
 // WatchStatusBar
 // ---------------------------------------------------------------------------
 
-Element WatchStatusBar::Render(const std::string& InVersion, const std::string& InTime, int InTick, int InPollMs, const FWatchInventoryCounters& InCounters) const
+Element WatchStatusBar::Render(const std::string &InVersion,
+                               const std::string &InTime, int InTick,
+                               int InPollMs,
+                               const FWatchInventoryCounters &InCounters) const
 {
     return hbox({
         text(" Poll #" + std::to_string(InTick)) | bold,
         text("  |  Last: " + std::to_string(InPollMs) + "ms") | dim,
-        text("  |  Plans: " + std::to_string(InCounters.mPlanCount) + "  Playbooks: " + std::to_string(InCounters.mPlaybookCount) + "  Impls: " + std::to_string(InCounters.mImplementationCount)) | dim,
+        text("  |  Plans: " + std::to_string(InCounters.mPlanCount) +
+             "  Playbooks: " + std::to_string(InCounters.mPlaybookCount) +
+             "  Impls: " + std::to_string(InCounters.mImplementationCount)) |
+            dim,
         filler(),
-        text("q=quit  a/A=plan  n/N=non-active  p/P=phase  w/W=wave  l/L=lane  f/F=files  s=schema  i=impl  r=refresh") | dim,
+        text("q=quit  a/A=plan  n/N=non-active  p/P=phase  w/W=wave  l/L=lane  "
+             "f/F=files  s=schema  i=impl  r=refresh") |
+            dim,
         text("  "),
     });
 }

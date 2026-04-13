@@ -8,7 +8,8 @@
 #include <string>
 #include <vector>
 
-namespace UniPlan {
+namespace UniPlan
+{
 
 // Shared regex constant
 extern const std::regex kMarkdownPathRegex;
@@ -622,11 +623,46 @@ EvaluatePlaybookSchema(const fs::path &InRepoRoot,
                        std::vector<std::string> &OutWarnings);
 
 // From UniPlanRuntime.cpp
+CacheConfigResult WriteCacheConfig(const std::string &InRepoRoot,
+                                   const CacheConfigOptions &InOptions,
+                                   const DocConfig &InCurrentConfig);
+std::vector<SchemaField>
+ParseSchemaFields(const fs::path &InSchemaPath,
+                  std::vector<std::string> &OutWarnings);
+std::vector<std::string> BuildSchemaExamples(const std::string &InType);
+std::string JoinMarkdownRowCells(const std::vector<std::string> &InRow);
+bool RowContainsAllTerms(const std::vector<std::string> &InRow,
+                         const std::vector<std::string> &InTerms);
+bool TryResolveRuleProvenance(const fs::path &InRepoRoot,
+                              const RuleProvenanceProbe &InProbe,
+                              std::string &OutResolvedEvidence);
+std::string BuildTopicPhaseIdentityNormalized(const std::string &InTopicKey,
+                                              const std::string &InPhaseKey);
+std::vector<ActivePhaseRecord>
+CollectActivePhaseRecords(const fs::path &InRepoRoot,
+                          const Inventory &InInventory,
+                          const std::vector<DocumentRecord> &InPlaybooks,
+                          std::vector<std::string> &OutWarnings);
+std::set<std::string>
+BuildHeadingIdSet(const std::vector<HeadingRecord> &InHeadings);
+bool IsPlaybookPhaseEntryReady(const fs::path &InPlaybookAbsolutePath,
+                               const std::string &InPhaseKey);
 std::vector<SectionSchemaEntry>
 BuildSectionSchemaEntries(const std::string &InType,
                           const fs::path &InRepoRoot = fs::path());
 fs::path ResolveSchemaFilePath(const std::string &InType,
                                const fs::path &InRepoRoot);
+void AppendGraphEdgeUnique(std::vector<GraphEdge> &InOutEdges,
+                           std::set<std::string> &InOutEdgeKeys,
+                           const std::string &InFromNodeId,
+                           const std::string &InToNodeId,
+                           const std::string &InKind, int InDepth);
+void AddDriftItem(std::vector<DriftItem> &InOutDrifts, const std::string &InId,
+                  const std::string &InSeverity, const std::string &InTopicKey,
+                  const std::string &InPath, const std::string &InMessage);
+int SeverityRank(const std::string &InSeverity);
+void PrintUsage();
+void PrintCommandUsage(const std::string &InCommand);
 
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>

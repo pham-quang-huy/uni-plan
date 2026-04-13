@@ -24,6 +24,7 @@ endif()
 
 add_executable(uni-plan
     Source/Main.cpp
+    Source/UniPlanCommandDispatch.cpp
     Source/UniPlanRuntime.cpp
     Source/UniPlanParsing.cpp
     Source/UniPlanCache.cpp
