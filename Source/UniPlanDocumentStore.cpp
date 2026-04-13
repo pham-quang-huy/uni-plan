@@ -42,6 +42,12 @@ bool TrySaveDocument(const fs::path &InRepoRoot, const FDocument &InDocument,
 {
     std::string FilePath = InDocument.mIdentity.mFilePath;
 
+    if (FilePath.empty())
+    {
+        OutError = "Document has empty file path";
+        return false;
+    }
+
     // Ensure .json extension
     if (FilePath.size() > 3 && FilePath.substr(FilePath.size() - 3) == ".md")
     {

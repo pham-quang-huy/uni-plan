@@ -432,9 +432,16 @@ static int RunPhaseTransition(const PhaseCommandOptions &InOptions,
         return 1;
     }
 
-    // Find and update execution_lanes
+    // Update execution_lanes Status column in playbook.
+    // Only set ALL lanes to the target when transitioning to
+    // completed or closed (indicating the phase is done).
+    // For in_progress/blocked/canceled, leave individual lane
+    // statuses as-is — agents manage lane statuses individually.
+    const bool SetAllLanes = (TargetStatus == EPhaseStatus::Completed ||
+                              TargetStatus == EPhaseStatus::Closed);
+
     auto LanesIt = PlaybookDoc.mSections.find("execution_lanes");
-    if (LanesIt != PlaybookDoc.mSections.end())
+    if (LanesIt != PlaybookDoc.mSections.end() && SetAllLanes)
     {
         for (FStructuredTable &Table : LanesIt->second.mTables)
         {

@@ -38,8 +38,11 @@ inline const char *ToString(EDocumentType InValue)
     return "unknown";
 }
 
-inline EDocumentType DocumentTypeFromString(const std::string &InValue)
+inline EDocumentType DocumentTypeFromString(const std::string &InValue,
+                                            bool *OutValid = nullptr)
 {
+    if (OutValid)
+        *OutValid = true;
     if (InValue == "plan")
         return EDocumentType::Plan;
     if (InValue == "playbook")
@@ -50,6 +53,8 @@ inline EDocumentType DocumentTypeFromString(const std::string &InValue)
         return EDocumentType::ChangeLog;
     if (InValue == "verification")
         return EDocumentType::Verification;
+    if (OutValid)
+        *OutValid = false;
     return EDocumentType::Plan;
 }
 

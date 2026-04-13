@@ -147,6 +147,11 @@ static bool SaveTagFile(const fs::path &InTagPath, const JsonValue &InRoot,
 {
     std::error_code DirError;
     fs::create_directories(InTagPath.parent_path(), DirError);
+    if (DirError)
+    {
+        OutError = "Failed to create directory: " + DirError.message();
+        return false;
+    }
     std::ofstream Stream(InTagPath, std::ios::out | std::ios::trunc);
     if (!Stream.is_open())
     {
@@ -154,12 +159,25 @@ static bool SaveTagFile(const fs::path &InTagPath, const JsonValue &InRoot,
         return false;
     }
     Stream << InRoot.dump(2) << "\n";
+    Stream.close();
+    if (Stream.fail())
+    {
+        OutError = "Write failed for tag file";
+        return false;
+    }
     return true;
 }
 
 static int RunTagSet(const fs::path &InRepoRoot, const std::string &InTarget,
                      const std::string &InTagsStr)
 {
+    if (InTarget.empty())
+    {
+        std::cout << "{\"ok\":false,\"error\":\"--target is "
+                     "required\"}\n";
+        return 2;
+    }
+
     const fs::path TagPath = GetTagFilePath(InRepoRoot);
     JsonValue Root = LoadTagFile(TagPath);
 

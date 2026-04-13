@@ -495,10 +495,20 @@ FMigrateStatusResult ComputeMigrateStatus(const fs::path &InRepoRoot)
 {
     FMigrateStatusResult Result;
 
-    for (auto It = fs::recursive_directory_iterator(
-             InRepoRoot, fs::directory_options::skip_permission_denied);
-         It != fs::recursive_directory_iterator(); ++It)
+    std::error_code Error;
+    if (!fs::exists(InRepoRoot, Error) || !fs::is_directory(InRepoRoot, Error))
     {
+        return Result;
+    }
+
+    for (auto It = fs::recursive_directory_iterator(
+             InRepoRoot, fs::directory_options::skip_permission_denied, Error);
+         It != fs::recursive_directory_iterator(); It.increment(Error))
+    {
+        if (Error)
+        {
+            break;
+        }
         if (ShouldSkipRecursionDirectory(It->path()))
         {
             It.disable_recursion_pending();

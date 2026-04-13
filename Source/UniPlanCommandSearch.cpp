@@ -59,7 +59,18 @@ int RunSearchCommand(const std::vector<std::string> &InArgs)
         else if (Token == "--section" && Index + 1 < InArgs.size())
             SectionFilter = ToLower(InArgs[++Index]);
         else if (Token == "--limit" && Index + 1 < InArgs.size())
-            Limit = std::stoi(InArgs[++Index]);
+        {
+            try
+            {
+                Limit = std::stoi(InArgs[++Index]);
+                if (Limit < 1)
+                    Limit = 1;
+            }
+            catch (...)
+            {
+                Limit = 20;
+            }
+        }
         else if (Token == "--repo-root" && Index + 1 < InArgs.size())
             RepoRoot = InArgs[++Index];
     }
