@@ -37,6 +37,7 @@ add_executable(uni-plan
     Source/UniPlanJsonIO.cpp
     Source/UniPlanMigrate.cpp
     Source/UniPlanCommandMigrate.cpp
+    Source/UniPlanDocumentStore.cpp
 )
 
 target_include_directories(uni-plan PRIVATE
