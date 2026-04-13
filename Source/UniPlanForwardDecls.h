@@ -664,6 +664,13 @@ int SeverityRank(const std::string &InSeverity);
 void PrintUsage();
 void PrintCommandUsage(const std::string &InCommand);
 
+// From UniPlanOptionParsing.cpp
+MigrateOptions ParseMigrateOptions(const std::vector<std::string> &InTokens);
+
+// From UniPlanCommandMigrate.cpp
+int RunMigrateJson(const MigrateOptions &InOptions, const bool InUseCache,
+                   const DocConfig &InConfig);
+
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>
 TryParseSectionSchemaFromFile(const fs::path &InSchemaPath);

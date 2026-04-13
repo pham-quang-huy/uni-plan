@@ -16,7 +16,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.27.0";
+static constexpr const char *kCliVersion = "0.28.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -303,6 +303,16 @@ struct CacheConfigOptions : BaseOptions
     bool mbDirSet = false;
     std::string mEnabled;
     std::string mVerbose;
+};
+
+struct MigrateOptions : BaseOptions
+{
+    std::string mSubcommand;     // "md-to-json", "json-to-md",
+                                 // "verify", "status"
+    std::string mDocPath;        // --doc <path>
+    std::string mTopic;          // --topic <topic>
+    bool mbAll = false;          // --all
+    bool mbDeleteSource = false; // --delete-source
 };
 
 // ---------------------------------------------------------------------------
