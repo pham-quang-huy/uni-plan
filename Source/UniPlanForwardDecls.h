@@ -681,6 +681,11 @@ int RunPlanCommand(const PlanCommandOptions &InOptions, const bool InUseCache,
 int RunPhaseExtendedCommand(const PhaseCommandOptions &InOptions,
                             const bool InUseCache, const DocConfig &InConfig);
 
+// From UniPlanCommandEvidence.cpp
+int RunEvidenceCommand(const std::vector<std::string> &InArgs,
+                       const bool InUseCache, const DocConfig &InConfig);
+int RunTagCommand(const std::vector<std::string> &InArgs);
+
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>
 TryParseSectionSchemaFromFile(const fs::path &InSchemaPath);

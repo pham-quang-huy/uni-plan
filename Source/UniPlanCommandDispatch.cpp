@@ -2171,6 +2171,41 @@ int RunMain(const int InArgc, char *InArgv[])
             return RunPlanCommand(Options, UseCache, Config);
         }
 
+        if (Command == "evidence")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            if (ContainsHelpFlag(Args))
+            {
+                std::cout << "Usage:\n"
+                          << "  uni-plan evidence add --topic <topic>"
+                             " --for <plan|impl|playbook>"
+                             " --type <changelog|verification>"
+                             " --date <date> --update <text>\n";
+                return 0;
+            }
+            return RunEvidenceCommand(Args, UseCache, Config);
+        }
+
+        if (Command == "tag")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            if (ContainsHelpFlag(Args))
+            {
+                std::cout << "Usage:\n"
+                          << "  uni-plan tag set --target "
+                             "<topic|topic:phase>"
+                             " --tags <tag1,tag2,...>\n"
+                          << "  uni-plan tag get --target "
+                             "<topic|topic:phase>\n"
+                          << "  uni-plan tag query --tags "
+                             "<tag1,tag2> [--mode and|or]\n";
+                return 0;
+            }
+            return RunTagCommand(Args);
+        }
+
         if (Command == "migrate")
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,
