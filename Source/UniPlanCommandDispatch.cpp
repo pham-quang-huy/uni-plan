@@ -2355,8 +2355,30 @@ int RunMain(const int InArgc, char *InArgv[])
                     else
                         OwnerKey = SC.mPhaseKey;
 
-                    // Find entries table
-                    const auto EntIt = SCDoc.mSections.find("entries");
+                    // Find entries table — check multiple
+                    // possible section names (entries,
+                    // change_entries, verification_entries)
+                    auto EntIt = SCDoc.mSections.find("entries");
+                    if (EntIt == SCDoc.mSections.end() ||
+                        EntIt->second.mTables.empty())
+                    {
+                        EntIt = SCDoc.mSections.find("change_entries");
+                    }
+                    if (EntIt == SCDoc.mSections.end() ||
+                        EntIt->second.mTables.empty())
+                    {
+                        EntIt = SCDoc.mSections.find("verification_entries");
+                    }
+                    if (EntIt == SCDoc.mSections.end() ||
+                        EntIt->second.mTables.empty())
+                    {
+                        EntIt = SCDoc.mSections.find("verification");
+                    }
+                    if (EntIt == SCDoc.mSections.end() ||
+                        EntIt->second.mTables.empty())
+                    {
+                        EntIt = SCDoc.mSections.find("checks");
+                    }
                     if (EntIt == SCDoc.mSections.end() ||
                         EntIt->second.mTables.empty())
                         continue;

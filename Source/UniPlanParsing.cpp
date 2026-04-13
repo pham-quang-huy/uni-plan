@@ -54,11 +54,12 @@ bool TryClassifyCoreDocument(const std::string &InRelativePath,
                              const std::string &InFilename,
                              DocumentRecord &OutRecord)
 {
-    static const std::regex PlanNameRegex(R"(^([A-Za-z0-9]+)\.Plan\.json$)");
+    static const std::regex PlanNameRegex(
+        R"(^([A-Za-z0-9]+)\.Plan\.(json|md)$)");
     static const std::regex PlaybookNameRegex(
-        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.json$)");
+        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.(json|md)$)");
     static const std::regex ImplementationNameRegex(
-        R"(^([A-Za-z0-9]+)\.Impl\.json$)");
+        R"(^([A-Za-z0-9]+)\.Impl\.(json|md)$)");
 
     std::smatch Match;
     if (IsPlanPath(InRelativePath) &&
@@ -97,11 +98,11 @@ bool TryClassifySidecarDocument(const std::string &InRelativePath,
                                 SidecarRecord &OutRecord)
 {
     static const std::regex PlanSidecarRegex(
-        R"(^([A-Za-z0-9]+)\.Plan\.(ChangeLog|Verification)\.json$)");
+        R"(^([A-Za-z0-9]+)\.Plan\.(ChangeLog|Verification)\.(json|md)$)");
     static const std::regex ImplementationSidecarRegex(
-        R"(^([A-Za-z0-9]+)\.Impl\.(ChangeLog|Verification)\.json$)");
+        R"(^([A-Za-z0-9]+)\.Impl\.(ChangeLog|Verification)\.(json|md)$)");
     static const std::regex PlaybookSidecarRegex(
-        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.(ChangeLog|Verification)\.json$)");
+        R"(^([A-Za-z0-9]+)\.([^.]+)\.Playbook\.(ChangeLog|Verification)\.(json|md)$)");
 
     std::smatch Match;
     if (IsPlanPath(InRelativePath) &&
@@ -558,7 +559,7 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
         }
 
         const std::string Ext = AbsolutePath.extension().string();
-        if (Ext != ".json")
+        if (Ext != ".json" && Ext != ".md")
         {
             AdvanceIterator();
             continue;

@@ -1,6 +1,9 @@
 #include "UniPlanDocumentStore.h"
+#include "UniPlanForwardDecls.h"
+#include "UniPlanHelpers.h"
 #include "UniPlanJsonIO.h"
 
+#include <set>
 #include <string>
 
 namespace UniPlan
@@ -181,9 +184,112 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
         return true;
     }
 
-    // No fragment — try as single-doc JSON (legacy compat)
+    // No fragment — try as single-doc JSON, then .md fallback
     const fs::path AbsPath = InRepoRoot / InRelativePath;
-    return TryReadDocumentJson(AbsPath, OutDocument, OutError);
+    const std::string Ext = AbsPath.extension().string();
+
+    if (Ext == ".json")
+    {
+        return TryReadDocumentJson(AbsPath, OutDocument, OutError);
+    }
+
+    if (Ext == ".md")
+    {
+        // Markdown fallback: parse headings/tables into
+        // FDocument. Used during bundle migration only.
+        std::vector<std::string> Lines;
+        if (!TryReadFileLines(AbsPath, Lines, OutError))
+        {
+            return false;
+        }
+        const std::vector<HeadingRecord> Headings = ParseHeadingRecords(Lines);
+        const std::vector<MarkdownTableRecord> Tables =
+            ParseMarkdownTables(Lines, Headings);
+
+        // Title from H1
+        for (const HeadingRecord &H : Headings)
+        {
+            if (H.mLevel == 1)
+            {
+                OutDocument.mTitle = H.mText;
+                break;
+            }
+        }
+
+        // Build sections from H2 headings
+        const int TotalLines = static_cast<int>(Lines.size());
+        std::set<int> TableLineSet;
+        for (const MarkdownTableRecord &T : Tables)
+        {
+            for (int L = T.mStartLine; L <= T.mEndLine; ++L)
+                TableLineSet.insert(L);
+        }
+        std::set<int> HeadingLineSet;
+        for (const HeadingRecord &H : Headings)
+        {
+            HeadingLineSet.insert(H.mLine);
+        }
+
+        for (size_t HI = 0; HI < Headings.size(); ++HI)
+        {
+            if (Headings[HI].mLevel != 2)
+                continue;
+
+            FSectionContent Section;
+            Section.mSectionID = Headings[HI].mSectionId;
+            Section.mHeading = Headings[HI].mText;
+            Section.mLevel = 2;
+
+            // Find section end
+            int SectionEnd = TotalLines - 1;
+            for (size_t NI = HI + 1; NI < Headings.size(); ++NI)
+            {
+                if (Headings[NI].mLevel <= 2)
+                {
+                    SectionEnd = Headings[NI].mLine - 1;
+                    break;
+                }
+            }
+
+            int ContentStart = Headings[HI].mLine + 1;
+
+            // Collect tables
+            for (const MarkdownTableRecord &T : Tables)
+            {
+                if (T.mStartLine >= ContentStart && T.mStartLine <= SectionEnd)
+                {
+                    FStructuredTable ST;
+                    ST.mTableID = T.mTableId;
+                    ST.mSectionID = Section.mSectionID;
+                    ST.mHeaders = T.mHeaders;
+                    for (const auto &Row : T.mRows)
+                    {
+                        std::vector<FTableCell> Cells;
+                        for (const std::string &C : Row)
+                            Cells.push_back(FTableCell{Trim(C)});
+                        ST.mRows.push_back(std::move(Cells));
+                    }
+                    Section.mTables.push_back(std::move(ST));
+                }
+            }
+
+            // Collect subsection IDs
+            for (size_t SI = HI + 1; SI < Headings.size(); ++SI)
+            {
+                if (Headings[SI].mLevel <= 2)
+                    break;
+                if (Headings[SI].mLevel == 3)
+                    Section.mSubsectionIDs.push_back(Headings[SI].mSectionId);
+            }
+
+            OutDocument.mSections[Section.mSectionID] = std::move(Section);
+        }
+
+        return true;
+    }
+
+    OutError = "Unsupported format: " + Ext;
+    return false;
 }
 
 // ---------------------------------------------------------------------------
