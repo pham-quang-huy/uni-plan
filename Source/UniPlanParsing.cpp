@@ -578,42 +578,150 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
         const std::string Relative = ToGenericPath(RelativePath);
         const std::string Filename = AbsolutePath.filename().string();
 
-        DocumentRecord CoreRecord;
-        if (TryClassifyCoreDocument(Relative, Filename, CoreRecord))
-        {
-            // Read status from JSON envelope
-            FDocument JsonDoc;
-            std::string JsonError;
-            if (TryReadDocumentJson(AbsolutePath, JsonDoc, JsonError))
-            {
-                CoreRecord.mStatusRaw = JsonDoc.mStatusRaw;
-                CoreRecord.mStatus = ToString(JsonDoc.mStatus);
-            }
-            else
-            {
-                CoreRecord.mStatus = "unknown";
-            }
+        // Try as plan-bundle first (*.Plan.json with
+        // plan-bundle schema)
+        static const std::regex BundleRegex(R"(^([A-Za-z0-9]+)\.Plan\.json$)");
+        std::smatch BundleMatch;
+        bool HandledAsBundle = false;
 
-            switch (CoreRecord.mKind)
+        if (std::regex_match(Filename, BundleMatch, BundleRegex))
+        {
+            FTopicBundle Bundle;
+            std::string BundleError;
+            if (TryReadTopicBundle(AbsolutePath, Bundle, BundleError))
             {
-            case EDocumentKind::Plan:
-                Result.mPlans.push_back(CoreRecord);
-                break;
-            case EDocumentKind::Playbook:
-                Result.mPlaybooks.push_back(CoreRecord);
-                break;
-            case EDocumentKind::Implementation:
-                Result.mImplementations.push_back(CoreRecord);
-                break;
+                HandledAsBundle = true;
+
+                // Create DocumentRecords from bundle
+                const std::string TopicKey = Bundle.mTopicKey;
+
+                // Plan record
+                {
+                    DocumentRecord PlanRecord;
+                    PlanRecord.mKind = EDocumentKind::Plan;
+                    PlanRecord.mTopicKey = TopicKey;
+                    PlanRecord.mPath = Relative + "#plan";
+                    PlanRecord.mStatus = ToString(Bundle.mPlan.mStatus);
+                    PlanRecord.mStatusRaw = Bundle.mPlan.mStatusRaw;
+                    Result.mPlans.push_back(std::move(PlanRecord));
+                }
+
+                // Implementation record
+                {
+                    DocumentRecord ImplRecord;
+                    ImplRecord.mKind = EDocumentKind::Implementation;
+                    ImplRecord.mTopicKey = TopicKey;
+                    ImplRecord.mPath = Relative + "#implementation";
+                    ImplRecord.mStatus =
+                        ToString(Bundle.mImplementation.mStatus);
+                    ImplRecord.mStatusRaw = Bundle.mImplementation.mStatusRaw;
+                    Result.mImplementations.push_back(std::move(ImplRecord));
+                }
+
+                // Playbook records
+                for (const auto &PBPair : Bundle.mPlaybooks)
+                {
+                    DocumentRecord PBRecord;
+                    PBRecord.mKind = EDocumentKind::Playbook;
+                    PBRecord.mTopicKey = TopicKey;
+                    PBRecord.mPhaseKey = PBPair.first;
+                    PBRecord.mPath = Relative + "#playbook:" + PBPair.first;
+                    PBRecord.mStatus = ToString(PBPair.second.mStatus);
+                    PBRecord.mStatusRaw = PBPair.second.mStatusRaw;
+                    Result.mPlaybooks.push_back(std::move(PBRecord));
+                }
+
+                // Sidecar records for changelogs
+                for (const auto &CLPair : Bundle.mChangeLogs)
+                {
+                    UniPlan::SidecarRecord SCRecord;
+                    SCRecord.mTopicKey = TopicKey;
+                    SCRecord.mDocKind = "ChangeLog";
+                    if (CLPair.first == "plan")
+                    {
+                        SCRecord.mOwnerKind = "Plan";
+                    }
+                    else if (CLPair.first == "implementation")
+                    {
+                        SCRecord.mOwnerKind = "Impl";
+                    }
+                    else
+                    {
+                        SCRecord.mOwnerKind = "Playbook";
+                        SCRecord.mPhaseKey = CLPair.first;
+                    }
+                    SCRecord.mPath = Relative + "#changelog:" + CLPair.first;
+                    Result.mSidecars.push_back(std::move(SCRecord));
+                }
+
+                // Sidecar records for verifications
+                for (const auto &VPair : Bundle.mVerifications)
+                {
+                    UniPlan::SidecarRecord SCRecord;
+                    SCRecord.mTopicKey = TopicKey;
+                    SCRecord.mDocKind = "Verification";
+                    if (VPair.first == "plan")
+                    {
+                        SCRecord.mOwnerKind = "Plan";
+                    }
+                    else if (VPair.first == "implementation")
+                    {
+                        SCRecord.mOwnerKind = "Impl";
+                    }
+                    else
+                    {
+                        SCRecord.mOwnerKind = "Playbook";
+                        SCRecord.mPhaseKey = VPair.first;
+                    }
+                    SCRecord.mPath = Relative + "#verification:" + VPair.first;
+                    Result.mSidecars.push_back(std::move(SCRecord));
+                }
+
+                AdvanceIterator();
+                continue;
             }
-            AdvanceIterator();
-            continue;
         }
 
-        SidecarRecord SidecarRecord;
-        if (TryClassifySidecarDocument(Relative, Filename, SidecarRecord))
+        // Legacy fallback: old multi-file format
+        // (*.Impl.json, *.Playbook.json, *.ChangeLog.json, etc.)
+        if (!HandledAsBundle)
         {
-            Result.mSidecars.push_back(SidecarRecord);
+            DocumentRecord CoreRecord;
+            if (TryClassifyCoreDocument(Relative, Filename, CoreRecord))
+            {
+                FDocument JsonDoc;
+                std::string JsonError;
+                if (TryReadDocumentJson(AbsolutePath, JsonDoc, JsonError))
+                {
+                    CoreRecord.mStatusRaw = JsonDoc.mStatusRaw;
+                    CoreRecord.mStatus = ToString(JsonDoc.mStatus);
+                }
+                else
+                {
+                    CoreRecord.mStatus = "unknown";
+                }
+
+                switch (CoreRecord.mKind)
+                {
+                case EDocumentKind::Plan:
+                    Result.mPlans.push_back(CoreRecord);
+                    break;
+                case EDocumentKind::Playbook:
+                    Result.mPlaybooks.push_back(CoreRecord);
+                    break;
+                case EDocumentKind::Implementation:
+                    Result.mImplementations.push_back(CoreRecord);
+                    break;
+                }
+                AdvanceIterator();
+                continue;
+            }
+
+            UniPlan::SidecarRecord SCRec;
+            if (TryClassifySidecarDocument(Relative, Filename, SCRec))
+            {
+                Result.mSidecars.push_back(SCRec);
+            }
         }
 
         AdvanceIterator();
@@ -2067,7 +2175,8 @@ TryParseSectionSchemaFromFile(const fs::path &InSchemaPath)
             Entry.mOrder = static_cast<int>(Entries.size()) + 1;
         }
 
-        // Extract requirement — only exact "required" maps to required=true
+        // Extract requirement — only exact "required" maps to
+        // required=true
         if (RequirementCol >= 0 &&
             static_cast<int>(Cells.size()) > RequirementCol)
         {

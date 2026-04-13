@@ -437,4 +437,288 @@ bool TryReadDocumentJson(const fs::path &InPath, FDocument &OutDocument,
     }
 }
 
+// ---------------------------------------------------------------------------
+// Topic bundle serialization
+// ---------------------------------------------------------------------------
+
+static JsonValue SerializeChangeLogEntry(const FChangeLogEntry &InEntry)
+{
+    JsonValue Entry = JsonValue::object();
+    Entry["date"] = InEntry.mDate;
+    Entry["change"] = InEntry.mChange;
+    if (!InEntry.mFiles.empty())
+        Entry["files"] = InEntry.mFiles;
+    if (!InEntry.mEvidence.empty())
+        Entry["evidence"] = InEntry.mEvidence;
+    return Entry;
+}
+
+static JsonValue SerializeVerificationEntry(const FVerificationEntry &InEntry)
+{
+    JsonValue Entry = JsonValue::object();
+    Entry["date"] = InEntry.mDate;
+    Entry["check"] = InEntry.mCheck;
+    Entry["result"] = InEntry.mResult;
+    if (!InEntry.mDetail.empty())
+        Entry["detail"] = InEntry.mDetail;
+    return Entry;
+}
+
+static JsonValue SerializeTopicBundle(const FTopicBundle &InBundle)
+{
+    JsonValue Root = JsonValue::object();
+    Root["$schema"] = "uni-plan://plan-bundle/v1";
+    Root["schema_version"] = InBundle.mSchemaVersion;
+    Root["topic_key"] = InBundle.mTopicKey;
+    Root["status"] = InBundle.mStatus;
+
+    // Plan
+    Root["plan"] = SerializeDocument(InBundle.mPlan);
+
+    // Implementation
+    Root["implementation"] = SerializeDocument(InBundle.mImplementation);
+
+    // Playbooks
+    JsonValue Playbooks = JsonValue::object();
+    for (const auto &Pair : InBundle.mPlaybooks)
+    {
+        Playbooks[Pair.first] = SerializeDocument(Pair.second);
+    }
+    Root["playbooks"] = std::move(Playbooks);
+
+    // ChangeLogs
+    JsonValue ChangeLogs = JsonValue::object();
+    for (const auto &Pair : InBundle.mChangeLogs)
+    {
+        JsonValue Entries = JsonValue::array();
+        for (const FChangeLogEntry &Entry : Pair.second)
+        {
+            Entries.push_back(SerializeChangeLogEntry(Entry));
+        }
+        ChangeLogs[Pair.first] = std::move(Entries);
+    }
+    Root["changelogs"] = std::move(ChangeLogs);
+
+    // Verifications
+    JsonValue Verifications = JsonValue::object();
+    for (const auto &Pair : InBundle.mVerifications)
+    {
+        JsonValue Entries = JsonValue::array();
+        for (const FVerificationEntry &Entry : Pair.second)
+        {
+            Entries.push_back(SerializeVerificationEntry(Entry));
+        }
+        Verifications[Pair.first] = std::move(Entries);
+    }
+    Root["verifications"] = std::move(Verifications);
+
+    return Root;
+}
+
+static FChangeLogEntry DeserializeChangeLogEntry(const JsonValue &InJson)
+{
+    FChangeLogEntry Entry;
+    Entry.mDate = GetString(InJson, "date");
+    Entry.mChange = GetString(InJson, "change");
+    Entry.mFiles = GetString(InJson, "files");
+    Entry.mEvidence = GetString(InJson, "evidence");
+    return Entry;
+}
+
+static FVerificationEntry DeserializeVerificationEntry(const JsonValue &InJson)
+{
+    FVerificationEntry Entry;
+    Entry.mDate = GetString(InJson, "date");
+    Entry.mCheck = GetString(InJson, "check");
+    Entry.mResult = GetString(InJson, "result");
+    Entry.mDetail = GetString(InJson, "detail");
+    return Entry;
+}
+
+static bool DeserializeTopicBundle(const JsonValue &InRoot,
+                                   FTopicBundle &OutBundle,
+                                   std::string &OutError)
+{
+    OutBundle.mTopicKey = GetString(InRoot, "topic_key");
+    OutBundle.mStatus = GetString(InRoot, "status");
+    OutBundle.mSchemaVersion = GetInt(InRoot, "schema_version", 1);
+
+    if (OutBundle.mTopicKey.empty())
+    {
+        OutError = "Missing required field 'topic_key'";
+        return false;
+    }
+
+    // Plan
+    if (InRoot.contains("plan") && InRoot["plan"].is_object())
+    {
+        if (!DeserializeDocument(InRoot["plan"], OutBundle.mPlan, OutError))
+        {
+            OutError = "Failed to parse plan: " + OutError;
+            return false;
+        }
+    }
+
+    // Implementation
+    if (InRoot.contains("implementation") &&
+        InRoot["implementation"].is_object())
+    {
+        if (!DeserializeDocument(InRoot["implementation"],
+                                 OutBundle.mImplementation, OutError))
+        {
+            OutError = "Failed to parse implementation: " + OutError;
+            return false;
+        }
+    }
+
+    // Playbooks
+    if (InRoot.contains("playbooks") && InRoot["playbooks"].is_object())
+    {
+        for (const auto &Item : InRoot["playbooks"].items())
+        {
+            if (Item.value().is_object())
+            {
+                FDocument PlaybookDoc;
+                if (!DeserializeDocument(Item.value(), PlaybookDoc, OutError))
+                {
+                    OutError = "Failed to parse playbook '" + Item.key() +
+                               "': " + OutError;
+                    return false;
+                }
+                OutBundle.mPlaybooks[Item.key()] = std::move(PlaybookDoc);
+            }
+        }
+    }
+
+    // ChangeLogs
+    if (InRoot.contains("changelogs") && InRoot["changelogs"].is_object())
+    {
+        for (const auto &Item : InRoot["changelogs"].items())
+        {
+            if (Item.value().is_array())
+            {
+                std::vector<FChangeLogEntry> Entries;
+                for (const auto &EntryJson : Item.value())
+                {
+                    if (EntryJson.is_object())
+                    {
+                        Entries.push_back(DeserializeChangeLogEntry(EntryJson));
+                    }
+                }
+                OutBundle.mChangeLogs[Item.key()] = std::move(Entries);
+            }
+        }
+    }
+
+    // Verifications
+    if (InRoot.contains("verifications") && InRoot["verifications"].is_object())
+    {
+        for (const auto &Item : InRoot["verifications"].items())
+        {
+            if (Item.value().is_array())
+            {
+                std::vector<FVerificationEntry> Entries;
+                for (const auto &EntryJson : Item.value())
+                {
+                    if (EntryJson.is_object())
+                    {
+                        Entries.push_back(
+                            DeserializeVerificationEntry(EntryJson));
+                    }
+                }
+                OutBundle.mVerifications[Item.key()] = std::move(Entries);
+            }
+        }
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Public API: Topic bundle
+// ---------------------------------------------------------------------------
+
+bool TryWriteTopicBundle(const FTopicBundle &InBundle, const fs::path &InPath,
+                         std::string &OutError)
+{
+    try
+    {
+        const JsonValue Root = SerializeTopicBundle(InBundle);
+        const std::string Content = Root.dump(2);
+
+        std::ofstream Stream(InPath, std::ios::out | std::ios::trunc);
+        if (!Stream.is_open())
+        {
+            OutError = "Failed to open file for writing: " + InPath.string();
+            return false;
+        }
+        Stream << Content << "\n";
+        Stream.close();
+        if (Stream.fail())
+        {
+            OutError = "Write failed: " + InPath.string();
+            return false;
+        }
+        return true;
+    }
+    catch (const std::exception &Ex)
+    {
+        OutError = std::string("Bundle write error: ") + Ex.what();
+        return false;
+    }
+}
+
+bool TryReadTopicBundle(const fs::path &InPath, FTopicBundle &OutBundle,
+                        std::string &OutError)
+{
+    try
+    {
+        std::ifstream Stream(InPath);
+        if (!Stream.is_open())
+        {
+            OutError = "Failed to open file: " + InPath.string();
+            return false;
+        }
+
+        std::ostringstream Buffer;
+        Buffer << Stream.rdbuf();
+        const std::string Content = Buffer.str();
+
+        if (Content.empty())
+        {
+            OutError = "File is empty: " + InPath.string();
+            return false;
+        }
+
+        const JsonValue Root = JsonValue::parse(Content);
+
+        if (!Root.is_object())
+        {
+            OutError = "Root is not a JSON object: " + InPath.string();
+            return false;
+        }
+
+        // Check schema to distinguish bundle from single doc
+        const std::string Schema = GetString(Root, "$schema");
+        if (Schema.find("plan-bundle") == std::string::npos)
+        {
+            OutError = "Not a plan-bundle file (schema: " + Schema +
+                       "): " + InPath.string();
+            return false;
+        }
+
+        return DeserializeTopicBundle(Root, OutBundle, OutError);
+    }
+    catch (const JsonValue::parse_error &Ex)
+    {
+        OutError = std::string("Bundle parse error: ") + Ex.what();
+        return false;
+    }
+    catch (const std::exception &Ex)
+    {
+        OutError = std::string("Bundle read error: ") + Ex.what();
+        return false;
+    }
+}
+
 } // namespace UniPlan

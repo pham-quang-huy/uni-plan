@@ -1,5 +1,8 @@
 #include "UniPlanRuntime.h"
+#include "UniPlanDocumentStore.h"
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJsonIO.h"
+#include "UniPlanTopicTypes.h"
 #ifdef UPLAN_WATCH
 #include "UniPlanWatchApp.h"
 #endif
@@ -2221,6 +2224,202 @@ int RunMain(const int InArgc, char *InArgv[])
                 return 0;
             }
             return RunSearchCommand(Args);
+        }
+
+        if (Command == "bundle")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            if (ContainsHelpFlag(Args))
+            {
+                std::cout << "Usage:\n"
+                          << "  uni-plan bundle --all --repo-root "
+                             "<path>\n"
+                          << "  uni-plan bundle --topic <key> "
+                             "--repo-root <path>\n"
+                          << "Merges multi-file .json into single "
+                             "<Topic>.Plan.json bundles in "
+                             "Docs/Plans/.\n";
+                return 0;
+            }
+
+            std::string Topic;
+            bool bAll = false;
+            BaseOptions BundleOpts;
+            std::vector<std::string> BundleArgs = Args;
+            ConsumeCommonOptions(BundleArgs, BundleOpts, true);
+            for (size_t Index = 0; Index < BundleArgs.size(); ++Index)
+            {
+                if (BundleArgs[Index] == "--topic" &&
+                    Index + 1 < BundleArgs.size())
+                    Topic = BundleArgs[++Index];
+                else if (BundleArgs[Index] == "--all")
+                    bAll = true;
+            }
+
+            const fs::path BundleRoot =
+                NormalizeRepoRootPath(BundleOpts.mRepoRoot);
+
+            // Build inventory from old multi-file format
+            const Inventory Inv =
+                BuildInventory(BundleRoot.string(), false, Config.mCacheDir,
+                               Config.mbCacheVerbose);
+
+            // Collect topics
+            std::set<std::string> TopicKeys;
+            if (bAll)
+            {
+                for (const auto &Plan : Inv.mPlans)
+                    TopicKeys.insert(Plan.mTopicKey);
+                for (const auto &Impl : Inv.mImplementations)
+                    TopicKeys.insert(Impl.mTopicKey);
+            }
+            else if (!Topic.empty())
+            {
+                TopicKeys.insert(ResolveTopicKeyFromInventory(Inv, Topic));
+            }
+            else
+            {
+                std::cerr << "bundle requires --all or "
+                             "--topic\n";
+                return 2;
+            }
+
+            // Ensure output directory
+            const fs::path OutDir = BundleRoot / "Docs" / "Plans";
+            fs::create_directories(OutDir);
+
+            int Bundled = 0;
+            int Failed = 0;
+
+            for (const std::string &Key : TopicKeys)
+            {
+                if (Key.empty())
+                    continue;
+
+                FTopicBundle Bundle;
+                Bundle.mTopicKey = Key;
+                Bundle.mSchemaVersion = 1;
+
+                // Load plan
+                const DocumentRecord *rpPlan =
+                    FindSingleRecordByTopic(Inv.mPlans, Key);
+                if (rpPlan)
+                {
+                    std::string Err;
+                    TryLoadDocument(BundleRoot, rpPlan->mPath, Bundle.mPlan,
+                                    Err);
+                    Bundle.mStatus = rpPlan->mStatus;
+                }
+
+                // Load implementation
+                const DocumentRecord *rpImpl =
+                    FindSingleRecordByTopic(Inv.mImplementations, Key);
+                if (rpImpl)
+                {
+                    std::string Err;
+                    TryLoadDocument(BundleRoot, rpImpl->mPath,
+                                    Bundle.mImplementation, Err);
+                }
+
+                // Load playbooks
+                for (const DocumentRecord &PB : Inv.mPlaybooks)
+                {
+                    if (PB.mTopicKey != Key)
+                        continue;
+                    FDocument PBDoc;
+                    std::string Err;
+                    if (TryLoadDocument(BundleRoot, PB.mPath, PBDoc, Err))
+                    {
+                        Bundle.mPlaybooks[PB.mPhaseKey] = std::move(PBDoc);
+                    }
+                }
+
+                // Load changelog/verification sidecars
+                for (const SidecarRecord &SC : Inv.mSidecars)
+                {
+                    if (SC.mTopicKey != Key)
+                        continue;
+
+                    FDocument SCDoc;
+                    std::string Err;
+                    if (!TryLoadDocument(BundleRoot, SC.mPath, SCDoc, Err))
+                        continue;
+
+                    // Extract entries from the sidecar
+                    std::string OwnerKey;
+                    if (SC.mOwnerKind == "Plan")
+                        OwnerKey = "plan";
+                    else if (SC.mOwnerKind == "Impl")
+                        OwnerKey = "implementation";
+                    else
+                        OwnerKey = SC.mPhaseKey;
+
+                    // Find entries table
+                    const auto EntIt = SCDoc.mSections.find("entries");
+                    if (EntIt == SCDoc.mSections.end() ||
+                        EntIt->second.mTables.empty())
+                        continue;
+
+                    const FStructuredTable &Table = EntIt->second.mTables[0];
+
+                    if (SC.mDocKind == "ChangeLog")
+                    {
+                        auto &Entries = Bundle.mChangeLogs[OwnerKey];
+                        for (const auto &Row : Table.mRows)
+                        {
+                            FChangeLogEntry Entry;
+                            if (Row.size() > 0)
+                                Entry.mDate = Row[0].mValue;
+                            if (Row.size() > 1)
+                                Entry.mChange = Row[1].mValue;
+                            if (Row.size() > 2)
+                                Entry.mFiles = Row[2].mValue;
+                            if (Row.size() > 3)
+                                Entry.mEvidence = Row[3].mValue;
+                            Entries.push_back(std::move(Entry));
+                        }
+                    }
+                    else
+                    {
+                        auto &Entries = Bundle.mVerifications[OwnerKey];
+                        for (const auto &Row : Table.mRows)
+                        {
+                            FVerificationEntry Entry;
+                            if (Row.size() > 0)
+                                Entry.mDate = Row[0].mValue;
+                            if (Row.size() > 1)
+                                Entry.mCheck = Row[1].mValue;
+                            if (Row.size() > 2)
+                                Entry.mResult = Row[2].mValue;
+                            if (Row.size() > 3)
+                                Entry.mDetail = Row[3].mValue;
+                            Entries.push_back(std::move(Entry));
+                        }
+                    }
+                }
+
+                // Write bundle
+                const fs::path OutPath = OutDir / (Key + ".Plan.json");
+                std::string WriteError;
+                if (TryWriteTopicBundle(Bundle, OutPath, WriteError))
+                {
+                    Bundled++;
+                }
+                else
+                {
+                    Failed++;
+                    std::cerr << "Failed to bundle " << Key << ": "
+                              << WriteError << "\n";
+                }
+            }
+
+            std::cout << "{\"schema\":\"uni-plan-bundle-v1\""
+                      << ",\"ok\":" << (Failed == 0 ? "true" : "false")
+                      << ",\"bundled\":" << Bundled << ",\"failed\":" << Failed
+                      << ",\"topic_count\":"
+                      << static_cast<int>(TopicKeys.size()) << "}\n";
+            return Failed > 0 ? 1 : 0;
         }
 
 #ifdef UPLAN_WATCH

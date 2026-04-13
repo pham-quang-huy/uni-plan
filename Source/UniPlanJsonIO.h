@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UniPlanDocumentTypes.h"
+#include "UniPlanTopicTypes.h"
 
 #include <filesystem>
 #include <string>
@@ -12,7 +13,6 @@ namespace UniPlan
 
 // ---------------------------------------------------------------------------
 // JSON document I/O — read/write FDocument to/from .json files.
-// Uses nlohmann/json internally but does not expose it in this header.
 // ---------------------------------------------------------------------------
 
 bool TryWriteDocumentJson(const FDocument &InDocument, const fs::path &InPath,
@@ -20,5 +20,15 @@ bool TryWriteDocumentJson(const FDocument &InDocument, const fs::path &InPath,
 
 bool TryReadDocumentJson(const fs::path &InPath, FDocument &OutDocument,
                          std::string &OutError);
+
+// ---------------------------------------------------------------------------
+// Topic bundle I/O — read/write FTopicBundle (plan-bundle/v1).
+// ---------------------------------------------------------------------------
+
+bool TryWriteTopicBundle(const FTopicBundle &InBundle, const fs::path &InPath,
+                         std::string &OutError);
+
+bool TryReadTopicBundle(const fs::path &InPath, FTopicBundle &OutBundle,
+                        std::string &OutError);
 
 } // namespace UniPlan
