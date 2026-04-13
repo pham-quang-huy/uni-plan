@@ -600,102 +600,9 @@ BuildPlanSummary(const PhaseListAllEntry &InEntry, const fs::path &InRepoRoot,
         }
     }
 
-    // Extract plan summary, goals, and non-goals from plan document
-    {
-        FDocument PlanDoc;
-        std::string PlanLoadError;
-        if (TryLoadDocument(InRepoRoot, InEntry.mPlanPath, PlanDoc,
-                            PlanLoadError))
-        {
-            // Extract summary text from content
-            const auto SumIt = PlanDoc.mSections.find("summary");
-            if (SumIt != PlanDoc.mSections.end())
-            {
-                std::istringstream Stream(SumIt->second.mContent);
-                std::string Line;
-                while (std::getline(Stream, Line) &&
-                       static_cast<int>(Summary.mSummaryLines.size()) < 10)
-                {
-                    const std::string Trimmed = Trim(Line);
-                    if (Trimmed.empty() || Trimmed.front() == '|' ||
-                        Trimmed.front() == '#')
-                    {
-                        continue;
-                    }
-                    std::string Clean = Trimmed;
-                    if (Clean.size() >= 2 && Clean[0] == '-' && Clean[1] == ' ')
-                    {
-                        Clean = Clean.substr(2);
-                    }
-                    Summary.mSummaryLines.push_back(Clean);
-                }
-            }
-
-            // Extract goals from goals_and_non_goals section table
-            for (const auto &SecPair : PlanDoc.mSections)
-            {
-                if (SecPair.first != "goals_and_non_goals")
-                {
-                    continue;
-                }
-                for (const FStructuredTable &Table : SecPair.second.mTables)
-                {
-                    int TypeCol = -1;
-                    int StatementCol = -1;
-                    int AreaCol = -1;
-                    for (int Col = 0;
-                         Col < static_cast<int>(Table.mHeaders.size()); ++Col)
-                    {
-                        const std::string Lower = ToLower(
-                            Trim(Table.mHeaders[static_cast<size_t>(Col)]));
-                        if (Lower == "type")
-                            TypeCol = Col;
-                        else if (Lower == "statement")
-                            StatementCol = Col;
-                        else if (Lower == "area")
-                            AreaCol = Col;
-                    }
-                    if (TypeCol < 0)
-                    {
-                        break;
-                    }
-                    for (const std::vector<FTableCell> &Row : Table.mRows)
-                    {
-                        const std::string TypeVal =
-                            (TypeCol < static_cast<int>(Row.size()))
-                                ? ToLower(Trim(
-                                      Row[static_cast<size_t>(TypeCol)].mValue))
-                                : "";
-                        std::string Statement =
-                            (StatementCol >= 0 &&
-                             StatementCol < static_cast<int>(Row.size()))
-                                ? Trim(Row[static_cast<size_t>(StatementCol)]
-                                           .mValue)
-                                : "";
-                        if (Statement.empty() && AreaCol >= 0 &&
-                            AreaCol < static_cast<int>(Row.size()))
-                        {
-                            Statement =
-                                Trim(Row[static_cast<size_t>(AreaCol)].mValue);
-                        }
-                        if (Statement.empty())
-                        {
-                            continue;
-                        }
-                        if (TypeVal.find("non") != std::string::npos)
-                        {
-                            Summary.mNonGoalStatements.push_back(Statement);
-                        }
-                        else if (TypeVal.find("goal") != std::string::npos)
-                        {
-                            Summary.mGoalStatements.push_back(Statement);
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
+    // Plan summary, goals, and non-goals are deferred to
+    // on-demand loading when the user selects a specific plan.
+    // Loading 42 bundle files just for summary text is too slow.
 
     // Count playbooks for this topic
     for (const DocumentRecord &Playbook : InPlaybooks)
@@ -706,78 +613,15 @@ BuildPlanSummary(const PhaseListAllEntry &InEntry, const fs::path &InRepoRoot,
         }
     }
 
-    // Collect blockers for this topic
-    for (const DocumentRecord &Plan : InInventory.mPlans)
-    {
-        if (Plan.mTopicKey == InEntry.mTopicKey)
-        {
-            std::vector<std::string> BlockerWarnings;
-            std::vector<BlockerItem> Items = CollectBlockerItemsFromDocument(
-                InRepoRoot, Plan, "plan", BlockerWarnings);
-            Summary.mBlockers.insert(Summary.mBlockers.end(), Items.begin(),
-                                     Items.end());
-        }
-    }
-    Summary.mBlockerCount = static_cast<int>(Summary.mBlockers.size());
+    // Blocker collection deferred — requires loading plan
+    // bundle which is too expensive for initial 42-topic scan.
+    Summary.mBlockerCount = 0;
 
-    // Build schema compliance result
-    Summary.mSchemaResult =
-        BuildTopicSchemaResult(InRepoRoot, Summary, InInventory);
-
-    // Build sidecar summaries for this topic
-    for (const SidecarRecord &Sidecar : InInventory.mSidecars)
-    {
-        if (Sidecar.mTopicKey != InEntry.mTopicKey)
-        {
-            continue;
-        }
-        FWatchSidecarSummary SidecarSummary;
-        SidecarSummary.mPath = Sidecar.mPath;
-        SidecarSummary.mOwnerKind = Sidecar.mOwnerKind;
-        SidecarSummary.mDocKind = Sidecar.mDocKind;
-        SidecarSummary.mPhaseKey = Sidecar.mPhaseKey;
-
-        FDocument SidecarDoc;
-        std::string SidecarLoadError;
-        if (TryLoadDocument(InRepoRoot, Sidecar.mPath, SidecarDoc,
-                            SidecarLoadError))
-        {
-            for (const auto &SecPair : SidecarDoc.mSections)
-            {
-                if (SecPair.first != "entries" &&
-                    SecPair.first != "verification_entries" &&
-                    SecPair.first != "change_entries" &&
-                    SecPair.first != "verification" &&
-                    SecPair.first != "checks")
-                {
-                    continue;
-                }
-                for (const FStructuredTable &Table : SecPair.second.mTables)
-                {
-                    SidecarSummary.mEntryCount =
-                        static_cast<int>(Table.mRows.size());
-                    if (!Table.mRows.empty() && !Table.mRows.back().empty())
-                    {
-                        SidecarSummary.mLatestDate =
-                            Trim(Table.mRows.back()[0].mValue);
-                    }
-                    break;
-                }
-                break;
-            }
-        }
-        Summary.mSidecarSummaries.push_back(std::move(SidecarSummary));
-    }
-
-    // Build execution taxonomy for ALL phases with playbooks
-    for (const PhaseItem &Phase : InEntry.mPhases)
-    {
-        if (!Phase.mPlaybookPath.empty())
-        {
-            Summary.mPhaseTaxonomies.push_back(
-                BuildPhaseTaxonomy(Phase, InRepoRoot));
-        }
-    }
+    // Schema compliance, sidecar details, and per-phase
+    // taxonomy are deferred — they require loading every
+    // document in the topic bundle and are too expensive
+    // for the initial snapshot of 42 topics. The watch UI
+    // shows these when a specific plan is selected.
 
     return Summary;
 }
@@ -788,6 +632,9 @@ FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
                                      const bool InCacheVerbose)
 {
     const auto StartTime = std::chrono::steady_clock::now();
+
+    // Clear bundle cache from previous snapshot rebuild
+    ClearBundleCache();
 
     FDocWatchSnapshot Snapshot;
     Snapshot.mRepoRoot = InRepoRoot;

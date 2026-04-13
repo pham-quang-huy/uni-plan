@@ -3,6 +3,7 @@
 #include "UniPlanHelpers.h"
 #include "UniPlanJsonIO.h"
 
+#include <map>
 #include <set>
 #include <string>
 
@@ -160,6 +161,15 @@ static bool UpdateDocumentInBundle(FTopicBundle &InOutBundle,
 // TryLoadDocument — fragment-aware bundle loading
 // ---------------------------------------------------------------------------
 
+// In-memory bundle cache to avoid re-parsing the same
+// large JSON file hundreds of times during a snapshot build.
+static std::map<std::string, FTopicBundle> sBundleCache;
+
+void ClearBundleCache()
+{
+    sBundleCache.clear();
+}
+
 bool TryLoadDocument(const fs::path &InRepoRoot,
                      const std::string &InRelativePath, FDocument &OutDocument,
                      std::string &OutError)
@@ -169,14 +179,21 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
 
     if (ParseBundlePath(InRelativePath, FilePath, Fragment))
     {
-        // Bundle path with #fragment
-        const fs::path AbsPath = InRepoRoot / FilePath;
-        FTopicBundle Bundle;
-        if (!TryReadTopicBundle(AbsPath, Bundle, OutError))
+        // Check cache first
+        const std::string CacheKey = InRepoRoot.string() + "/" + FilePath;
+        auto CacheIt = sBundleCache.find(CacheKey);
+        if (CacheIt == sBundleCache.end())
         {
-            return false;
+            // Parse and cache
+            const fs::path AbsPath = InRepoRoot / FilePath;
+            FTopicBundle Bundle;
+            if (!TryReadTopicBundle(AbsPath, Bundle, OutError))
+            {
+                return false;
+            }
+            CacheIt = sBundleCache.emplace(CacheKey, std::move(Bundle)).first;
         }
-        if (!ExtractDocumentFromBundle(Bundle, Fragment, OutDocument))
+        if (!ExtractDocumentFromBundle(CacheIt->second, Fragment, OutDocument))
         {
             OutError = "Fragment not found in bundle: " + Fragment;
             return false;

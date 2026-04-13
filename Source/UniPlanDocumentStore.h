@@ -37,4 +37,8 @@ FSectionContent ResolveSectionFromDocument(const FDocument &InDocument,
 FStructuredTable ResolveTableFromDocument(const FDocument &InDocument,
                                           int InTableID);
 
+// Clear the in-memory bundle cache. Call between snapshot
+// rebuilds to pick up file changes.
+void ClearBundleCache();
+
 } // namespace UniPlan

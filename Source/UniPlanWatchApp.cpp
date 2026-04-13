@@ -598,8 +598,19 @@ int DocWatchApp::Run()
                 mbForceRefresh = false;
 
                 // Full snapshot rebuild
-                FDocWatchSnapshot Fresh = BuildWatchSnapshot(
-                    mRepoRoot, mbUseCache, mConfig.mCacheDir, false);
+                FDocWatchSnapshot Fresh;
+                try
+                {
+                    Fresh = BuildWatchSnapshot(mRepoRoot, mbUseCache,
+                                               mConfig.mCacheDir, false);
+                }
+                catch (const std::exception &Ex)
+                {
+                    std::cerr << "[watch] snapshot error: " << Ex.what()
+                              << "\n";
+                    std::this_thread::sleep_for(std::chrono::seconds(3));
+                    continue;
+                }
 
                 // Initialize signature after first build
                 if (bFirstTick)
@@ -625,9 +636,14 @@ int DocWatchApp::Run()
             }
         });
 
-    // Event-driven UI loop — blocks until keyboard input or data Post
+    // Polling UI loop — RunOnce with sleep to process
+    // screen.Post callbacks between renders
     Loop loop(&screen, dashboard);
-    loop.Run();
+    while (!loop.HasQuitted())
+    {
+        loop.RunOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+    }
 
     mRunning.store(false, std::memory_order_relaxed);
     if (mDataThread.joinable())
