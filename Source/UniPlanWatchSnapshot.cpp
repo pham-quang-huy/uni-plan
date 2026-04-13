@@ -617,11 +617,17 @@ BuildPlanSummary(const PhaseListAllEntry &InEntry, const fs::path &InRepoRoot,
     // bundle which is too expensive for initial 42-topic scan.
     Summary.mBlockerCount = 0;
 
-    // Schema compliance, sidecar details, and per-phase
-    // taxonomy are deferred — they require loading every
-    // document in the topic bundle and are too expensive
-    // for the initial snapshot of 42 topics. The watch UI
-    // shows these when a specific plan is selected.
+    // Build execution taxonomy for phases with playbooks.
+    // Bundle cache makes this fast — each playbook load is a
+    // cache hit (bundle was already parsed during inventory).
+    for (const PhaseItem &Phase : InEntry.mPhases)
+    {
+        if (!Phase.mPlaybookPath.empty())
+        {
+            Summary.mPhaseTaxonomies.push_back(
+                BuildPhaseTaxonomy(Phase, InRepoRoot));
+        }
+    }
 
     return Summary;
 }
