@@ -2206,6 +2206,23 @@ int RunMain(const int InArgc, char *InArgv[])
             return RunTagCommand(Args);
         }
 
+        if (Command == "search")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            if (ContainsHelpFlag(Args))
+            {
+                std::cout << "Usage:\n"
+                          << "  uni-plan search --query <text> "
+                             "[--type <plan|playbook|impl>] "
+                             "[--status <filter>] "
+                             "[--section <id>] "
+                             "[--limit <n>]\n";
+                return 0;
+            }
+            return RunSearchCommand(Args);
+        }
+
         if (Command == "migrate")
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,

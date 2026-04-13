@@ -41,6 +41,7 @@ add_executable(uni-plan
     Source/UniPlanMutation.cpp
     Source/UniPlanCommandPlan.cpp
     Source/UniPlanCommandEvidence.cpp
+    Source/UniPlanCommandSearch.cpp
 )
 
 target_include_directories(uni-plan PRIVATE

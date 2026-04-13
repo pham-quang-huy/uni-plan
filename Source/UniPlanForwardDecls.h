@@ -686,6 +686,9 @@ int RunEvidenceCommand(const std::vector<std::string> &InArgs,
                        const bool InUseCache, const DocConfig &InConfig);
 int RunTagCommand(const std::vector<std::string> &InArgs);
 
+// From UniPlanCommandSearch.cpp
+int RunSearchCommand(const std::vector<std::string> &InArgs);
+
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>
 TryParseSectionSchemaFromFile(const fs::path &InSchemaPath);
