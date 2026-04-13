@@ -34,9 +34,13 @@ add_executable(uni-plan
     Source/UniPlanOutputHuman.cpp
     Source/UniPlanAnalysis.cpp
     Source/UniPlanOptionParsing.cpp
+    Source/UniPlanJsonIO.cpp
 )
 
-target_include_directories(uni-plan PRIVATE Source/)
+target_include_directories(uni-plan PRIVATE
+    Source/
+    ThirdParty/json/
+)
 
 # ---------------------------------------------------------------------------
 # Watch mode (conditional)
