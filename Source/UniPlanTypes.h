@@ -18,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.41.0";
+static constexpr const char *kCliVersion = "0.41.1";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -358,6 +358,7 @@ struct FChangelogAddOptions : BaseOptions
     std::string mScope;
     std::string mChange;
     std::string mType = "chore";
+    std::string mAffected;
 };
 
 struct FVerificationAddOptions : BaseOptions

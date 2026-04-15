@@ -857,9 +857,9 @@ ParseChangelogAddOptions(const std::vector<std::string> &InTokens)
             ParseRequiredTopic(Remaining, Index, Options.mTopic);
             continue;
         }
-        if (Token == "--scope")
+        if (Token == "--scope" || Token == "--phase")
         {
-            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            Options.mScope = ConsumeValuedOption(Remaining, Index, Token);
             continue;
         }
         if (Token == "--change")
@@ -870,6 +870,12 @@ ParseChangelogAddOptions(const std::vector<std::string> &InTokens)
         if (Token == "--type")
         {
             Options.mType = ConsumeValuedOption(Remaining, Index, "--type");
+            continue;
+        }
+        if (Token == "--affected")
+        {
+            Options.mAffected =
+                ConsumeValuedOption(Remaining, Index, "--affected");
             continue;
         }
         throw UsageError("Unknown option for changelog add: " + Token);
@@ -894,9 +900,9 @@ ParseVerificationAddOptions(const std::vector<std::string> &InTokens)
             ParseRequiredTopic(Remaining, Index, Options.mTopic);
             continue;
         }
-        if (Token == "--scope")
+        if (Token == "--scope" || Token == "--phase")
         {
-            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            Options.mScope = ConsumeValuedOption(Remaining, Index, Token);
             continue;
         }
         if (Token == "--check")

@@ -2064,6 +2064,8 @@ int RunTaskSetCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
+    AppendAutoChangelog(Bundle, Target, Target + " updated");
+
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
@@ -2097,6 +2099,7 @@ int RunChangelogAddCommand(const std::vector<std::string> &InArgs,
         Options.mScope.empty() ? -1 : std::atoi(Options.mScope.c_str());
     Entry.mDate = GetUtcNow().substr(0, 10);
     Entry.mChange = Options.mChange;
+    Entry.mAffected = Options.mAffected;
     Entry.mActor = ETestingActor::AI;
 
     EChangeType Type;

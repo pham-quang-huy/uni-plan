@@ -189,8 +189,8 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  uni-plan changelog --topic <topic> [--phase "
      "<N>]\n"
      "  uni-plan changelog add --topic <topic> --change "
-     "<text> [--scope <N>] [--type "
-     "<feat|fix|refactor|chore>] [--evidence <text>]\n\n",
+     "<text> [--phase <N>] [--type "
+     "<feat|fix|refactor|chore>] [--affected <text>]\n\n",
      "Query or append changelog entries.\n\n",
      "Required:\n"
      "  --topic <topic>         Topic key\n\n",
