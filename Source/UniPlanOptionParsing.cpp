@@ -578,6 +578,14 @@ ParseBundleTimelineOptions(const std::vector<std::string> &InTokens)
             Options.mSince = ConsumeValuedOption(Remaining, Index, "--since");
             continue;
         }
+        if (Token == "--phase")
+        {
+            const std::string Val =
+                ConsumeValuedOption(Remaining, Index, "--phase");
+            Options.mPhaseFilter = std::atoi(Val.c_str());
+            Options.mbHasPhaseFilter = true;
+            continue;
+        }
         throw UsageError("Unknown option for timeline: " + Token);
     }
     if (Options.mTopic.empty())

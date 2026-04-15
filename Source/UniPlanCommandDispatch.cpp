@@ -219,17 +219,19 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  uni-plan verification add --topic X --scope 2 "
      "--check 'build passes' --result pass\n"},
     {"timeline",
-     "Usage: uni-plan timeline --topic <topic> [--since "
-     "<yyyy-mm-dd>]\n\n",
+     "Usage: uni-plan timeline --topic <topic> [--phase "
+     "<N>] [--since <yyyy-mm-dd>]\n\n",
      "Chronological timeline of changelog + verification "
      "entries.\n\n",
      "Required:\n"
      "  --topic <topic>         Topic key\n\n",
+     "  --phase <N>             Filter by phase index\n"
      "  --since <date>          Only show entries after "
      "this date\n",
      kHumanTable,
      "Examples:\n"
      "  uni-plan timeline --topic MultiPlatforming\n"
+     "  uni-plan timeline --topic X --phase 6\n"
      "  uni-plan timeline --topic X --since 2026-04-01\n"},
     {"blockers", "Usage: uni-plan blockers [--topic <topic>]\n\n",
      "List phases with blocked status or non-trivial "

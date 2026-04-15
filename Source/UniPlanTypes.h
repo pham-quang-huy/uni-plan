@@ -18,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.41.1";
+static constexpr const char *kCliVersion = "0.42.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -299,6 +299,8 @@ struct FBundleTimelineOptions : BaseOptions
 {
     std::string mTopic;
     std::string mSince;
+    int mPhaseFilter = -2; // -2 = no filter
+    bool mbHasPhaseFilter = false;
 };
 
 struct FBundleBlockersOptions : BaseOptions

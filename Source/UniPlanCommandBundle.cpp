@@ -1163,7 +1163,7 @@ static int RunBundleTimelineJson(const fs::path &InRepoRoot,
     {
         std::string mDate;
         std::string mKind; // "changelog" or "verification"
-        std::string mScope;
+        int mPhase;        // phase index or -1 for topic-level
         std::string mText;
         std::string mType;
     };
@@ -1173,18 +1173,18 @@ static int RunBundleTimelineJson(const fs::path &InRepoRoot,
     {
         if (!InOptions.mSince.empty() && CL.mDate < InOptions.mSince)
             continue;
-        const std::string PhaseStr =
-            CL.mPhase < 0 ? "" : std::to_string(CL.mPhase);
+        if (InOptions.mbHasPhaseFilter && CL.mPhase != InOptions.mPhaseFilter)
+            continue;
         Entries.push_back(
-            {CL.mDate, "changelog", PhaseStr, CL.mChange, ToString(CL.mType)});
+            {CL.mDate, "changelog", CL.mPhase, CL.mChange, ToString(CL.mType)});
     }
     for (const FVerificationEntry &VE : Bundle.mVerifications)
     {
         if (!InOptions.mSince.empty() && VE.mDate < InOptions.mSince)
             continue;
-        const std::string VPhaseStr =
-            VE.mPhase < 0 ? "" : std::to_string(VE.mPhase);
-        Entries.push_back({VE.mDate, "verification", VPhaseStr, VE.mCheck, ""});
+        if (InOptions.mbHasPhaseFilter && VE.mPhase != InOptions.mPhaseFilter)
+            continue;
+        Entries.push_back({VE.mDate, "verification", VE.mPhase, VE.mCheck, ""});
     }
 
     // Sort by date descending (newest first)
@@ -1197,6 +1197,8 @@ static int RunBundleTimelineJson(const fs::path &InRepoRoot,
     EmitJsonField("topic", Bundle.mTopicKey);
     if (!InOptions.mSince.empty())
         EmitJsonField("since", InOptions.mSince);
+    if (InOptions.mbHasPhaseFilter)
+        EmitJsonFieldInt("phase_filter", InOptions.mPhaseFilter);
     EmitJsonFieldSizeT("count", Entries.size());
     std::cout << "\"entries\":[";
     for (size_t I = 0; I < Entries.size(); ++I)
@@ -1205,7 +1207,12 @@ static int RunBundleTimelineJson(const fs::path &InRepoRoot,
         std::cout << "{";
         EmitJsonField("date", Entries[I].mDate);
         EmitJsonField("kind", Entries[I].mKind);
-        EmitJsonField("scope", Entries[I].mScope);
+        if (Entries[I].mPhase < 0)
+            std::cout << "\"phase\":null,";
+        else
+            EmitJsonFieldInt("phase", Entries[I].mPhase);
+        EmitJsonField("phase_label",
+                      ResolvePhaseLabel(Entries[I].mPhase, Bundle.mPhases));
         EmitJsonFieldNullable("text", Entries[I].mText);
         EmitJsonFieldNullable("type", Entries[I].mType, false);
         std::cout << "}";
@@ -1235,7 +1242,7 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
     {
         std::string mDate;
         std::string mKind;
-        std::string mScope;
+        int mPhase; // phase index or -1 for topic-level
         std::string mText;
     };
 
@@ -1244,17 +1251,17 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
     {
         if (!InOptions.mSince.empty() && CL.mDate < InOptions.mSince)
             continue;
-        const std::string PhaseStr =
-            CL.mPhase < 0 ? "" : std::to_string(CL.mPhase);
-        Entries.push_back({CL.mDate, "changelog", PhaseStr, CL.mChange});
+        if (InOptions.mbHasPhaseFilter && CL.mPhase != InOptions.mPhaseFilter)
+            continue;
+        Entries.push_back({CL.mDate, "changelog", CL.mPhase, CL.mChange});
     }
     for (const FVerificationEntry &VE : Bundle.mVerifications)
     {
         if (!InOptions.mSince.empty() && VE.mDate < InOptions.mSince)
             continue;
-        const std::string VPhaseStr =
-            VE.mPhase < 0 ? "" : std::to_string(VE.mPhase);
-        Entries.push_back({VE.mDate, "verification", VPhaseStr, VE.mCheck});
+        if (InOptions.mbHasPhaseFilter && VE.mPhase != InOptions.mPhaseFilter)
+            continue;
+        Entries.push_back({VE.mDate, "verification", VE.mPhase, VE.mCheck});
     }
     std::sort(Entries.begin(), Entries.end(),
               [](const FTimelineEntry &A, const FTimelineEntry &B)
@@ -1265,14 +1272,16 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
               << " count=" << Entries.size() << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Date", "Kind", "Scope", "Text"};
+    Table.mHeaders = {"Date", "Kind", "Phase", "Text"};
     for (const FTimelineEntry &E : Entries)
     {
         std::string Text = E.mText;
         if (Text.size() > 60)
             Text = Text.substr(0, 57) + "...";
+        const std::string PhaseDisplay =
+            E.mPhase < 0 ? "(topic)" : std::to_string(E.mPhase);
         Table.AddRow(
-            {E.mDate, E.mKind, E.mScope, kColorDim + Text + kColorReset});
+            {E.mDate, E.mKind, PhaseDisplay, kColorDim + Text + kColorReset});
     }
     Table.Print();
     return 0;

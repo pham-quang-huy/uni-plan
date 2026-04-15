@@ -213,7 +213,7 @@ uni-plan phase list --topic <topic> [--status <filter>] [--json|--human]
 uni-plan phase get --topic <topic> --phase <N> [--brief|--execution|--reference] [--json|--human]
 uni-plan changelog --topic <topic> [--phase <N>] [--json|--human]
 uni-plan verification --topic <topic> [--phase <N>] [--json|--human]
-uni-plan timeline --topic <topic> [--since <yyyy-mm-dd>] [--json|--human]
+uni-plan timeline --topic <topic> [--phase <N>] [--since <yyyy-mm-dd>] [--json|--human]
 uni-plan blockers [--topic <topic>] [--json|--human]
 uni-plan validate [--topic <topic>] [--strict] [--json|--human]
 ```
