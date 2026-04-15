@@ -11,9 +11,10 @@ Use this skill to add a new validation check to the uni-plan CLI.
 ## Required Context
 
 Before adding a check, read:
-1. `Source/UniPlanValidation.cpp` — existing checks and patterns
-2. `Source/UniPlanTypes.h` — `kCliVersion` and validation-related types
-3. `Schemas/*.Schema.md` — if the check validates against a schema
+1. `Source/UniPlanValidation.cpp` — existing 18 evaluators and `ValidateAllBundles()`
+2. `Source/UniPlanTypes.h` — `kCliVersion` and `ValidateCheck` struct
+3. `Source/UniPlanTopicTypes.h` — `FTopicBundle`, `FPhaseRecord`, `FPhaseLifecycle`, `FPhaseDesignMaterial`
+4. `Source/UniPlanEnums.h` — `EValidationSeverity` (ErrorMajor, ErrorMinor, Warning)
 
 ## Workflow
 
@@ -23,72 +24,76 @@ Define the check with:
 
 | Field | Value |
 |-------|-------|
-| Check ID | Short snake_case identifier (e.g., `playbook_blank_sections`) |
+| Check ID | Short snake_case identifier (e.g., `phase_scope_empty`, `changelog_date_format`) |
+| Severity | `ErrorMajor` (bundle broken), `ErrorMinor` (field violation), or `Warning` (advisory) |
 | Description | Human-readable explanation of what it validates |
-| Severity | `critical` or `warning` |
-| Doc types affected | Which document types this check applies to |
 
-### Step 2: Add the Evaluate Function
+### Step 2: Add the Evaluator Function
 
-In `Source/UniPlanValidation.cpp`, add a new `Evaluate*` function following existing patterns:
+In `Source/UniPlanValidation.cpp`, add a new evaluator following existing patterns:
 
 ```cpp
-static void Evaluate<CheckName>(
-    const Inventory& InInventory,
-    const std::string& InRepoRoot,
-    std::vector<ValidateCheck>& OutChecks)
+static void Eval<CheckName>(const std::vector<FTopicBundle> &InBundles,
+                            std::vector<ValidateCheck> &OutChecks)
 {
-    ValidateCheck Check;
-    Check.mCheckID = "<check_id>";
-    Check.mDescription = "<description>";
-    // ... validation logic ...
-    Check.mbPassed = /* result */;
-    OutChecks.push_back(Check);
+    for (const FTopicBundle &B : InBundles)
+    {
+        // Validation logic — iterate phases, jobs, tasks as needed
+        // Use the Fail() helper to record failures:
+        Fail(OutChecks, "check_id", EValidationSeverity::ErrorMinor,
+             B.mTopicKey, "path.to.field", "detail message");
+    }
 }
 ```
 
-Key patterns from existing code:
-- Use `BuildSectionSchemaEntries()` for schema-driven checks
-- Use `TryReadFileLines()` from `UniPlanHelpers.h` for file reading
-- Use `SplitMarkdownTableRow()` for table parsing
-- Set `Check.mDetails` with specific failure information
+Key patterns from existing evaluators:
+- Access plan metadata: `B.mMetadata.mTitle`, `B.mMetadata.mSummary`
+- Access phase lifecycle: `Phase.mLifecycle.mStatus`, `Phase.mLifecycle.mDone`
+- Access phase design: `Phase.mDesign.mInvestigation`, `Phase.mDesign.mCodeEntityContract`
+- Access jobs/tasks: `Phase.mJobs[J].mTasks[T]`
+- Use `Fail()` helper for consistent error formatting
+- Use `IsValidISODate()` / `IsValidISOTimestamp()` for date validation
 
-### Step 3: Wire Into Runner
+### Step 3: Wire Into ValidateAllBundles
 
-Find the main validation runner function in `UniPlanValidation.cpp` and add the call:
+In `ValidateAllBundles()`, add the call in the appropriate severity section:
 
 ```cpp
-Evaluate<CheckName>(InInventory, InRepoRoot, OutChecks);
+// ErrorMajor
+Eval<CheckName>(InBundles, Checks);
+
+// ErrorMinor
+Eval<CheckName>(InBundles, Checks);
+
+// Warning
+Eval<CheckName>(InBundles, Checks);
 ```
 
 ### Step 4: Version Bump
 
-If this adds a new check (increasing the total check count):
-- Bump `kCliVersion` MINOR in `Source/UniPlanTypes.h`
-- Update the check count in `CLAUDE.md` if documented there
+Bump `kCliVersion` MINOR in `Source/UniPlanTypes.h` (new validation check = new feature).
 
 ### Step 5: Build and Verify
 
 ```bash
 ./build.sh
-uni-plan validate --repo <test-repo>
+cd ~/code/FourImmortalsEngine && uni-plan validate --human
 ```
 
 Verify:
 - New check appears in validation output
-- Check passes on conforming documents
-- Check fails (with helpful details) on non-conforming documents
+- Check fires correctly on real bundle data
 - Existing checks are not affected
 
 ## Naming Convention
 
-- Check IDs: `snake_case` — e.g., `plan_required_sections`, `playbook_heading_naming`
-- Evaluate functions: `Evaluate` + PascalCase — e.g., `EvaluatePlanRequiredSections`
-- Group by doc type prefix: `plan_*`, `playbook_*`, `impl_*`, `doc_*`
+- Check IDs: `snake_case` — e.g., `required_fields`, `phase_scope_empty`
+- Evaluator functions: `Eval` + PascalCase — e.g., `EvalRequiredFields`, `EvalPhaseScope`
+- Group by domain prefix: `required_*`, `phase_*`, `job_*`, `task_*`, `changelog_*`, `verification_*`
 
 ## Rules
 
-- One check per `Evaluate*` function — don't combine unrelated validations
-- Always include `mDetails` with actionable failure information
-- Use dynamic schema resolution (`BuildSectionSchemaEntries`) — never hardcode section lists
+- One check per evaluator function — don't combine unrelated validations
+- Always include detail message with actionable failure information
+- Use typed domain access (FTopicBundle, FPhaseRecord) — never parse markdown
 - Build-verify before considering the check complete

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "UniPlanEnums.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -16,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.39.0";
+static constexpr const char *kCliVersion = "0.41.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -49,6 +51,14 @@ static constexpr const char *kCacheClearSchema = "uni-plan-cache-clear-v1";
 static constexpr const char *kCacheConfigSchema = "uni-plan-cache-config-v1";
 static constexpr const char *kSectionContentSchema =
     "uni-plan-section-content-v1";
+
+// V4 bundle-native command schemas
+static constexpr const char *kTopicListSchema = "uni-plan-topic-list-v1";
+static constexpr const char *kTopicGetSchema = "uni-plan-topic-get-v1";
+static constexpr const char *kPhaseGetSchema = "uni-plan-phase-get-v1";
+static constexpr const char *kPhaseListSchemaV2 = "uni-plan-phase-list-v2";
+static constexpr const char *kChangelogSchemaV2 = "uni-plan-changelog-v2";
+static constexpr const char *kVerificationSchemaV2 = "uni-plan-verification-v2";
 
 // ---------------------------------------------------------------------------
 // ANSI color codes for --human mode
@@ -180,102 +190,9 @@ struct ListOptions : BaseOptions
     std::string mStatus = "all";
 };
 
-struct LintOptions : BaseOptions
-{
-    bool mbFailOnWarning = false;
-};
-
-struct InventoryOptions : BaseOptions
-{
-};
-
-struct OrphanCheckOptions : BaseOptions
-{
-};
-
-struct ArtifactsOptions : BaseOptions
-{
-    std::string mTopic;
-    std::string mKind = "all";
-};
-
-struct PhaseOptions : BaseOptions
-{
-    std::string mTopic;
-    std::string mStatus = "all";
-};
-
-struct EvidenceOptions : BaseOptions
-{
-    std::string mTopic;
-    std::string mDocClass;
-    std::string mPhaseKey;
-};
-
-struct SchemaOptions : BaseOptions
-{
-    std::string mType;
-};
-
-struct RulesOptions : BaseOptions
-{
-};
-
 struct ValidateOptions : BaseOptions
 {
     bool mbStrict = false;
-};
-
-struct SectionResolveOptions : BaseOptions
-{
-    std::string mDocPath;
-    std::string mSection;
-};
-
-struct SectionSchemaOptions : BaseOptions
-{
-    std::string mType = "doc";
-};
-
-struct SectionListOptions : BaseOptions
-{
-    std::string mDocPath;
-    bool mbCount = false;
-};
-
-struct SectionContentOptions : BaseOptions
-{
-    std::string mDocPath;
-    std::string mSection;
-    int mLineCharLimit = 0;
-};
-
-struct ExcerptOptions : BaseOptions
-{
-    std::string mDocPath;
-    std::string mSection;
-    int mContextLines = 2;
-};
-
-struct TableListOptions : BaseOptions
-{
-    std::string mDocPath;
-};
-
-struct TableGetOptions : BaseOptions
-{
-    std::string mDocPath;
-    int mTableId = 0;
-};
-
-struct GraphOptions : BaseOptions
-{
-    std::string mTopic;
-    int mDepth = 2;
-};
-
-struct DiagnoseDriftOptions : BaseOptions
-{
 };
 
 struct TimelineOptions : BaseOptions
@@ -338,6 +255,120 @@ static constexpr const char *kPhaseDetailSchema = "uni-plan-phase-detail-v1";
 static constexpr const char *kPhaseTransitionSchema =
     "uni-plan-phase-transition-v1";
 
+// V4 bundle-native option structs
+struct FTopicListOptions : BaseOptions
+{
+    std::string mStatus = "all";
+};
+
+struct FTopicGetOptions : BaseOptions
+{
+    std::string mTopic;
+};
+
+struct FPhaseListOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mStatus = "all";
+};
+
+struct FPhaseGetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    bool mbBrief = false;     // --brief: compact view for session resume
+    bool mbExecution = false; // --execution: jobs/tasks only
+    bool mbReference = false; // --reference: design material only
+};
+
+struct FBundleChangelogOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mScopeFilter; // "plan", "implementation", or index
+    bool mbHasScopeFilter = false;
+};
+
+struct FBundleVerificationOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mScopeFilter;
+    bool mbHasScopeFilter = false;
+};
+
+struct FBundleTimelineOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mSince;
+};
+
+struct FBundleBlockersOptions : BaseOptions
+{
+    std::string mTopic; // optional — empty means all topics
+};
+
+struct FBundleValidateOptions : BaseOptions
+{
+    std::string mTopic; // optional — empty means all topics
+    bool mbStrict = false;
+};
+
+// Mutation option structs
+static constexpr const char *kMutationSchema = "uni-plan-mutation-v1";
+
+struct FTopicSetOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mStatus;
+    std::string mNextActions;
+};
+
+struct FPhaseSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mStatus;
+    std::string mDone;
+    std::string mRemaining;
+    std::string mBlockers;
+    std::string mContext; // agent_context
+};
+
+struct FJobSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mJobIndex = -1;
+    std::string mStatus;
+};
+
+struct FTaskSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mJobIndex = -1;
+    int mTaskIndex = -1;
+    std::string mStatus;
+    std::string mEvidence;
+    std::string mNotes;
+};
+
+struct FChangelogAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mScope;
+    std::string mChange;
+    std::string mType = "chore";
+};
+
+struct FVerificationAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mScope;
+    std::string mCheck;
+    std::string mResult;
+    std::string mDetail;
+};
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
@@ -380,18 +411,6 @@ struct LintResult : FBaseResult
     int mWarningCount = 0;
     int mNamePatternWarningCount = 0;
     int mMissingH1WarningCount = 0;
-};
-
-struct InventoryItem
-{
-    std::string mPath;
-    int mLineCount = 0;
-    std::string mLastCommit;
-};
-
-struct InventoryResult : FBaseResult
-{
-    std::vector<InventoryItem> mItems;
 };
 
 struct OrphanCheckResult : FBaseResult
@@ -507,11 +526,12 @@ struct SchemaField
 
 struct ValidateCheck
 {
-    std::string mId;
+    std::string mID;
+    EValidationSeverity mSeverity = EValidationSeverity::Warning;
     bool mbOk = true;
-    bool mbCritical = false;
+    std::string mTopic; // which bundle (empty for aggregate checks)
+    std::string mPath;  // e.g. "phases[2].jobs[1].tasks[0]"
     std::string mDetail;
-    std::string mRuleId;
     std::vector<std::string> mDiagnostics;
 };
 
@@ -541,16 +561,6 @@ struct DriftItem
     std::string mTopicKey;
     std::string mPath;
     std::string mMessage;
-};
-
-struct TimelineItem
-{
-    std::string mDate;
-    std::string mDocClass;
-    std::string mPhaseKey;
-    std::string mSourcePath;
-    std::string mUpdate;
-    std::string mEvidence;
 };
 
 struct BlockerItem
@@ -760,13 +770,6 @@ struct SectionSchemaEntry
     std::string mSectionId;
     bool mbRequired = false;
     int mOrder = 0;
-};
-
-struct SectionCount
-{
-    std::string mHeading;
-    std::string mSectionId;
-    int mCount = 0;
 };
 
 struct ResolvedDocument

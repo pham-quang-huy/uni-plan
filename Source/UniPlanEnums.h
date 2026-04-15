@@ -169,6 +169,270 @@ inline EPairState PairStateFromString(const std::string &InValue)
 }
 
 // ---------------------------------------------------------------------------
+// EExecutionStatus — execution entity status (phase/lane/job/task).
+// Closed set: no Unknown, no Canceled (those are topic-level concerns).
+// ---------------------------------------------------------------------------
+
+enum class EExecutionStatus : uint8_t
+{
+    NotStarted,
+    InProgress,
+    Completed,
+    Blocked
+};
+
+inline const char *ToString(EExecutionStatus InValue)
+{
+    switch (InValue)
+    {
+    case EExecutionStatus::NotStarted:
+        return "not_started";
+    case EExecutionStatus::InProgress:
+        return "in_progress";
+    case EExecutionStatus::Completed:
+        return "completed";
+    case EExecutionStatus::Blocked:
+        return "blocked";
+    }
+    return "not_started";
+}
+
+inline bool ExecutionStatusFromString(const std::string &InValue,
+                                      EExecutionStatus &OutValue)
+{
+    if (InValue == "not_started")
+    {
+        OutValue = EExecutionStatus::NotStarted;
+        return true;
+    }
+    if (InValue == "in_progress")
+    {
+        OutValue = EExecutionStatus::InProgress;
+        return true;
+    }
+    if (InValue == "completed")
+    {
+        OutValue = EExecutionStatus::Completed;
+        return true;
+    }
+    if (InValue == "blocked")
+    {
+        OutValue = EExecutionStatus::Blocked;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// ETopicStatus — topic-level status (superset of execution status).
+// Includes Canceled for topics that are abandoned.
+// ---------------------------------------------------------------------------
+
+enum class ETopicStatus : uint8_t
+{
+    NotStarted,
+    InProgress,
+    Completed,
+    Blocked,
+    Canceled
+};
+
+inline const char *ToString(ETopicStatus InValue)
+{
+    switch (InValue)
+    {
+    case ETopicStatus::NotStarted:
+        return "not_started";
+    case ETopicStatus::InProgress:
+        return "in_progress";
+    case ETopicStatus::Completed:
+        return "completed";
+    case ETopicStatus::Blocked:
+        return "blocked";
+    case ETopicStatus::Canceled:
+        return "canceled";
+    }
+    return "not_started";
+}
+
+inline bool TopicStatusFromString(const std::string &InValue,
+                                  ETopicStatus &OutValue)
+{
+    if (InValue == "not_started")
+    {
+        OutValue = ETopicStatus::NotStarted;
+        return true;
+    }
+    if (InValue == "in_progress")
+    {
+        OutValue = ETopicStatus::InProgress;
+        return true;
+    }
+    if (InValue == "completed")
+    {
+        OutValue = ETopicStatus::Completed;
+        return true;
+    }
+    if (InValue == "blocked")
+    {
+        OutValue = ETopicStatus::Blocked;
+        return true;
+    }
+    if (InValue == "canceled")
+    {
+        OutValue = ETopicStatus::Canceled;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// EFileAction — file manifest action type.
+// ---------------------------------------------------------------------------
+
+enum class EFileAction : uint8_t
+{
+    Create,
+    Modify,
+    Delete
+};
+
+inline const char *ToString(EFileAction InValue)
+{
+    switch (InValue)
+    {
+    case EFileAction::Create:
+        return "create";
+    case EFileAction::Modify:
+        return "modify";
+    case EFileAction::Delete:
+        return "delete";
+    }
+    return "create";
+}
+
+inline bool FileActionFromString(const std::string &InValue,
+                                 EFileAction &OutValue)
+{
+    if (InValue == "create")
+    {
+        OutValue = EFileAction::Create;
+        return true;
+    }
+    if (InValue == "modify")
+    {
+        OutValue = EFileAction::Modify;
+        return true;
+    }
+    if (InValue == "delete")
+    {
+        OutValue = EFileAction::Delete;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// ETestingActor — who performs a testing step.
+// ---------------------------------------------------------------------------
+
+enum class ETestingActor : uint8_t
+{
+    Human,
+    AI,
+    Automated
+};
+
+inline const char *ToString(ETestingActor InValue)
+{
+    switch (InValue)
+    {
+    case ETestingActor::Human:
+        return "human";
+    case ETestingActor::AI:
+        return "ai";
+    case ETestingActor::Automated:
+        return "automated";
+    }
+    return "human";
+}
+
+inline bool TestingActorFromString(const std::string &InValue,
+                                   ETestingActor &OutValue)
+{
+    if (InValue == "human")
+    {
+        OutValue = ETestingActor::Human;
+        return true;
+    }
+    if (InValue == "ai")
+    {
+        OutValue = ETestingActor::AI;
+        return true;
+    }
+    if (InValue == "automated")
+    {
+        OutValue = ETestingActor::Automated;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// EChangeType — changelog entry classification.
+// ---------------------------------------------------------------------------
+
+enum class EChangeType : uint8_t
+{
+    Feat,
+    Fix,
+    Refactor,
+    Chore
+};
+
+inline const char *ToString(EChangeType InValue)
+{
+    switch (InValue)
+    {
+    case EChangeType::Feat:
+        return "feat";
+    case EChangeType::Fix:
+        return "fix";
+    case EChangeType::Refactor:
+        return "refactor";
+    case EChangeType::Chore:
+        return "chore";
+    }
+    return "chore";
+}
+
+inline bool ChangeTypeFromString(const std::string &InValue,
+                                 EChangeType &OutValue)
+{
+    if (InValue == "feat")
+    {
+        OutValue = EChangeType::Feat;
+        return true;
+    }
+    if (InValue == "fix")
+    {
+        OutValue = EChangeType::Fix;
+        return true;
+    }
+    if (InValue == "refactor")
+    {
+        OutValue = EChangeType::Refactor;
+        return true;
+    }
+    if (InValue == "chore")
+    {
+        OutValue = EChangeType::Chore;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
 // EDriftSeverity — severity levels for drift diagnosis items.
 // ---------------------------------------------------------------------------
 
@@ -304,6 +568,31 @@ inline const char *ToString(ETaxonomyLevel InValue)
         return "task";
     }
     return "unknown";
+}
+
+// ---------------------------------------------------------------------------
+// EValidationSeverity — validation check severity levels.
+// ---------------------------------------------------------------------------
+
+enum class EValidationSeverity : uint8_t
+{
+    ErrorMajor, // Bundle is broken — cannot be used by agents
+    ErrorMinor, // Field violation — data quality issue
+    Warning     // Advisory — not blocking but should be fixed
+};
+
+inline const char *ToString(EValidationSeverity InValue)
+{
+    switch (InValue)
+    {
+    case EValidationSeverity::ErrorMajor:
+        return "error_major";
+    case EValidationSeverity::ErrorMinor:
+        return "error_minor";
+    case EValidationSeverity::Warning:
+        return "warning";
+    }
+    return "warning";
 }
 
 } // namespace UniPlan

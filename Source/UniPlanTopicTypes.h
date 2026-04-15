@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UniPlanDocumentTypes.h"
+#include "UniPlanTaxonomyTypes.h"
 
 #include <map>
 #include <string>
@@ -10,29 +11,31 @@ namespace UniPlan
 {
 
 // ---------------------------------------------------------------------------
-// Topic bundle types — one file per topic containing all governance
-// documents (plan + implementation + playbooks + changelogs +
-// verifications).
+// Topic bundle types — one .Plan.json file per topic.
+// Schema: plan-v4
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// FChangeLogEntry — one entry in a changelog.
+// FChangeLogEntry — one changelog entry.
 // ---------------------------------------------------------------------------
 
 struct FChangeLogEntry
 {
+    int mPhase = -1; // phase index (0, 1, ...) or -1 for topic-level
     std::string mDate;
     std::string mChange;
-    std::string mFiles;
-    std::string mEvidence;
+    std::string mAffected; // entity refs (e.g. "phases[0].jobs[2]")
+    EChangeType mType = EChangeType::Chore;
+    ETestingActor mActor = ETestingActor::Human;
 };
 
 // ---------------------------------------------------------------------------
-// FVerificationEntry — one entry in a verification record.
+// FVerificationEntry — one verification entry.
 // ---------------------------------------------------------------------------
 
 struct FVerificationEntry
 {
+    int mPhase = -1; // phase index (0, 1, ...) or -1 for topic-level
     std::string mDate;
     std::string mCheck;
     std::string mResult;
@@ -40,25 +43,109 @@ struct FVerificationEntry
 };
 
 // ---------------------------------------------------------------------------
+// FTestingRecord — one testing step within a phase.
+// ---------------------------------------------------------------------------
+
+struct FTestingRecord
+{
+    std::string mSession;
+    ETestingActor mActor = ETestingActor::Human;
+    std::string mStep;
+    std::string mAction;
+    std::string mExpected;
+    std::string mEvidence;
+};
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// FPhaseLifecycle — execution status, timestamps, and tracking.
+// Changes when phase progress changes.
+// ---------------------------------------------------------------------------
+
+struct FPhaseLifecycle
+{
+    EExecutionStatus mStatus = EExecutionStatus::NotStarted;
+    std::string mDone;
+    std::string mRemaining;
+    std::string mBlockers;
+    std::string mStartedAt;
+    std::string mCompletedAt;
+    std::string mAgentContext;
+};
+
+// ---------------------------------------------------------------------------
+// FPhaseDesignMaterial — investigation, code snippets, constraints.
+// Changes when phase design/planning changes.
+// ---------------------------------------------------------------------------
+
+struct FPhaseDesignMaterial
+{
+    std::string mInvestigation;
+    std::string mCodeSnippets;
+    std::string mDependencies;
+    std::string mReadinessGate;
+    std::string mHandoff;
+    std::string mCodeEntityContract;
+    std::string mBestPractices;
+    std::string mValidationCommands;
+    std::string mMultiPlatforming;
+};
+
+// ---------------------------------------------------------------------------
+// FPhaseRecord — complete phase with execution taxonomy + tracking.
+// ---------------------------------------------------------------------------
+
+struct FPhaseRecord
+{
+    std::string mScope;
+    std::string mOutput;
+    FPhaseLifecycle mLifecycle;
+    FPhaseDesignMaterial mDesign;
+    std::vector<FLaneRecord> mLanes;
+    std::vector<FJobRecord> mJobs;
+    std::vector<FTestingRecord> mTesting;
+    std::vector<FFileManifestItem> mFileManifest;
+};
+
+// ---------------------------------------------------------------------------
+// FPlanMetadata — plan-level descriptive fields.
+// Grouped by single-responsibility: these change when the plan's
+// scope, goals, or constraints change.
+// ---------------------------------------------------------------------------
+
+struct FPlanMetadata
+{
+    std::string mTitle;
+    std::string mSummary;
+    std::string mGoals;
+    std::string mNonGoals;
+    std::string mRisks;
+    std::string mAcceptanceCriteria;
+    std::string mProblemStatement;
+    std::string mValidationCommands;
+    std::string mBaselineAudit;
+    std::string mExecutionStrategy;
+    std::string mLockedDecisions;
+    std::string mSourceReferences;
+    std::string mDependencies;
+};
+
+// ---------------------------------------------------------------------------
 // FTopicBundle — complete governance bundle for one topic.
 // Stored as a single <TopicKey>.Plan.json file.
-// Schema: "uni-plan://plan-bundle/v1"
 // ---------------------------------------------------------------------------
 
 struct FTopicBundle
 {
     std::string mTopicKey;
-    std::string mStatus;
-    int mSchemaVersion = 1;
+    ETopicStatus mStatus = ETopicStatus::NotStarted;
+    FPlanMetadata mMetadata;
 
-    // Core documents
-    FDocument mPlan;
-    FDocument mImplementation;
-    std::map<std::string, FDocument> mPlaybooks; // key = phase
+    std::vector<FPhaseRecord> mPhases;
+    std::string mNextActions;
 
-    // Evidence (key = "plan", "implementation", or phase key)
-    std::map<std::string, std::vector<FChangeLogEntry>> mChangeLogs;
-    std::map<std::string, std::vector<FVerificationEntry>> mVerifications;
+    std::vector<FChangeLogEntry> mChangeLogs;
+    std::vector<FVerificationEntry> mVerifications;
 };
 
 } // namespace UniPlan

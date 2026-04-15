@@ -135,13 +135,9 @@ int DocWatchApp::Run()
                 mSelectedPhaseIndex <
                     static_cast<int>(SelectedPlan.mPhases.size()))
             {
-                const std::string &PhaseKey =
-                    SelectedPlan
-                        .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
-                        .mPhaseKey;
                 for (const FPhaseTaxonomy &T : SelectedPlan.mPhaseTaxonomies)
                 {
-                    if (T.mPhaseKey == PhaseKey)
+                    if (T.mPhaseIndex == mSelectedPhaseIndex)
                     {
                         SelectedTaxonomy = T;
                         break;
@@ -385,14 +381,11 @@ int DocWatchApp::Run()
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
                 {
-                    const std::string &PhKey =
-                        KeySelectedPlan
-                            .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
-                            .mPhaseKey;
+
                     for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
-                        if (T.mPhaseKey == PhKey)
+                        if (T.mPhaseIndex == mSelectedPhaseIndex)
                         {
                             rpTax = &T;
                             break;
@@ -413,14 +406,11 @@ int DocWatchApp::Run()
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
                 {
-                    const std::string &PhKey =
-                        KeySelectedPlan
-                            .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
-                            .mPhaseKey;
+
                     for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
-                        if (T.mPhaseKey == PhKey)
+                        if (T.mPhaseIndex == mSelectedPhaseIndex)
                         {
                             rpTax = &T;
                             break;
@@ -442,14 +432,11 @@ int DocWatchApp::Run()
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
                 {
-                    const std::string &PhKey =
-                        KeySelectedPlan
-                            .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
-                            .mPhaseKey;
+
                     for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
-                        if (T.mPhaseKey == PhKey)
+                        if (T.mPhaseIndex == mSelectedPhaseIndex)
                         {
                             rpTax = &T;
                             break;
@@ -470,14 +457,11 @@ int DocWatchApp::Run()
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
                 {
-                    const std::string &PhKey =
-                        KeySelectedPlan
-                            .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
-                            .mPhaseKey;
+
                     for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
-                        if (T.mPhaseKey == PhKey)
+                        if (T.mPhaseIndex == mSelectedPhaseIndex)
                         {
                             rpTax = &T;
                             break;
@@ -500,14 +484,11 @@ int DocWatchApp::Run()
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
                 {
-                    const std::string &PhKey =
-                        KeySelectedPlan
-                            .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
-                            .mPhaseKey;
+
                     for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
-                        if (T.mPhaseKey == PhKey)
+                        if (T.mPhaseIndex == mSelectedPhaseIndex)
                         {
                             rpTax = &T;
                             break;
@@ -530,14 +511,11 @@ int DocWatchApp::Run()
                     mSelectedPhaseIndex <
                         static_cast<int>(KeySelectedPlan.mPhases.size()))
                 {
-                    const std::string &PhKey =
-                        KeySelectedPlan
-                            .mPhases[static_cast<size_t>(mSelectedPhaseIndex)]
-                            .mPhaseKey;
+
                     for (const FPhaseTaxonomy &T :
                          KeySelectedPlan.mPhaseTaxonomies)
                     {
-                        if (T.mPhaseKey == PhKey)
+                        if (T.mPhaseIndex == mSelectedPhaseIndex)
                         {
                             rpTax = &T;
                             break;

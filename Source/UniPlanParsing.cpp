@@ -593,123 +593,94 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
             {
                 HandledAsBundle = true;
 
-                // Create DocumentRecords from bundle
+                // Create DocumentRecords from V4 bundle fields
                 const std::string TopicKey = Bundle.mTopicKey;
+                const std::string BundleStatus = ToString(Bundle.mStatus);
 
-                // Derive plan status — try bundle level, then
-                // scan plan summary table for Status row
-                std::string DerivedStatus = Bundle.mStatus;
-                if (DerivedStatus.empty() || DerivedStatus == "unknown")
-                {
-                    DerivedStatus = ToString(Bundle.mPlan.mStatus);
-                }
-                if (DerivedStatus.empty() || DerivedStatus == "unknown")
-                {
-                    // Scan plan tables for Status field
-                    for (const auto &SP : Bundle.mPlan.mSections)
-                    {
-                        for (const FStructuredTable &T : SP.second.mTables)
-                        {
-                            if (T.mHeaders.size() < 2)
-                                continue;
-                            for (const auto &Row : T.mRows)
-                            {
-                                if (Row.size() >= 2 &&
-                                    ToLower(Trim(Row[0].mValue)) == "status")
-                                {
-                                    DerivedStatus =
-                                        NormalizeStatusValue(Row[1].mValue);
-                                    break;
-                                }
-                            }
-                            if (DerivedStatus != "unknown")
-                                break;
-                        }
-                        if (DerivedStatus != "unknown")
-                            break;
-                    }
-                }
-
-                // Plan record
+                // Plan record — status from bundle root
                 {
                     DocumentRecord PlanRecord;
                     PlanRecord.mKind = EDocumentKind::Plan;
                     PlanRecord.mTopicKey = TopicKey;
                     PlanRecord.mPath = Relative + "#plan";
-                    PlanRecord.mStatus = DerivedStatus;
-                    PlanRecord.mStatusRaw = DerivedStatus;
+                    PlanRecord.mStatus = BundleStatus;
+                    PlanRecord.mStatusRaw = BundleStatus;
                     Result.mPlans.push_back(std::move(PlanRecord));
                 }
 
-                // Implementation record
+                // Implementation record — status resolved
+                // from phase statuses
                 {
                     DocumentRecord ImplRecord;
                     ImplRecord.mKind = EDocumentKind::Implementation;
                     ImplRecord.mTopicKey = TopicKey;
                     ImplRecord.mPath = Relative + "#implementation";
-                    ImplRecord.mStatus =
-                        ToString(Bundle.mImplementation.mStatus);
-                    ImplRecord.mStatusRaw = Bundle.mImplementation.mStatusRaw;
+                    ImplRecord.mStatus = BundleStatus;
+                    ImplRecord.mStatusRaw = BundleStatus;
                     Result.mImplementations.push_back(std::move(ImplRecord));
                 }
 
-                // Playbook records
-                for (const auto &PBPair : Bundle.mPlaybooks)
+                // Playbook records — one per phase
+                for (size_t PI = 0; PI < Bundle.mPhases.size(); ++PI)
                 {
+                    const FPhaseRecord &Phase = Bundle.mPhases[PI];
+                    const std::string PhaseKey = std::to_string(PI);
                     DocumentRecord PBRecord;
                     PBRecord.mKind = EDocumentKind::Playbook;
                     PBRecord.mTopicKey = TopicKey;
-                    PBRecord.mPhaseKey = PBPair.first;
-                    PBRecord.mPath = Relative + "#playbook:" + PBPair.first;
-                    PBRecord.mStatus = ToString(PBPair.second.mStatus);
-                    PBRecord.mStatusRaw = PBPair.second.mStatusRaw;
+                    PBRecord.mPhaseKey = PhaseKey;
+                    PBRecord.mPath = Relative + "#playbook:" + PhaseKey;
+                    PBRecord.mStatus = std::string(ToString(Phase.mLifecycle.mStatus));
+                    PBRecord.mStatusRaw = PBRecord.mStatus;
                     Result.mPlaybooks.push_back(std::move(PBRecord));
                 }
 
-                // Sidecar records for changelogs
-                for (const auto &CLPair : Bundle.mChangeLogs)
+                // Sidecar records for changelogs (unique scopes)
                 {
-                    UniPlan::SidecarRecord SCRecord;
-                    SCRecord.mTopicKey = TopicKey;
-                    SCRecord.mDocKind = "ChangeLog";
-                    if (CLPair.first == "plan")
+                    std::set<int> SeenCLPhases;
+                    for (const FChangeLogEntry &CL : Bundle.mChangeLogs)
                     {
-                        SCRecord.mOwnerKind = "Plan";
+                        if (!SeenCLPhases.insert(CL.mPhase).second)
+                            continue;
+                        const std::string PhaseStr =
+                            CL.mPhase < 0 ? "" : std::to_string(CL.mPhase);
+                        UniPlan::SidecarRecord SCRecord;
+                        SCRecord.mTopicKey = TopicKey;
+                        SCRecord.mDocKind = "ChangeLog";
+                        if (CL.mPhase < 0)
+                            SCRecord.mOwnerKind = "Plan";
+                        else
+                        {
+                            SCRecord.mOwnerKind = "Playbook";
+                            SCRecord.mPhaseKey = PhaseStr;
+                        }
+                        SCRecord.mPath = Relative + "#changelog:" + PhaseStr;
+                        Result.mSidecars.push_back(std::move(SCRecord));
                     }
-                    else if (CLPair.first == "implementation")
-                    {
-                        SCRecord.mOwnerKind = "Impl";
-                    }
-                    else
-                    {
-                        SCRecord.mOwnerKind = "Playbook";
-                        SCRecord.mPhaseKey = CLPair.first;
-                    }
-                    SCRecord.mPath = Relative + "#changelog:" + CLPair.first;
-                    Result.mSidecars.push_back(std::move(SCRecord));
                 }
 
-                // Sidecar records for verifications
-                for (const auto &VPair : Bundle.mVerifications)
+                // Sidecar records for verifications (unique scopes)
                 {
-                    UniPlan::SidecarRecord SCRecord;
-                    SCRecord.mTopicKey = TopicKey;
-                    SCRecord.mDocKind = "Verification";
-                    if (VPair.first == "plan")
+                    std::set<int> SeenVPhases;
+                    for (const FVerificationEntry &VE : Bundle.mVerifications)
                     {
-                        SCRecord.mOwnerKind = "Plan";
+                        if (!SeenVPhases.insert(VE.mPhase).second)
+                            continue;
+                        const std::string PhaseStr =
+                            VE.mPhase < 0 ? "" : std::to_string(VE.mPhase);
+                        UniPlan::SidecarRecord SCRecord;
+                        SCRecord.mTopicKey = TopicKey;
+                        SCRecord.mDocKind = "Verification";
+                        if (VE.mPhase < 0)
+                            SCRecord.mOwnerKind = "Plan";
+                        else
+                        {
+                            SCRecord.mOwnerKind = "Playbook";
+                            SCRecord.mPhaseKey = PhaseStr;
+                        }
+                        SCRecord.mPath = Relative + "#verification:" + PhaseStr;
+                        Result.mSidecars.push_back(std::move(SCRecord));
                     }
-                    else if (VPair.first == "implementation")
-                    {
-                        SCRecord.mOwnerKind = "Impl";
-                    }
-                    else
-                    {
-                        SCRecord.mOwnerKind = "Playbook";
-                        SCRecord.mPhaseKey = VPair.first;
-                    }
-                    SCRecord.mPath = Relative + "#verification:" + VPair.first;
-                    Result.mSidecars.push_back(std::move(SCRecord));
                 }
 
                 AdvanceIterator();
@@ -724,17 +695,7 @@ Inventory BuildInventoryFresh(const std::string &InRepoRoot)
             DocumentRecord CoreRecord;
             if (TryClassifyCoreDocument(Relative, Filename, CoreRecord))
             {
-                FDocument JsonDoc;
-                std::string JsonError;
-                if (TryReadDocumentJson(AbsolutePath, JsonDoc, JsonError))
-                {
-                    CoreRecord.mStatusRaw = JsonDoc.mStatusRaw;
-                    CoreRecord.mStatus = ToString(JsonDoc.mStatus);
-                }
-                else
-                {
-                    CoreRecord.mStatus = "unknown";
-                }
+                CoreRecord.mStatus = "unknown";
 
                 switch (CoreRecord.mKind)
                 {

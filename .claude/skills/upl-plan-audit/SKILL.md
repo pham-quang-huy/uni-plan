@@ -1,6 +1,6 @@
 ---
 name: upl-plan-audit
-description: Audit a plan topic through the uni-plan CLI. Use this skill whenever auditing a topic's plan/playbook/implementation bundle, detecting governance drift or missing artifacts, checking phase readiness gates, or verifying a topic's health before starting a new phase. Also use when someone asks about plan status or document quality.
+description: Audit a plan topic through the uni-plan CLI. Use this skill whenever auditing a topic's .Plan.json bundle, detecting validation issues, checking phase readiness, or verifying a topic's health before starting a new phase. Also use when someone asks about plan status or document quality.
 implicit_invocation: true
 ---
 
@@ -13,29 +13,24 @@ Use this skill for CLI-first topic audits. uni-plan IS the audit tool — use it
 ### 1. Run CLI Audit Commands
 
 ```bash
-# Topic artifact bundle
-uni-plan artifacts --topic <topic>
+# Topic overview (status, phases, metadata)
+uni-plan topic get --topic <topic> --human
 
-# Plan phase table
-uni-plan phase --topic <topic>
+# Phase breakdown with status
+uni-plan phase list --topic <topic> --human
 
-# Repo-wide validation
-uni-plan validate
+# Specific phase detail (jobs, lanes, design material)
+uni-plan phase get --topic <topic> --phase <N> --human
 
-# Repo-wide drift detection
-uni-plan diagnose drift
+# V4 bundle validation (18 evaluators, 3 severity levels)
+uni-plan validate --topic <topic> --human
 
-# Repo blockers
-uni-plan blockers
+# Blockers across all topics
+uni-plan blockers --human
 
-# Lint all documents
-uni-plan lint
-
-# Section discovery for a specific doc
-uni-plan section list --doc <path>
-
-# Compare against schema
-uni-plan section schema --type <plan|playbook|implementation>
+# Evidence history
+uni-plan changelog --topic <topic> --human
+uni-plan verification --topic <topic> --human
 ```
 
 ### 2. Phase Governance Gates
@@ -44,18 +39,18 @@ Flag violations when a phase advances to `in_progress` without satisfying these:
 
 | Gate | Requirement |
 |------|-------------|
-| Playbook-first | Phase needs a dedicated `<Topic>.<Phase>.Playbook.md` before starting |
-| Schema compliance | All required sections present per schema |
-| Content depth | Playbook has substantive content, not just section stubs |
-| Testing procedures | Testable phases carry testing procedures in the playbook |
+| Design material | Phase has populated investigation, code entity contract, and testing fields |
+| Content depth | Phase design material has substantive content, not empty strings |
+| Testing fields | Testable phases have testing records with actor and step fields |
+| Validation clean | `uni-plan validate --topic <topic>` reports no ErrorMajor issues |
 
 ### 3. Report Findings
 
 Present structured findings in **table format**:
 
-| # | Severity | Artifact | Finding | Recommended Fix |
-|---|----------|----------|---------|----------------|
-| 1 | critical | TopicName.Plan.md | Missing `execution_strategy` section | Add section per Plan.Schema.md |
+| # | Severity | Topic | Path | Finding | Recommended Fix |
+|---|----------|-------|------|---------|----------------|
+| 1 | critical | TopicName | phases[0].scope | empty scope field | Populate phase scope |
 
 ## Finding Taxonomy
 
@@ -64,8 +59,8 @@ Every finding must carry:
 | Field | Content |
 |-------|---------|
 | severity | `critical`, `major`, or `minor` |
-| kind | Drift or governance category |
-| artifact | Owning document |
+| kind | Validation or governance category |
+| topic | Owning topic key |
 | evidence | Concrete observed proof |
 | recommended_fix | Actionable remediation |
 
@@ -73,15 +68,16 @@ Every finding must carry:
 
 ### Single Topic
 ```bash
-uni-plan artifacts --topic <topic>
-uni-plan phase --topic <topic>
+uni-plan topic get --topic <topic> --human
+uni-plan phase list --topic <topic> --human
+uni-plan validate --topic <topic> --human
 ```
 
 ### All Topics
 ```bash
-uni-plan list --type pair
-uni-plan validate
-uni-plan diagnose drift
+uni-plan topic list --human
+uni-plan validate --human
+uni-plan blockers --human
 ```
 
 ## Verdict

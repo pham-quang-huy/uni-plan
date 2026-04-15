@@ -2,6 +2,7 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanMutation.h"
+#include "UniPlanSchemaValidation.h"
 #include "UniPlanTaxonomyTypes.h"
 #include "UniPlanTypes.h"
 
@@ -84,11 +85,11 @@ static int RunPlanInfo(const PlanCommandOptions &InOptions,
     int PhaseBlocked = 0;
     for (const PhaseItem &Phase : Phases)
     {
-        if (Phase.mStatus == "completed" || Phase.mStatus == "closed")
+        if (Phase.mLifecycle.mStatus == "completed" || Phase.mLifecycle.mStatus == "closed")
             PhaseCompleted++;
-        else if (Phase.mStatus == "in_progress")
+        else if (Phase.mLifecycle.mStatus == "in_progress")
             PhaseInProgress++;
-        else if (Phase.mStatus == "blocked")
+        else if (Phase.mLifecycle.mStatus == "blocked")
             PhaseBlocked++;
         else
             PhaseNotStarted++;
@@ -118,7 +119,7 @@ static int RunPlanInfo(const PlanCommandOptions &InOptions,
             std::cout << ",";
         const PhaseItem &Phase = Phases[Index];
         std::cout << "{\"key\":" << JsonQuote(Phase.mPhaseKey)
-                  << ",\"status\":" << JsonQuote(Phase.mStatus)
+                  << ",\"status\":" << JsonQuote(Phase.mLifecycle.mStatus)
                   << ",\"playbook\":" << JsonNullOrQuote(Phase.mPlaybookPath)
                   << ",\"description\":" << JsonNullOrQuote(Phase.mDescription)
                   << "}";
@@ -301,10 +302,9 @@ static int RunPhaseDetail(const PhaseCommandOptions &InOptions,
                     for (const auto &Row : Table.mRows)
                     {
                         FLaneRecord Lane;
-                        if (Row.size() > 0)
-                            Lane.mLaneID = Row[0].mValue;
                         if (Row.size() > 1)
-                            Lane.mStatus = Row[1].mValue;
+                            Lane.mStatus =
+                                ParseExecutionStatusLenient(Row[1].mValue);
                         if (Row.size() > 2)
                             Lane.mScope = Row[2].mValue;
                         if (Row.size() > 3)
@@ -330,8 +330,8 @@ static int RunPhaseDetail(const PhaseCommandOptions &InOptions,
         if (Index > 0)
             std::cout << ",";
         const FLaneRecord &Lane = Lanes[Index];
-        std::cout << "{\"lane\":" << JsonQuote(Lane.mLaneID)
-                  << ",\"status\":" << JsonQuote(Lane.mStatus)
+        std::cout << "{\"lane\":" << JsonQuote("L" + std::to_string(Index))
+                  << ",\"status\":" << JsonQuote(ToString(Lane.mStatus))
                   << ",\"scope\":" << JsonQuote(Lane.mScope)
                   << ",\"exit_criteria\":" << JsonQuote(Lane.mExitCriteria)
                   << "}";

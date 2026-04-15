@@ -299,50 +299,24 @@ DerivePhaseStatusFromPlaybook(const fs::path &InRepoRoot,
         return "not_started";
     }
 
-    FDocument Doc;
+    FPhaseRecord Phase;
     std::string LoadError;
-    if (!TryLoadDocument(InRepoRoot, InPlaybookPath, Doc, LoadError))
+    if (!TryLoadPhaseRecord(InRepoRoot, InPlaybookPath, Phase, LoadError))
     {
         return "unknown";
     }
 
-    StatusCounters Counters;
-    const auto LanesIt = Doc.mSections.find("execution_lanes");
-    if (LanesIt != Doc.mSections.end())
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::NotStarted)
     {
-        for (const FStructuredTable &Table : LanesIt->second.mTables)
-        {
-            int StatusCol = -1;
-            int LaneCol = -1;
-            for (int Col = 0; Col < static_cast<int>(Table.mHeaders.size());
-                 ++Col)
-            {
-                const std::string Lower =
-                    ToLower(Trim(Table.mHeaders[static_cast<size_t>(Col)]));
-                if (Lower == "status")
-                {
-                    StatusCol = Col;
-                }
-                else if (Lower == "lane")
-                {
-                    LaneCol = Col;
-                }
-            }
-            if (StatusCol < 0 || LaneCol < 0)
-            {
-                continue;
-            }
-            for (const std::vector<FTableCell> &Row : Table.mRows)
-            {
-                if (StatusCol < static_cast<int>(Row.size()))
-                {
-                    AddStatusCandidate(
-                        Counters, Row[static_cast<size_t>(StatusCol)].mValue);
-                }
-            }
-        }
+        return ToString(Phase.mLifecycle.mStatus);
     }
 
+    // Fallback: derive from lane statuses
+    StatusCounters Counters;
+    for (const FLaneRecord &Lane : Phase.mLanes)
+    {
+        AddStatusCandidate(Counters, ToString(Lane.mStatus));
+    }
     return ResolveNormalizedStatus(Counters);
 }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "UniPlanEnums.h"
+
 #include <string>
 #include <vector>
 
@@ -8,81 +10,77 @@ namespace UniPlan
 
 // ---------------------------------------------------------------------------
 // Execution taxonomy types shared between CLI commands and watch mode.
-// These replace the former FWatch*Item types in UniPlanWatchSnapshot.h.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// FLaneRecord — one execution lane within a phase playbook.
-// Source: playbook execution_lanes table.
-// Replaces: FWatchLaneItem.
+// FLaneRecord — one execution lane within a phase.
 // ---------------------------------------------------------------------------
 
 struct FLaneRecord
 {
-    std::string mLaneID;
-    std::string mStatus;
-    std::string mScope;
-    std::string mExitCriteria;
-};
-
-// ---------------------------------------------------------------------------
-// FJobRecord — one job within a wave/lane in the job board.
-// Source: playbook wave_lane_job_board table.
-// Replaces: FWatchJobItem.
-// ---------------------------------------------------------------------------
-
-struct FJobRecord
-{
-    std::string mWaveID;
-    std::string mLaneID;
-    std::string mJobID;
-    std::string mJobName;
-    std::string mStatus;
+    EExecutionStatus mStatus = EExecutionStatus::NotStarted;
     std::string mScope;
     std::string mExitCriteria;
 };
 
 // ---------------------------------------------------------------------------
 // FTaskRecord — one checklist task within a job.
-// Source: playbook job_task_checklist table.
-// Replaces: FWatchTaskItem.
+// Defined before FJobRecord so it can be nested inside it.
 // ---------------------------------------------------------------------------
 
 struct FTaskRecord
 {
-    std::string mJobRef;
-    std::string mTaskID;
-    std::string mStatus;
+    EExecutionStatus mStatus = EExecutionStatus::NotStarted;
     std::string mDescription;
     std::string mEvidence;
+    std::string mNotes;
+    std::string mCompletedAt; // ISO 8601
+};
+
+// ---------------------------------------------------------------------------
+// FJobRecord — one job within a wave/lane in the job board.
+// Tasks are nested inside their parent job (no back-reference).
+// ---------------------------------------------------------------------------
+
+struct FJobRecord
+{
+    int mWave = 0;
+    int mLane = 0;
+    EExecutionStatus mStatus = EExecutionStatus::NotStarted;
+    std::string mScope;
+    std::string mOutput;
+    std::string mExitCriteria;
+    std::vector<FTaskRecord> mTasks;
+
+    // Agent execution lifecycle
+    std::string mStartedAt;
+    std::string mCompletedAt;
 };
 
 // ---------------------------------------------------------------------------
 // FFileManifestItem — one entry in the target file manifest.
-// Source: playbook target_file_manifest table.
-// Replaces: FWatchFileManifestItem.
 // ---------------------------------------------------------------------------
 
 struct FFileManifestItem
 {
     std::string mFilePath;
-    std::string mAction;
+    EFileAction mAction = EFileAction::Create;
     std::string mDescription;
 };
 
 // ---------------------------------------------------------------------------
-// FPhaseTaxonomy — complete execution taxonomy for one phase.
-// Aggregates lanes, jobs, tasks, and file manifest from a playbook.
-// Replaces: FWatchPhaseTaxonomy.
+// FPhaseTaxonomy — display-oriented taxonomy for watch mode panels.
+// Tasks are flat here for display convenience (flattened from
+// nested FJobRecord.mTasks).
 // ---------------------------------------------------------------------------
 
 struct FPhaseTaxonomy
 {
-    std::string mPhaseKey;
+    int mPhaseIndex = -1;
     std::string mPlaybookPath;
     std::vector<FLaneRecord> mLanes;
     std::vector<FJobRecord> mJobs;
-    std::vector<FTaskRecord> mTasks;
+    std::vector<FTaskRecord> mTasks; // flattened for display
     std::vector<FFileManifestItem> mFileManifest;
     int mWaveCount = 0;
     int mPlaybookLineCount = 0;

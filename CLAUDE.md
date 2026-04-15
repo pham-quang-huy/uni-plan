@@ -2,7 +2,7 @@
 
 ## project_overview
 
-uni-plan is a standalone C++17 CLI tool for plan governance — validating, linting, and monitoring markdown-based plan/playbook/implementation document bundles across repositories.
+uni-plan is a standalone C++17 CLI tool for plan governance — managing, validating, and monitoring `.Plan.json` topic bundles across repositories. Each topic is a single JSON file containing phases, changelogs, verifications, and plan metadata.
 
 - **Language**: C++17
 - **Build system**: CMake 3.20+ with Ninja generator
@@ -91,7 +91,7 @@ uni-plan/
 │   ├── UniPlanHelpers.h      # String/JSON/file utilities
 │   ├── UniPlanRuntime.cpp/h  # Runtime engine
 │   ├── UniPlanParsing.cpp    # Document parsing
-│   ├── UniPlanValidation.cpp # 28 validation checks
+│   ├── UniPlanValidation.cpp # 18 V4 bundle evaluators + lint
 │   ├── UniPlanCache.cpp      # Caching system
 │   ├── UniPlanAnalysis.cpp   # Analysis operations
 │   ├── UniPlanOptionParsing.cpp # CLI option parsing
@@ -168,60 +168,71 @@ Before committing any `Source/` changes, verify `kCliVersion` was bumped appropr
 
 ## documentation_rules
 
-### Document naming
+### V4 bundle model
+
+Each topic is a single `.Plan.json` file in `Docs/Plans/`. The bundle contains all plan metadata, phases (with lifecycle + design material), changelogs, and verifications. There are no separate implementation trackers, playbook files, or sidecar files.
+
+| Item | Location |
+|------|----------|
+| Topic bundle | `Docs/Plans/<TopicPascalCase>.Plan.json` |
+| Phases | Inline array in the bundle (`mPhases`) |
+| Changelogs | Inline array in the bundle (`mChangeLogs`) |
+| Verifications | Inline array in the bundle (`mVerifications`) |
+
+### Legacy .md naming (lint only)
+
+The `.md` naming patterns below apply to non-plan documentation (specs, ADRs, references). Plan/implementation/playbook topics are `.Plan.json` bundles.
 
 | Doc Type | Pattern | Placement |
 |----------|---------|-----------|
-| Plan | `<TopicPascalCase>.Plan.md` | `Docs/Plans/` |
-| Implementation | `<TopicPascalCase>.Impl.md` | `Docs/Implementation/` |
-| Playbook | `<TopicPascalCase>.<PhaseKey>.Playbook.md` | `Docs/Playbooks/` |
-| Plan ChangeLog | `<Topic>.Plan.ChangeLog.md` | `Docs/Plans/` |
-| Plan Verification | `<Topic>.Plan.Verification.md` | `Docs/Plans/` |
-| Impl ChangeLog | `<Topic>.Impl.ChangeLog.md` | `Docs/Implementation/` |
-| Impl Verification | `<Topic>.Impl.Verification.md` | `Docs/Implementation/` |
-| Playbook ChangeLog | `<Topic>.<Phase>.Playbook.ChangeLog.md` | `Docs/Playbooks/` |
-| Playbook Verification | `<Topic>.<Phase>.Playbook.Verification.md` | `Docs/Playbooks/` |
-
-### Pairing rules
-
-- Every plan must have a paired implementation tracker
-- Every active phase must have a dedicated playbook
-- Every plan/playbook/impl must have ChangeLog + Verification sidecars
+| Plan (legacy) | `<TopicPascalCase>.Plan.md` | `Docs/Plans/` |
+| Implementation (legacy) | `<TopicPascalCase>.Impl.md` | `Docs/Implementation/` |
+| Playbook (legacy) | `<TopicPascalCase>.<PhaseKey>.Playbook.md` | `Docs/Playbooks/` |
 
 ## schema_files
 
-The 10 canonical schema files in `Schemas/` define document structure contracts:
+The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 18 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
 
-| Schema | Purpose |
-|--------|---------|
-| `Doc.Schema.md` | Base document structure (H1 + section_menu) |
-| `Plan.Schema.md` | Plan required/optional sections and ordering |
-| `Playbook.Schema.md` | Playbook required/optional sections (most detailed) |
-| `Implementation.Schema.md` | Implementation tracker sections |
-| `PlanChangeLog.Schema.md` | Plan change log sidecar structure |
-| `PlanVerification.Schema.md` | Plan verification sidecar structure |
-| `PlaybookChangeLog.Schema.md` | Playbook change log sidecar structure |
-| `PlaybookVerification.Schema.md` | Playbook verification sidecar structure |
-| `ImplChangeLog.Schema.md` | Implementation change log sidecar structure |
-| `ImplVerification.Schema.md` | Implementation verification sidecar structure |
-
-Schemas are parsed at runtime by `BuildSectionSchemaEntries()` in `Source/UniPlanParsing.cpp`. Schema resolution order: repo-local → bundled (next to binary) → fallback.
+| Schema | Purpose (lint only) |
+|--------|---------------------|
+| `Plan.Schema.md` | Plan .md section ordering |
+| `Playbook.Schema.md` | Playbook .md section ordering |
+| `Implementation.Schema.md` | Implementation .md section ordering |
+| `*ChangeLog.Schema.md` (3) | ChangeLog .md sidecar structure |
+| `*Verification.Schema.md` (3) | Verification .md sidecar structure |
+| `Doc.Schema.md` | Base .md document structure |
 
 ## cli_commands
 
+### V4 query commands
+
 ```bash
-uni-plan list [--type plan|impl|playbook|pair] [--status <filter>]
-uni-plan phase [--topic <topic>]
-uni-plan lint
-uni-plan validate
-uni-plan diagnose drift
-uni-plan blockers
-uni-plan artifacts --topic <topic>
-uni-plan section list --doc <path>
-uni-plan section content --doc <path> --id <section>
-uni-plan section schema --type <plan|playbook|implementation>
-uni-plan schema [--type <doctype>]
-uni-plan inventory
-uni-plan orphan-check
+uni-plan topic list [--status <filter>] [--json|--human]
+uni-plan topic get --topic <topic> [--json|--human]
+uni-plan phase list --topic <topic> [--status <filter>] [--json|--human]
+uni-plan phase get --topic <topic> --phase <N> [--brief|--execution|--reference] [--json|--human]
+uni-plan changelog --topic <topic> [--phase <N>] [--json|--human]
+uni-plan verification --topic <topic> [--phase <N>] [--json|--human]
+uni-plan timeline --topic <topic> [--since <yyyy-mm-dd>] [--json|--human]
+uni-plan blockers [--topic <topic>] [--json|--human]
+uni-plan validate [--topic <topic>] [--strict] [--json|--human]
+```
+
+### V4 mutation commands
+
+```bash
+uni-plan topic set --topic <topic> [--status <status>] [--next-actions <text>]
+uni-plan phase set --topic <topic> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>]
+uni-plan job set --topic <topic> --phase <N> --job <N> --status <status>
+uni-plan task set --topic <topic> --phase <N> --job <N> --task <N> [--status <s>] [--evidence <t>] [--notes <t>]
+uni-plan changelog add --topic <topic> [--phase <N>] --change <text> [--type <feat|fix|refactor|chore>]
+uni-plan verification add --topic <topic> [--phase <N>] --check <text> [--result <text>] [--detail <text>]
+```
+
+### Utility commands
+
+```bash
+uni-plan cache info|clear|config [--dir <path>] [--json|--human]
 uni-plan watch [--repo <path>]
+uni-plan lint [--json|--human]  # legacy .md filename check only
 ```

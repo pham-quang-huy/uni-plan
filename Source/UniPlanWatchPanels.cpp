@@ -169,8 +169,9 @@ ValidationPanel::Render(const FWatchValidationSummary &InValidation) const
         text("\xe2\x9c\x97 " + std::to_string(InValidation.mFailedChecks) +
              " failed") |
             color(InValidation.mFailedChecks > 0 ? Color::Red : Color::Green),
-        text("  (" + std::to_string(InValidation.mCriticalFailures) +
-             " critical)") |
+        text("  (" + std::to_string(InValidation.mErrorMajorCount) +
+             " major, " + std::to_string(InValidation.mErrorMinorCount) +
+             " minor)") |
             dim,
     });
 
@@ -190,7 +191,7 @@ ValidationPanel::Render(const FWatchValidationSummary &InValidation) const
         for (const ValidateCheck &Check : InValidation.mFailedCheckDetails)
         {
             CheckData.push_back(
-                {text(Check.mId) | flex, text("FAIL") | color(Color::Red)});
+                {text(Check.mID) | flex, text("FAIL") | color(Color::Red)});
         }
         auto CheckTable = Table(std::move(CheckData));
         CheckTable.SelectAll().SeparatorVertical(EMPTY);
@@ -452,7 +453,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
 
         for (const FPhaseTaxonomy &Tax : InPlan.mPhaseTaxonomies)
         {
-            if (Tax.mPhaseKey == Phase.mPhaseKey)
+            if (Tax.mPhaseIndex == Index)
             {
                 PBLines = std::to_string(Tax.mPlaybookLineCount);
                 PBLinesInt = Tax.mPlaybookLineCount;
@@ -460,50 +461,32 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
                 int LD = 0, LA = 0, LT = 0;
                 for (const FLaneRecord &L : Tax.mLanes)
                 {
-                    if (L.mStatus == "completed" || L.mStatus == "closed")
-                    {
+                    if (L.mStatus == EExecutionStatus::Completed)
                         LD++;
-                    }
-                    else if (L.mStatus == "in_progress")
-                    {
+                    else if (L.mStatus == EExecutionStatus::InProgress)
                         LA++;
-                    }
                     else
-                    {
                         LT++;
-                    }
                 }
                 int JD = 0, JA = 0, JT = 0;
                 for (const FJobRecord &J : Tax.mJobs)
                 {
-                    if (J.mStatus == "completed" || J.mStatus == "closed")
-                    {
+                    if (J.mStatus == EExecutionStatus::Completed)
                         JD++;
-                    }
-                    else if (J.mStatus == "in_progress")
-                    {
+                    else if (J.mStatus == EExecutionStatus::InProgress)
                         JA++;
-                    }
                     else
-                    {
                         JT++;
-                    }
                 }
                 int TD = 0, TA = 0, TT = 0;
                 for (const FTaskRecord &T : Tax.mTasks)
                 {
-                    if (T.mStatus == "completed" || T.mStatus == "closed")
-                    {
+                    if (T.mStatus == EExecutionStatus::Completed)
                         TD++;
-                    }
-                    else if (T.mStatus == "in_progress")
-                    {
+                    else if (T.mStatus == EExecutionStatus::InProgress)
                         TA++;
-                    }
                     else
-                    {
                         TT++;
-                    }
                 }
 
                 TaxSummary = "";
@@ -774,7 +757,7 @@ Element ValidationFailPanel::Render(
             Detail = Check.mDiagnostics[0];
         }
         Data.push_back(
-            {text(Check.mId) | color(Color::Red), text(Detail) | dim | flex});
+            {text(Check.mID) | color(Color::Red), text(Detail) | dim | flex});
     }
 
     auto FailTable = Table(std::move(Data));
@@ -801,11 +784,9 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
     if (InSelectedPhaseIndex >= 0 &&
         InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
     {
-        const std::string &SelectedKey =
-            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
         for (const FPhaseTaxonomy &Tax : InPlan.mPhaseTaxonomies)
         {
-            if (Tax.mPhaseKey == SelectedKey)
+            if (Tax.mPhaseIndex == InSelectedPhaseIndex)
             {
                 rpTax = &Tax;
                 break;
@@ -838,7 +819,7 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
     for (int Index = 0; Index < static_cast<int>(Tax.mLanes.size()); ++Index)
     {
         const FLaneRecord &Lane = Tax.mLanes[static_cast<size_t>(Index)];
-        if (Lane.mStatus == "completed" || Lane.mStatus == "closed")
+        if (Lane.mStatus == EExecutionStatus::Completed)
         {
             LanesDone++;
         }
@@ -846,8 +827,8 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         const std::string Marker;
 
         Elements RowCells = PadGridRow({
-            text(Marker + Lane.mLaneID),
-            ColorStatus(Lane.mStatus) | size(WIDTH, EQUAL, 14),
+            text(Marker + "L" + std::to_string(Index)),
+            ColorStatus(ToString(Lane.mStatus)) | size(WIDTH, EQUAL, 14),
             text(Lane.mScope) | dim | flex,
             text(Lane.mExitCriteria) | dim | flex,
         });
@@ -861,59 +842,60 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         LaneGridRows.push_back(std::move(RowCells));
     }
 
-    auto LanesPanel = window(text(" [L]ANES: " + Tax.mPhaseKey + " (" +
-                                  std::to_string(Tax.mLanes.size()) + ") ") |
-                                 bold,
-                             gridbox(std::move(LaneGridRows)) | flex);
+    auto LanesPanel =
+        window(text(" [L]ANES: " + ("P" + std::to_string(Tax.mPhaseIndex)) +
+                    " (" + std::to_string(Tax.mLanes.size()) + ") ") |
+                   bold,
+               gridbox(std::move(LaneGridRows)) | flex);
 
     // --- JOB BOARD sub-panel (using ftxui::Table) ---
     // Collect unique waves for filtering
-    std::vector<std::string> UniqueWaves;
+    std::vector<int> UniqueWaves;
     for (const FJobRecord &Job : Tax.mJobs)
     {
         bool Found = false;
-        for (const std::string &W : UniqueWaves)
+        for (int W : UniqueWaves)
         {
-            if (W == Job.mWaveID)
+            if (W == Job.mWave)
             {
                 Found = true;
                 break;
             }
         }
-        if (!Found && !Job.mWaveID.empty())
+        if (!Found)
         {
-            UniqueWaves.push_back(Job.mWaveID);
+            UniqueWaves.push_back(Job.mWave);
         }
     }
 
-    std::string WaveFilter;
+    int WaveFilter = -1;
     if (InSelectedWaveIndex >= 0 &&
         InSelectedWaveIndex < static_cast<int>(UniqueWaves.size()))
     {
         WaveFilter = UniqueWaves[static_cast<size_t>(InSelectedWaveIndex)];
     }
-    std::string LaneFilter;
+    int LaneFilter = -1;
     if (InSelectedLaneIndex >= 0 &&
         InSelectedLaneIndex < static_cast<int>(Tax.mLanes.size()))
     {
-        LaneFilter =
-            Tax.mLanes[static_cast<size_t>(InSelectedLaneIndex)].mLaneID;
+        LaneFilter = InSelectedLaneIndex;
     }
 
     std::vector<std::vector<Element>> JobTableData;
     JobTableData.push_back({text("Wave") | bold, text("Lane") | bold,
-                            text("Job") | bold, text("Status") | bold,
+                            text("Status") | bold,
                             text("Scope") | bold | flex});
 
     int JobsDone = 0, JobsActive = 0, JobsTodo = 0;
     int VisibleJobCount = 0;
-    for (const FJobRecord &Job : Tax.mJobs)
+    for (size_t JI = 0; JI < Tax.mJobs.size(); ++JI)
     {
-        if (Job.mStatus == "completed" || Job.mStatus == "closed")
+        const FJobRecord &Job = Tax.mJobs[JI];
+        if (Job.mStatus == EExecutionStatus::Completed)
         {
             JobsDone++;
         }
-        else if (Job.mStatus == "in_progress")
+        else if (Job.mStatus == EExecutionStatus::InProgress)
         {
             JobsActive++;
         }
@@ -922,26 +904,19 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
             JobsTodo++;
         }
 
-        if (!WaveFilter.empty() && Job.mWaveID != WaveFilter)
+        if (WaveFilter >= 0 && Job.mWave != WaveFilter)
         {
             continue;
         }
-        if (!LaneFilter.empty() && Job.mLaneID != LaneFilter)
+        if (LaneFilter >= 0 && Job.mLane != LaneFilter)
         {
             continue;
-        }
-
-        std::string JobLabel = Job.mJobID;
-        if (!Job.mJobName.empty())
-        {
-            JobLabel += " " + Job.mJobName;
         }
 
         JobTableData.push_back({
-            text(Job.mWaveID),
-            text(Job.mLaneID),
-            text(JobLabel),
-            ColorStatus(Job.mStatus),
+            text("W" + std::to_string(Job.mWave)),
+            text("L" + std::to_string(Job.mLane)),
+            ColorStatus(ToString(Job.mStatus)),
             text(Job.mScope) | dim | flex,
         });
         VisibleJobCount++;
@@ -960,9 +935,12 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         JobsContent = JobTable.Render() | flex;
     }
 
-    std::string WaveTitle = WaveFilter.empty() ? "all" : WaveFilter;
-    std::string LaneTitle = LaneFilter.empty() ? "all" : LaneFilter;
-    auto JobsPanel = window(text(" [W]AVE/[L]ANE/JOB BOARD: " + Tax.mPhaseKey +
+    std::string WaveTitle =
+        WaveFilter < 0 ? "all" : ("W" + std::to_string(WaveFilter));
+    std::string LaneTitle =
+        LaneFilter < 0 ? "all" : ("L" + std::to_string(LaneFilter));
+    auto JobsPanel = window(text(" [W]AVE/[L]ANE/JOB BOARD: " +
+                                 ("P" + std::to_string(Tax.mPhaseIndex)) +
                                  " (W=" + WaveTitle + " L=" + LaneTitle + ", " +
                                  std::to_string(Tax.mJobs.size()) + " jobs) ") |
                                 bold,
@@ -976,36 +954,38 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
 
     int TasksDone = 0, TasksActive = 0, TasksTodo = 0;
     int VisibleTaskCount = 0;
-    for (const FTaskRecord &Task : Tax.mTasks)
+    for (size_t JI = 0; JI < Tax.mJobs.size(); ++JI)
     {
-        if (Task.mStatus == "completed" || Task.mStatus == "closed")
-        {
-            TasksDone++;
-        }
-        else if (Task.mStatus == "in_progress")
-        {
-            TasksActive++;
-        }
-        else
-        {
-            TasksTodo++;
-        }
-
-        if (!LaneFilter.empty() &&
-            Task.mJobRef.find("/" + LaneFilter + "/") == std::string::npos &&
-            Task.mJobRef.find(LaneFilter + "/") != 0)
+        const FJobRecord &Job = Tax.mJobs[JI];
+        if (LaneFilter >= 0 && Job.mLane != LaneFilter)
         {
             continue;
         }
+        for (size_t TI = 0; TI < Job.mTasks.size(); ++TI)
+        {
+            const FTaskRecord &Task = Job.mTasks[TI];
+            if (Task.mStatus == EExecutionStatus::Completed)
+            {
+                TasksDone++;
+            }
+            else if (Task.mStatus == EExecutionStatus::InProgress)
+            {
+                TasksActive++;
+            }
+            else
+            {
+                TasksTodo++;
+            }
 
-        TaskTableData.push_back({
-            text(Task.mJobRef),
-            text(Task.mTaskID),
-            ColorStatus(Task.mStatus),
-            text(Task.mDescription) | dim | flex,
-            text(Task.mEvidence) | dim | flex,
-        });
-        VisibleTaskCount++;
+            TaskTableData.push_back({
+                text("J" + std::to_string(JI)),
+                text("T" + std::to_string(TI)),
+                ColorStatus(ToString(Task.mStatus)),
+                text(Task.mDescription) | dim | flex,
+                text(Task.mEvidence) | dim | flex,
+            });
+            VisibleTaskCount++;
+        }
     }
 
     Element TasksContent;
@@ -1021,10 +1001,11 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         TasksContent = TaskTable.Render() | flex;
     }
 
-    auto TasksPanel = window(text(" TASKS: " + Tax.mPhaseKey + " (" +
-                                  std::to_string(Tax.mTasks.size()) + ") ") |
-                                 bold,
-                             TasksContent);
+    auto TasksPanel =
+        window(text(" TASKS: " + ("P" + std::to_string(Tax.mPhaseIndex)) +
+                    " (" + std::to_string(Tax.mTasks.size()) + ") ") |
+                   bold,
+               TasksContent);
 
     // --- Summary ---
     auto SummaryLine = hbox({
@@ -1422,8 +1403,11 @@ Element FileManifestPanel::Render(const FPhaseTaxonomy &InTaxonomy,
 {
     if (InTaxonomy.mFileManifest.empty())
     {
-        return window(text(" FILES: " + InTaxonomy.mPhaseKey + " (0) ") | bold,
-                      text("  (no file changes planned)") | dim);
+        return window(
+            text(" FILES: " + ("P" + std::to_string(InTaxonomy.mPhaseIndex)) +
+                 " (0) ") |
+                bold,
+            text("  (no file changes planned)") | dim);
     }
 
     static constexpr int kPageSize = 10;
@@ -1440,21 +1424,21 @@ Element FileManifestPanel::Render(const FPhaseTaxonomy &InTaxonomy,
         const FFileManifestItem &Item =
             InTaxonomy.mFileManifest[static_cast<size_t>(Index)];
         auto ActionColor = Color::White;
-        if (Item.mAction == "create")
+        if (Item.mAction == EFileAction::Create)
         {
             ActionColor = Color::Green;
         }
-        else if (Item.mAction == "modify")
+        else if (Item.mAction == EFileAction::Modify)
         {
             ActionColor = Color::Yellow;
         }
-        else if (Item.mAction == "remove")
+        else if (Item.mAction == EFileAction::Delete)
         {
             ActionColor = Color::Red;
         }
         TableData.push_back({
             text(Item.mFilePath) | flex,
-            text(Item.mAction) | color(ActionColor),
+            text(std::string(ToString(Item.mAction))) | color(ActionColor),
             text(Item.mDescription) | dim | flex,
         });
     }
@@ -1463,8 +1447,9 @@ Element FileManifestPanel::Render(const FPhaseTaxonomy &InTaxonomy,
     FileTable.SelectAll().SeparatorVertical(EMPTY);
     FileTable.SelectRow(0).SeparatorHorizontal(LIGHT);
 
-    std::string Title = " FILES: " + InTaxonomy.mPhaseKey + " (" +
-                        std::to_string(TotalFiles) + ")";
+    std::string Title =
+        " FILES: " + ("P" + std::to_string(InTaxonomy.mPhaseIndex)) + " (" +
+        std::to_string(TotalFiles) + ")";
     if (TotalFiles > kPageSize)
     {
         const int PageCount = (TotalFiles + kPageSize - 1) / kPageSize;

@@ -177,81 +177,6 @@ ListOptions ParseListOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
-PhaseOptions ParsePhaseOptions(const std::vector<std::string> &InTokens)
-{
-    PhaseOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--topic")
-        {
-            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
-            continue;
-        }
-        if (Token == "--status" || Token == "--state")
-        {
-            Options.mStatus =
-                ToLower(Trim(ConsumeValuedOption(Remaining, Index, Token)));
-            continue;
-        }
-        throw UsageError("Unknown option for phase: " + Token);
-    }
-
-    Options.mStatus = ValidateAndNormalizeStatusFilter(
-        Options.mStatus, "Supported values: all | not_started | in_progress | "
-                         "completed | closed | blocked | canceled | unknown "
-                         "(prefix with ! to exclude)");
-    return Options;
-}
-
-LintOptions ParseLintOptions(const std::vector<std::string> &InTokens)
-{
-    LintOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options, true);
-
-    for (const std::string &Token : Remaining)
-    {
-        if (Token == "--fail-on-warning" || Token == "--strict")
-        {
-            Options.mbFailOnWarning = true;
-            continue;
-        }
-        throw UsageError("Unknown option for lint: " + Token);
-    }
-    return Options;
-}
-
-InventoryOptions ParseInventoryOptions(const std::vector<std::string> &InTokens)
-{
-    InventoryOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options, true);
-
-    for (const std::string &Token : Remaining)
-    {
-        throw UsageError("Unknown option for inventory: " + Token);
-    }
-    return Options;
-}
-
-OrphanCheckOptions
-ParseOrphanCheckOptions(const std::vector<std::string> &InTokens)
-{
-    OrphanCheckOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options, true);
-
-    for (const std::string &Token : Remaining)
-    {
-        throw UsageError("Unknown option for orphan-check: " + Token);
-    }
-    return Options;
-}
-
 int ParsePositiveInteger(const std::string &InValue,
                          const std::string &InOptionName)
 {
@@ -302,135 +227,6 @@ int ParseNonNegativeInteger(const std::string &InValue,
     }
 }
 
-ArtifactsOptions ParseArtifactsOptions(const std::vector<std::string> &InTokens)
-{
-    ArtifactsOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--topic")
-        {
-            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
-            continue;
-        }
-        if (Token == "--type")
-        {
-            Options.mKind =
-                ToLower(ConsumeValuedOption(Remaining, Index, "--type"));
-            continue;
-        }
-        throw UsageError("Unknown option for artifacts: " + Token);
-    }
-
-    if (Trim(Options.mTopic).empty())
-    {
-        throw UsageError("Missing required option --topic");
-    }
-
-    static const std::set<std::string> AllowedKinds = {
-        "all", "implementation", "plan", "playbook", "sidecar"};
-    if (AllowedKinds.count(Options.mKind) == 0)
-    {
-        throw UsageError("Invalid value for --type: " + Options.mKind);
-    }
-    return Options;
-}
-
-EvidenceOptions ParseEvidenceOptions(const std::vector<std::string> &InTokens,
-                                     const std::string &InCommandName)
-{
-    EvidenceOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--topic")
-        {
-            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
-            continue;
-        }
-        if (Token == "--for")
-        {
-            Options.mDocClass =
-                ToLower(ConsumeValuedOption(Remaining, Index, "--for"));
-            continue;
-        }
-        if (Token == "--phase")
-        {
-            Options.mPhaseKey =
-                ConsumeValuedOption(Remaining, Index, "--phase");
-            continue;
-        }
-        throw UsageError("Unknown option for " + InCommandName + ": " + Token);
-    }
-
-    if (Trim(Options.mTopic).empty())
-    {
-        throw UsageError("Missing required option --topic");
-    }
-    if (Trim(Options.mDocClass).empty())
-    {
-        throw UsageError("Missing required option --for");
-    }
-
-    static const std::set<std::string> AllowedDocClasses = {
-        "plan", "implementation", "playbook"};
-    if (AllowedDocClasses.count(Options.mDocClass) == 0)
-    {
-        throw UsageError("Invalid value for --for: " + Options.mDocClass);
-    }
-    if (Options.mDocClass != "playbook" && !Options.mPhaseKey.empty())
-    {
-        throw UsageError("--phase is only valid when --for playbook");
-    }
-    return Options;
-}
-
-SchemaOptions ParseSchemaOptions(const std::vector<std::string> &InTokens)
-{
-    SchemaOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--type")
-        {
-            Options.mType =
-                ToLower(ConsumeValuedOption(Remaining, Index, "--type"));
-            continue;
-        }
-        throw UsageError("Unknown option for schema: " + Token);
-    }
-
-    if (!IsSupportedSchemaType(Options.mType))
-    {
-        throw UsageError("Invalid value for --type: " + Options.mType +
-                         ". Supported values: doc | plan | playbook | "
-                         "implementation | changelog | verification");
-    }
-    return Options;
-}
-
-RulesOptions ParseRulesOptions(const std::vector<std::string> &InTokens)
-{
-    RulesOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (const std::string &Token : Remaining)
-    {
-        throw UsageError("Unknown option for rules: " + Token);
-    }
-    return Options;
-}
-
 ValidateOptions ParseValidateOptions(const std::vector<std::string> &InTokens)
 {
     ValidateOptions Options;
@@ -445,291 +241,6 @@ ValidateOptions ParseValidateOptions(const std::vector<std::string> &InTokens)
             continue;
         }
         throw UsageError("Unknown option for validate: " + Token);
-    }
-    return Options;
-}
-
-SectionResolveOptions
-ParseSectionResolveOptions(const std::vector<std::string> &InTokens)
-{
-    SectionResolveOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--doc")
-        {
-            Options.mDocPath = ConsumeValuedOption(Remaining, Index, "--doc");
-            continue;
-        }
-        if (Token == "--section")
-        {
-            Options.mSection =
-                ConsumeValuedOption(Remaining, Index, "--section");
-            continue;
-        }
-        throw UsageError("Unknown option for section resolve: " + Token);
-    }
-
-    if (Trim(Options.mDocPath).empty())
-    {
-        throw UsageError("Missing required option --doc");
-    }
-    if (Trim(Options.mSection).empty())
-    {
-        throw UsageError("Missing required option --section");
-    }
-    return Options;
-}
-
-SectionSchemaOptions
-ParseSectionSchemaOptions(const std::vector<std::string> &InTokens)
-{
-    SectionSchemaOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--type")
-        {
-            Options.mType =
-                ToLower(ConsumeValuedOption(Remaining, Index, "--type"));
-            continue;
-        }
-        throw UsageError("Unknown option for section schema: " + Token);
-    }
-
-    if (!IsSupportedSchemaType(Options.mType))
-    {
-        throw UsageError("Invalid value for --type: " + Options.mType +
-                         ". Supported values: doc | plan | playbook | "
-                         "implementation | changelog | verification");
-    }
-    return Options;
-}
-
-SectionListOptions
-ParseSectionListOptions(const std::vector<std::string> &InTokens)
-{
-    SectionListOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--doc")
-        {
-            Options.mDocPath = ConsumeValuedOption(Remaining, Index, "--doc");
-            continue;
-        }
-        if (Token == "--count")
-        {
-            Options.mbCount = true;
-            continue;
-        }
-        throw UsageError("Unknown option for section list: " + Token);
-    }
-    return Options;
-}
-
-SectionContentOptions
-ParseSectionContentOptions(const std::vector<std::string> &InTokens)
-{
-    SectionContentOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--doc")
-        {
-            Options.mDocPath = ConsumeValuedOption(Remaining, Index, "--doc");
-            continue;
-        }
-        if (Token == "--id")
-        {
-            Options.mSection = ConsumeValuedOption(Remaining, Index, "--id");
-            continue;
-        }
-        if (Token == "--line-char-limit")
-        {
-            const std::string Value =
-                ConsumeValuedOption(Remaining, Index, "--line-char-limit");
-            try
-            {
-                Options.mLineCharLimit = std::stoi(Value);
-            }
-            catch (...)
-            {
-                throw UsageError("Invalid value for --line-char-limit: " +
-                                 Value);
-            }
-            if (Options.mLineCharLimit < 0)
-            {
-                throw UsageError("--line-char-limit must be non-negative");
-            }
-            continue;
-        }
-        throw UsageError("Unknown option for section content: " + Token);
-    }
-
-    if (Trim(Options.mDocPath).empty())
-    {
-        throw UsageError("Missing required option --doc");
-    }
-    if (Trim(Options.mSection).empty())
-    {
-        throw UsageError("Missing required option --id");
-    }
-    return Options;
-}
-
-ExcerptOptions ParseExcerptOptions(const std::vector<std::string> &InTokens)
-{
-    ExcerptOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--doc")
-        {
-            Options.mDocPath = ConsumeValuedOption(Remaining, Index, "--doc");
-            continue;
-        }
-        if (Token == "--section")
-        {
-            Options.mSection =
-                ConsumeValuedOption(Remaining, Index, "--section");
-            continue;
-        }
-        if (Token == "--context-lines")
-        {
-            Options.mContextLines = ParseNonNegativeInteger(
-                ConsumeValuedOption(Remaining, Index, "--context-lines"),
-                "--context-lines");
-            continue;
-        }
-        throw UsageError("Unknown option for excerpt: " + Token);
-    }
-
-    if (Trim(Options.mDocPath).empty())
-    {
-        throw UsageError("Missing required option --doc");
-    }
-    if (Trim(Options.mSection).empty())
-    {
-        throw UsageError("Missing required option --section");
-    }
-    return Options;
-}
-
-TableListOptions ParseTableListOptions(const std::vector<std::string> &InTokens)
-{
-    TableListOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--doc")
-        {
-            Options.mDocPath = ConsumeValuedOption(Remaining, Index, "--doc");
-            continue;
-        }
-        throw UsageError("Unknown option for table list: " + Token);
-    }
-
-    if (Trim(Options.mDocPath).empty())
-    {
-        throw UsageError("Missing required option --doc");
-    }
-    return Options;
-}
-
-TableGetOptions ParseTableGetOptions(const std::vector<std::string> &InTokens)
-{
-    TableGetOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--doc")
-        {
-            Options.mDocPath = ConsumeValuedOption(Remaining, Index, "--doc");
-            continue;
-        }
-        if (Token == "--table-id")
-        {
-            Options.mTableId = ParsePositiveInteger(
-                ConsumeValuedOption(Remaining, Index, "--table-id"),
-                "--table-id");
-            continue;
-        }
-        throw UsageError("Unknown option for table get: " + Token);
-    }
-
-    if (Trim(Options.mDocPath).empty())
-    {
-        throw UsageError("Missing required option --doc");
-    }
-    if (Options.mTableId <= 0)
-    {
-        throw UsageError("Missing required option --table-id");
-    }
-    return Options;
-}
-
-GraphOptions ParseGraphOptions(const std::vector<std::string> &InTokens)
-{
-    GraphOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--topic")
-        {
-            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
-            continue;
-        }
-        if (Token == "--depth")
-        {
-            Options.mDepth = ParseNonNegativeInteger(
-                ConsumeValuedOption(Remaining, Index, "--depth"), "--depth");
-            continue;
-        }
-        throw UsageError("Unknown option for graph: " + Token);
-    }
-
-    if (Trim(Options.mTopic).empty())
-    {
-        throw UsageError("Missing required option --topic");
-    }
-    return Options;
-}
-
-DiagnoseDriftOptions
-ParseDiagnoseDriftOptions(const std::vector<std::string> &InTokens)
-{
-    DiagnoseDriftOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (const std::string &Token : Remaining)
-    {
-        throw UsageError("Unknown option for diagnose drift: " + Token);
     }
     return Options;
 }
@@ -878,6 +389,537 @@ ParseCacheConfigOptions(const std::vector<std::string> &InTokens)
                          "--enabled, or --verbose");
     }
 
+    return Options;
+}
+
+// ---------------------------------------------------------------------------
+// V4 bundle-native option parsers
+// ---------------------------------------------------------------------------
+
+FTopicListOptions
+ParseTopicListOptions(const std::vector<std::string> &InTokens)
+{
+    FTopicListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        throw UsageError("Unknown option for topic list: " + Token);
+    }
+    return Options;
+}
+
+FTopicGetOptions ParseTopicGetOptions(const std::vector<std::string> &InTokens)
+{
+    FTopicGetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        throw UsageError("Unknown option for topic get: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("topic get requires --topic <topic>");
+    return Options;
+}
+
+FPhaseListOptions
+ParsePhaseListOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        throw UsageError("Unknown option for phase list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase list requires --topic <topic>");
+    return Options;
+}
+
+FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseGetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            const std::string Val =
+                ConsumeValuedOption(Remaining, Index, "--phase");
+            if (!Val.empty() &&
+                !std::isdigit(static_cast<unsigned char>(Val[0])))
+            {
+                throw UsageError("Phase must be an integer index (e.g. 6), "
+                                 "not a key (e.g. " +
+                                 Val + ")");
+            }
+            Options.mPhaseIndex = std::atoi(Val.c_str());
+            continue;
+        }
+        if (Token == "--brief")
+        {
+            Options.mbBrief = true;
+            continue;
+        }
+        if (Token == "--execution")
+        {
+            Options.mbExecution = true;
+            continue;
+        }
+        if (Token == "--reference")
+        {
+            Options.mbReference = true;
+            continue;
+        }
+        throw UsageError("Unknown option for phase get: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase get requires --topic <topic>");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("phase get requires --phase <index>");
+    return Options;
+}
+
+FBundleChangelogOptions
+ParseBundleChangelogOptions(const std::vector<std::string> &InTokens)
+{
+    FBundleChangelogOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--phase" || Token == "--scope")
+        {
+            Options.mScopeFilter = ConsumeValuedOption(Remaining, Index, Token);
+            Options.mbHasScopeFilter = true;
+            continue;
+        }
+        throw UsageError("Unknown option for changelog: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("changelog requires --topic <topic>");
+    return Options;
+}
+
+FBundleVerificationOptions
+ParseBundleVerificationOptions(const std::vector<std::string> &InTokens)
+{
+    FBundleVerificationOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--phase" || Token == "--scope")
+        {
+            Options.mScopeFilter = ConsumeValuedOption(Remaining, Index, Token);
+            Options.mbHasScopeFilter = true;
+            continue;
+        }
+        throw UsageError("Unknown option for verification: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("verification requires --topic <topic>");
+    return Options;
+}
+
+FBundleTimelineOptions
+ParseBundleTimelineOptions(const std::vector<std::string> &InTokens)
+{
+    FBundleTimelineOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--since")
+        {
+            Options.mSince = ConsumeValuedOption(Remaining, Index, "--since");
+            continue;
+        }
+        throw UsageError("Unknown option for timeline: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("timeline requires --topic <topic>");
+    return Options;
+}
+
+FBundleBlockersOptions
+ParseBundleBlockersOptions(const std::vector<std::string> &InTokens)
+{
+    FBundleBlockersOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        throw UsageError("Unknown option for blockers: " + Token);
+    }
+    return Options;
+}
+
+FBundleValidateOptions
+ParseBundleValidateOptions(const std::vector<std::string> &InTokens)
+{
+    FBundleValidateOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--strict")
+        {
+            Options.mbStrict = true;
+            continue;
+        }
+        throw UsageError("Unknown option for validate: " + Token);
+    }
+    return Options;
+}
+
+// ---------------------------------------------------------------------------
+// Mutation option parsers
+// ---------------------------------------------------------------------------
+
+static void ParseRequiredTopic(const std::vector<std::string> &InRemaining,
+                               size_t &InOutIndex, std::string &OutTopic)
+{
+    const std::string &Token = InRemaining[InOutIndex];
+    if (Token == "--topic")
+    {
+        OutTopic = ConsumeValuedOption(InRemaining, InOutIndex, "--topic");
+    }
+}
+
+static void ParseRequiredPhaseIndex(const std::vector<std::string> &InRemaining,
+                                    size_t &InOutIndex, int &OutIndex)
+{
+    const std::string Val =
+        ConsumeValuedOption(InRemaining, InOutIndex, "--phase");
+    if (!Val.empty() && !std::isdigit(static_cast<unsigned char>(Val[0])))
+    {
+        throw UsageError("Phase must be an integer index (e.g. 6), "
+                         "not a key (e.g. " +
+                         Val + ")");
+    }
+    OutIndex = std::atoi(Val.c_str());
+}
+
+static void ParseRequiredIntIndex(const std::vector<std::string> &InRemaining,
+                                  size_t &InOutIndex, const std::string &InFlag,
+                                  int &OutIndex)
+{
+    const std::string Val =
+        ConsumeValuedOption(InRemaining, InOutIndex, InFlag);
+    OutIndex = std::atoi(Val.c_str());
+}
+
+FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
+{
+    FTopicSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        if (Token == "--next-actions")
+        {
+            Options.mNextActions =
+                ConsumeValuedOption(Remaining, Index, "--next-actions");
+            continue;
+        }
+        throw UsageError("Unknown option for topic set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("topic set requires --topic <topic>");
+    return Options;
+}
+
+FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        if (Token == "--done")
+        {
+            Options.mDone = ConsumeValuedOption(Remaining, Index, "--done");
+            continue;
+        }
+        if (Token == "--remaining")
+        {
+            Options.mRemaining =
+                ConsumeValuedOption(Remaining, Index, "--remaining");
+            continue;
+        }
+        if (Token == "--blockers")
+        {
+            Options.mBlockers =
+                ConsumeValuedOption(Remaining, Index, "--blockers");
+            continue;
+        }
+        if (Token == "--context")
+        {
+            Options.mContext =
+                ConsumeValuedOption(Remaining, Index, "--context");
+            continue;
+        }
+        throw UsageError("Unknown option for phase set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase set requires --topic <topic>");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("phase set requires --phase <index>");
+    return Options;
+}
+
+FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens)
+{
+    FJobSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--job")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--job", Options.mJobIndex);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        throw UsageError("Unknown option for job set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("job set requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("job set requires --phase");
+    if (Options.mJobIndex < 0)
+        throw UsageError("job set requires --job");
+    if (Options.mStatus.empty())
+        throw UsageError("job set requires --status");
+    return Options;
+}
+
+FTaskSetOptions ParseTaskSetOptions(const std::vector<std::string> &InTokens)
+{
+    FTaskSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--job")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--job", Options.mJobIndex);
+            continue;
+        }
+        if (Token == "--task")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--task",
+                                  Options.mTaskIndex);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        if (Token == "--evidence")
+        {
+            Options.mEvidence =
+                ConsumeValuedOption(Remaining, Index, "--evidence");
+            continue;
+        }
+        if (Token == "--notes")
+        {
+            Options.mNotes = ConsumeValuedOption(Remaining, Index, "--notes");
+            continue;
+        }
+        throw UsageError("Unknown option for task set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("task set requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("task set requires --phase");
+    if (Options.mJobIndex < 0)
+        throw UsageError("task set requires --job");
+    if (Options.mTaskIndex < 0)
+        throw UsageError("task set requires --task");
+    return Options;
+}
+
+FChangelogAddOptions
+ParseChangelogAddOptions(const std::vector<std::string> &InTokens)
+{
+    FChangelogAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--scope")
+        {
+            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            continue;
+        }
+        if (Token == "--change")
+        {
+            Options.mChange = ConsumeValuedOption(Remaining, Index, "--change");
+            continue;
+        }
+        if (Token == "--type")
+        {
+            Options.mType = ConsumeValuedOption(Remaining, Index, "--type");
+            continue;
+        }
+        throw UsageError("Unknown option for changelog add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("changelog add requires --topic");
+    if (Options.mChange.empty())
+        throw UsageError("changelog add requires --change");
+    return Options;
+}
+
+FVerificationAddOptions
+ParseVerificationAddOptions(const std::vector<std::string> &InTokens)
+{
+    FVerificationAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--scope")
+        {
+            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            continue;
+        }
+        if (Token == "--check")
+        {
+            Options.mCheck = ConsumeValuedOption(Remaining, Index, "--check");
+            continue;
+        }
+        if (Token == "--result")
+        {
+            Options.mResult = ConsumeValuedOption(Remaining, Index, "--result");
+            continue;
+        }
+        if (Token == "--detail")
+        {
+            Options.mDetail = ConsumeValuedOption(Remaining, Index, "--detail");
+            continue;
+        }
+        throw UsageError("Unknown option for verification add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("verification add requires --topic");
+    if (Options.mCheck.empty())
+        throw UsageError("verification add requires --check");
     return Options;
 }
 

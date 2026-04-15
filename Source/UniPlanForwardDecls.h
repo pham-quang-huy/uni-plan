@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
 #include <map>
@@ -95,38 +96,11 @@ ValidateAndNormalizeStatusFilter(const std::string &InRawStatus,
                                  const std::string &InSupportedHint,
                                  const std::set<std::string> *InAllowedValues);
 ListOptions ParseListOptions(const std::vector<std::string> &InTokens);
-PhaseOptions ParsePhaseOptions(const std::vector<std::string> &InTokens);
-LintOptions ParseLintOptions(const std::vector<std::string> &InTokens);
-InventoryOptions
-ParseInventoryOptions(const std::vector<std::string> &InTokens);
-OrphanCheckOptions
-ParseOrphanCheckOptions(const std::vector<std::string> &InTokens);
 int ParsePositiveInteger(const std::string &InValue,
                          const std::string &InOptionName);
 int ParseNonNegativeInteger(const std::string &InValue,
                             const std::string &InOptionName);
-ArtifactsOptions
-ParseArtifactsOptions(const std::vector<std::string> &InTokens);
-EvidenceOptions ParseEvidenceOptions(const std::vector<std::string> &InTokens,
-                                     const std::string &InCommandName);
-SchemaOptions ParseSchemaOptions(const std::vector<std::string> &InTokens);
-RulesOptions ParseRulesOptions(const std::vector<std::string> &InTokens);
 ValidateOptions ParseValidateOptions(const std::vector<std::string> &InTokens);
-SectionResolveOptions
-ParseSectionResolveOptions(const std::vector<std::string> &InTokens);
-SectionSchemaOptions
-ParseSectionSchemaOptions(const std::vector<std::string> &InTokens);
-SectionListOptions
-ParseSectionListOptions(const std::vector<std::string> &InTokens);
-SectionContentOptions
-ParseSectionContentOptions(const std::vector<std::string> &InTokens);
-ExcerptOptions ParseExcerptOptions(const std::vector<std::string> &InTokens);
-TableListOptions
-ParseTableListOptions(const std::vector<std::string> &InTokens);
-TableGetOptions ParseTableGetOptions(const std::vector<std::string> &InTokens);
-GraphOptions ParseGraphOptions(const std::vector<std::string> &InTokens);
-DiagnoseDriftOptions
-ParseDiagnoseDriftOptions(const std::vector<std::string> &InTokens);
 TimelineOptions ParseTimelineOptions(const std::vector<std::string> &InTokens);
 BlockersOptions ParseBlockersOptions(const std::vector<std::string> &InTokens);
 CacheInfoOptions
@@ -136,216 +110,49 @@ ParseCacheClearOptions(const std::vector<std::string> &InTokens);
 CacheConfigOptions
 ParseCacheConfigOptions(const std::vector<std::string> &InTokens);
 
-// From DocOutputHuman.cpp
-size_t VisibleWidth(const std::string &InText);
-void PrintRow(const std::vector<std::string> &InCells,
-              const std::vector<size_t> &InWidths, const bool InBold);
-void PrintSeparator(const std::vector<size_t> &InWidths);
-int RunListHuman(const Inventory &InInventory, const std::string &InKind,
-                 const std::string &InStatusFilter);
-int RunLintHuman(const LintResult &InResult);
-int RunInventoryHuman(const InventoryResult &InResult);
-int RunOrphanCheckHuman(const OrphanCheckResult &InResult);
-int RunArtifactsHuman(const Inventory &InInventory,
-                      const std::string &InTopicKey, const std::string &InKind);
-int RunEvidenceHuman(const std::string &InLabel, const std::string &InTopicKey,
-                     const std::string &InDocClass,
-                     const std::vector<EvidenceEntry> &InEntries,
-                     const std::vector<std::string> &InWarnings);
-int RunSchemaHuman(const std::string &InType,
-                   const std::vector<SchemaField> &InFields,
-                   const std::vector<std::string> &InExamples,
-                   const std::vector<std::string> &InWarnings);
-int RunRulesHuman(const std::vector<RuleEntry> &InRules,
-                  const std::vector<std::string> &InWarnings);
-int RunValidateHuman(const bool InStrict, const bool InOk,
-                     const std::vector<ValidateCheck> &InChecks,
-                     const std::vector<std::string> &InErrors,
-                     const std::vector<std::string> &InWarnings);
-int RunSectionResolveHuman(const std::string &InDocPath,
-                           const SectionResolution &InResolution,
-                           const std::vector<std::string> &InWarnings);
-int RunSectionSchemaHuman(const std::string &InType,
-                          const std::vector<SectionSchemaEntry> &InEntries);
-int RunSectionListHuman(const std::vector<SectionCount> &InCounts,
-                        const bool InShowCount);
-int RunSectionListDocHuman(const std::string &InDocPath,
-                           const std::vector<HeadingRecord> &InHeadings);
-int RunExcerptHuman(const std::string &InDocPath,
-                    const SectionResolution &InResolution,
-                    const int InExcerptStartLine,
-                    const std::vector<std::string> &InExcerptLines,
-                    const std::vector<std::string> &InWarnings);
-int RunTableListHuman(const std::string &InDocPath,
-                      const std::vector<MarkdownTableRecord> &InTables,
-                      const std::vector<std::string> &InWarnings);
-int RunTableGetHuman(const std::string &InDocPath,
-                     const MarkdownTableRecord &InTable,
-                     const std::vector<std::string> &InWarnings);
-int RunGraphHuman(const std::string &InTopicKey, const int InDepth,
-                  const std::vector<GraphNode> &InNodes,
-                  const std::vector<GraphEdge> &InEdges,
-                  const std::vector<std::string> &InWarnings);
-int RunDiagnoseDriftHuman(const bool InOk,
-                          const std::vector<DriftItem> &InDrifts,
-                          const std::vector<std::string> &InWarnings);
-int RunTimelineHuman(const std::string &InTopicKey, const std::string &InSince,
-                     const std::vector<TimelineItem> &InItems,
-                     const std::vector<std::string> &InWarnings);
-int RunPhaseHuman(const std::string &InTopicKey, const std::string &InPlanPath,
-                  const std::string &InStatusFilter,
-                  const std::vector<PhaseItem> &InItems,
-                  const std::vector<std::string> &InWarnings);
-int RunPhaseListAllHuman(const std::string &InStatusFilter,
-                         const std::vector<PhaseListAllEntry> &InEntries,
-                         const std::vector<std::string> &InWarnings);
-int RunBlockersHuman(const std::string &InStatusFilter,
-                     const std::vector<BlockerItem> &InItems,
-                     const std::vector<std::string> &InWarnings);
+// V4 bundle-native option parsers
+FTopicListOptions
+ParseTopicListOptions(const std::vector<std::string> &InTokens);
+FTopicGetOptions ParseTopicGetOptions(const std::vector<std::string> &InTokens);
+FPhaseListOptions
+ParsePhaseListOptions(const std::vector<std::string> &InTokens);
+FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens);
+FBundleChangelogOptions
+ParseBundleChangelogOptions(const std::vector<std::string> &InTokens);
+FBundleVerificationOptions
+ParseBundleVerificationOptions(const std::vector<std::string> &InTokens);
+FBundleTimelineOptions
+ParseBundleTimelineOptions(const std::vector<std::string> &InTokens);
+FBundleBlockersOptions
+ParseBundleBlockersOptions(const std::vector<std::string> &InTokens);
+FBundleValidateOptions
+ParseBundleValidateOptions(const std::vector<std::string> &InTokens);
+FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens);
+FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens);
+FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens);
+FTaskSetOptions ParseTaskSetOptions(const std::vector<std::string> &InTokens);
+FChangelogAddOptions
+ParseChangelogAddOptions(const std::vector<std::string> &InTokens);
+FVerificationAddOptions
+ParseVerificationAddOptions(const std::vector<std::string> &InTokens);
+
+// From UniPlanOutputHuman.cpp
 int RunCacheInfoHuman(const CacheInfoResult &InResult);
 int RunCacheClearHuman(const CacheClearResult &InResult);
 int RunCacheConfigHuman(const CacheConfigResult &InResult);
 
-// From DocOutputJson.cpp
-int RunListJson(const Inventory &InInventory, const std::string &InKind,
-                const std::string &InStatusFilter);
-int RunLintJson(const LintResult &InResult);
-int RunInventoryJson(const InventoryResult &InResult);
-int RunOrphanCheckJson(const OrphanCheckResult &InResult);
-int RunArtifactsJson(const Inventory &InInventory,
-                     const std::string &InTopicKey, const std::string &InKind);
-int RunSchemaJson(const std::string &InGeneratedUtc,
-                  const std::string &InRepoRoot, const std::string &InType,
-                  const std::vector<SchemaField> &InFields,
-                  const std::vector<std::string> &InExamples,
-                  const std::vector<std::string> &InWarnings);
-int RunRulesJson(const std::string &InGeneratedUtc,
-                 const std::string &InRepoRoot,
-                 const std::vector<RuleEntry> &InRules,
-                 const std::vector<std::string> &InWarnings);
-int RunSectionResolveJson(const std::string &InGeneratedUtc,
-                          const std::string &InRepoRoot,
-                          const std::string &InDocPath,
-                          const SectionResolution &InResolution,
-                          const std::vector<std::string> &InWarnings);
-int RunSectionSchemaJson(const std::string &InGeneratedUtc,
-                         const std::string &InRepoRoot,
-                         const std::string &InType,
-                         const std::vector<SectionSchemaEntry> &InEntries);
-int RunSectionListJson(const std::string &InGeneratedUtc,
-                       const std::string &InRepoRoot,
-                       const std::vector<SectionCount> &InCounts,
-                       const bool InShowCount);
-int RunSectionListDocJson(const std::string &InGeneratedUtc,
-                          const std::string &InRepoRoot,
-                          const std::string &InDocPath,
-                          const std::vector<HeadingRecord> &InHeadings);
-int RunTableListJson(const std::string &InGeneratedUtc,
-                     const std::string &InRepoRoot,
-                     const std::string &InDocPath,
-                     const std::vector<MarkdownTableRecord> &InTables,
-                     const std::vector<std::string> &InWarnings);
-int RunTableGetJson(const std::string &InGeneratedUtc,
-                    const std::string &InRepoRoot, const std::string &InDocPath,
-                    const MarkdownTableRecord &InTable,
-                    const std::vector<std::string> &InWarnings);
-int RunDiagnoseDriftJson(const std::string &InGeneratedUtc,
-                         const std::string &InRepoRoot, const bool InOk,
-                         const std::vector<DriftItem> &InDrifts,
-                         const std::vector<std::string> &InWarnings);
-int RunTimelineJson(const std::string &InGeneratedUtc,
-                    const std::string &InRepoRoot,
-                    const std::string &InTopicKey, const std::string &InSince,
-                    const std::vector<TimelineItem> &InItems,
-                    const std::vector<std::string> &InWarnings);
-int RunBlockersJson(const std::string &InGeneratedUtc,
-                    const std::string &InRepoRoot,
-                    const std::string &InStatusFilter,
-                    const std::vector<BlockerItem> &InItems,
-                    const std::vector<std::string> &InWarnings);
+// From UniPlanOutputJson.cpp
 int RunCacheInfoJson(const std::string &InRepoRoot,
                      const CacheInfoResult &InResult);
 int RunCacheClearJson(const std::string &InRepoRoot,
                       const CacheClearResult &InResult);
 int RunCacheConfigJson(const std::string &InRepoRoot,
                        const CacheConfigResult &InResult);
-int RunPhaseListAllJson(const std::string &InGeneratedUtc,
-                        const std::string &InRepoRoot,
-                        const std::string &InStatusFilter,
-                        const std::vector<PhaseListAllEntry> &InEntries,
-                        const std::vector<std::string> &InWarnings);
 
-// From DocOutputText.cpp
-int RunListText(const Inventory &InInventory, const std::string &InKind,
-                const std::string &InStatusFilter);
-int RunLintText(const LintResult &InResult);
-int RunInventoryText(const InventoryResult &InResult);
-int RunOrphanCheckText(const OrphanCheckResult &InResult);
-int RunArtifactsText(const Inventory &InInventory,
-                     const std::string &InTopicKey, const std::string &InKind);
-int RunEvidenceText(const std::string &InLabel, const std::string &InTopicKey,
-                    const std::string &InDocClass,
-                    const std::vector<EvidenceEntry> &InEntries,
-                    const std::vector<std::string> &InWarnings);
-int RunSchemaText(const std::string &InType,
-                  const std::vector<SchemaField> &InFields,
-                  const std::vector<std::string> &InExamples,
-                  const std::vector<std::string> &InWarnings);
-int RunRulesText(const std::vector<RuleEntry> &InRules,
-                 const std::vector<std::string> &InWarnings);
-int RunValidateText(const bool InStrict, const bool InOk,
-                    const std::vector<ValidateCheck> &InChecks,
-                    const std::vector<std::string> &InErrors,
-                    const std::vector<std::string> &InWarnings);
-int RunSectionResolveText(const std::string &InDocPath,
-                          const SectionResolution &InResolution,
-                          const std::vector<std::string> &InWarnings);
-int RunSectionSchemaText(const std::string &InType,
-                         const std::vector<SectionSchemaEntry> &InEntries);
-int RunSectionListText(const std::vector<SectionCount> &InCounts,
-                       const bool InShowCount);
-int RunSectionListDocText(const std::string &InDocPath,
-                          const std::vector<HeadingRecord> &InHeadings);
-int RunExcerptText(const std::string &InDocPath,
-                   const SectionResolution &InResolution,
-                   const int InExcerptStartLine,
-                   const std::vector<std::string> &InExcerptLines,
-                   const std::vector<std::string> &InWarnings);
-int RunTableListText(const std::string &InDocPath,
-                     const std::vector<MarkdownTableRecord> &InTables,
-                     const std::vector<std::string> &InWarnings);
-int RunTableGetText(const std::string &InDocPath,
-                    const MarkdownTableRecord &InTable,
-                    const std::vector<std::string> &InWarnings);
-int RunGraphText(const std::string &InTopicKey, const int InDepth,
-                 const std::vector<GraphNode> &InNodes,
-                 const std::vector<GraphEdge> &InEdges,
-                 const std::vector<std::string> &InWarnings);
-int RunDiagnoseDriftText(const bool InOk,
-                         const std::vector<DriftItem> &InDrifts,
-                         const std::vector<std::string> &InWarnings);
-int RunTimelineText(const std::string &InTopicKey, const std::string &InSince,
-                    const std::vector<TimelineItem> &InItems,
-                    const std::vector<std::string> &InWarnings);
-int RunPhaseText(const std::string &InTopicKey, const std::string &InPlanPath,
-                 const std::string &InStatusFilter,
-                 const std::vector<PhaseItem> &InItems,
-                 const std::vector<std::string> &InWarnings);
-int RunBlockersText(const std::string &InStatusFilter,
-                    const std::vector<BlockerItem> &InItems,
-                    const std::vector<std::string> &InWarnings);
+// From UniPlanOutputText.cpp
 int RunCacheInfoText(const CacheInfoResult &InResult);
 int RunCacheClearText(const CacheClearResult &InResult);
 int RunCacheConfigText(const CacheConfigResult &InResult);
-int RunPhaseListAllText(const std::string &InStatusFilter,
-                        const std::vector<PhaseListAllEntry> &InEntries,
-                        const std::vector<std::string> &InWarnings);
-int RunSectionContentText(const std::string &InDocPath,
-                          const SectionResolution &InResolution,
-                          const int InLineCharLimit,
-                          const int InContentStartLine,
-                          const std::vector<std::string> &InContentLines,
-                          const std::vector<std::string> &InWarnings);
 
 // From DocParsing.cpp
 bool PathContainsSegment(const std::string &InRelativePath,
@@ -464,9 +271,6 @@ ResolvedDocument ReadAndParseDocument(const BaseOptions &InOptions,
 // From DocValidation.cpp
 LintResult BuildLintResult(const std::string &InRepoRoot,
                            const bool InQuiet = false);
-InventoryResult BuildDocInventoryResult(const std::string &InRepoRoot);
-OrphanCheckResult BuildOrphanCheckResult(const std::string &InRepoRoot);
-bool IsSnakeCaseHeadingLiteral(const std::string &InHeadingText);
 PlanSchemaValidationResult
 EvaluatePlanSchemaConformance(const fs::path &InRepoRoot,
                               const std::vector<DocumentRecord> &InPlans,
@@ -512,9 +316,7 @@ EvaluatePlaybookBlankSections(const fs::path &InRepoRoot,
                               const std::vector<DocumentRecord> &InPlaybooks,
                               std::vector<std::string> &OutWarnings);
 std::vector<ValidateCheck>
-BuildValidateChecks(const Inventory &InInventory, const fs::path &InRepoRoot,
-                    const bool InStrict, std::vector<std::string> &OutErrors,
-                    std::vector<std::string> &OutWarnings, bool &OutOk);
+ValidateAllBundles(const std::vector<FTopicBundle> &InBundles);
 
 // Additional cross-file declarations
 // Defined in DocAnalysis.cpp
@@ -524,160 +326,75 @@ void BuildReferenceGraph(
     std::vector<std::string> &InOutWarnings,
     std::map<std::string, std::set<std::string>> &OutOutgoing,
     std::map<std::string, std::set<std::string>> &OutIncoming);
-// Defined in DocOutputHuman.cpp
-int RunSectionContentHuman(const std::string &InDocPath,
-                           const SectionResolution &InResolution,
-                           const int InLineCharLimit,
-                           const int InContentStartLine,
-                           const std::vector<std::string> &InContentLines,
-                           const std::vector<MarkdownTableRecord> &InTables,
-                           const std::vector<std::string> &InWarnings);
-// Defined in DocOutputJson.cpp
-int RunEvidenceJson(const char *InSchemaId, const std::string &InGeneratedUtc,
-                    const std::string &InRepoRoot,
-                    const std::string &InTopicKey,
-                    const std::string &InDocClass,
-                    const std::vector<EvidenceEntry> &InEntries,
-                    const std::vector<std::string> &InWarnings);
-// Defined in DocOutputJson.cpp
-int RunValidateJson(const std::string &InGeneratedUtc,
-                    const std::string &InRepoRoot, const bool InStrict,
-                    const bool InOk, const std::vector<ValidateCheck> &InChecks,
-                    const std::vector<std::string> &InErrors,
-                    const std::vector<std::string> &InWarnings);
-// Defined in DocOutputJson.cpp
-int RunExcerptJson(const std::string &InGeneratedUtc,
-                   const std::string &InRepoRoot, const std::string &InDocPath,
-                   const SectionResolution &InResolution,
-                   const int InContextLines, const int InExcerptStartLine,
-                   const std::vector<std::string> &InExcerptLines,
-                   const std::vector<std::string> &InWarnings);
-// Defined in DocOutputJson.cpp
-int RunGraphJson(const std::string &InGeneratedUtc,
-                 const std::string &InRepoRoot, const std::string &InTopicKey,
-                 const int InDepth, const std::vector<GraphNode> &InNodes,
-                 const std::vector<GraphEdge> &InEdges,
-                 const std::vector<std::string> &InWarnings);
-// Defined in DocOutputJson.cpp
-int RunPhaseJson(const std::string &InGeneratedUtc,
-                 const std::string &InRepoRoot, const std::string &InTopicKey,
-                 const std::string &InPlanPath,
-                 const std::string &InStatusFilter,
-                 const std::vector<PhaseItem> &InItems,
-                 const std::vector<std::string> &InWarnings);
-// Defined in DocOutputJson.cpp
-int RunSectionContentJson(const std::string &InGeneratedUtc,
-                          const std::string &InRepoRoot,
-                          const std::string &InDocPath,
-                          const SectionResolution &InResolution,
-                          const int InLineCharLimit,
-                          const int InContentStartLine,
-                          const std::vector<std::string> &InContentLines,
-                          const std::vector<MarkdownTableRecord> &InTables,
-                          const std::vector<std::string> &InWarnings);
-// Defined in DocParsing.cpp
+
+// From UniPlanParsing.cpp
 void AppendSidecarIntegrityWarnings(
     const std::vector<DocumentRecord> &InPlans,
     const std::vector<DocumentRecord> &InPlaybooks,
     const std::vector<DocumentRecord> &InImplementations,
     const std::vector<SidecarRecord> &InSidecars,
     std::vector<std::string> &OutWarnings);
-// Defined in DocRuntime.cpp
-const std::vector<DocumentRecord> &
-ResolveRecordsByKind(const Inventory &InInventory, const std::string &InKind);
-// Defined in DocRuntime.cpp
-std::vector<const TopicPairRecord *>
-FilterPairsByStatus(const std::vector<TopicPairRecord> &InPairs,
-                    const std::string &InStatusFilter);
-// Defined in DocRuntime.cpp
-std::vector<const DocumentRecord *>
-FilterRecordsByStatus(const std::vector<DocumentRecord> &InRecords,
-                      const std::string &InStatusFilter);
-// Defined in DocRuntime.cpp
-bool IsSupportedSchemaType(const std::string &InType);
-// Defined in DocRuntime.cpp
-std::vector<RuleEntry> BuildRules(const fs::path &InRepoRoot,
-                                  std::vector<std::string> &OutWarnings);
-// Defined in DocRuntime.cpp
-bool HasIndexedHeadingPrefix(const std::string &InHeadingText);
-// Defined in DocRuntime.cpp
-std::string ExtractPhaseKeyFromCell(const std::string &InCellValue);
-// Defined in DocRuntime.cpp
-PhaseEntryGateResult
-EvaluatePhaseEntryGate(const fs::path &InRepoRoot,
-                       const std::vector<DocumentRecord> &InPlans,
-                       const std::vector<DocumentRecord> &InPlaybooks,
-                       std::vector<std::string> &OutWarnings);
-// Defined in DocRuntime.cpp
-ArtifactRoleBoundaryResult EvaluateArtifactRoleBoundaries(
-    const fs::path &InRepoRoot, const std::vector<DocumentRecord> &InPlaybooks,
-    const std::vector<DocumentRecord> &InImplementations,
-    std::vector<std::string> &OutWarnings);
-// Defined in DocRuntime.cpp
-PlaybookSchemaResult
-EvaluatePlaybookSchema(const fs::path &InRepoRoot,
-                       const std::vector<DocumentRecord> &InPlaybooks,
-                       std::vector<std::string> &OutWarnings);
 
 // From UniPlanRuntime.cpp
 CacheConfigResult WriteCacheConfig(const std::string &InRepoRoot,
                                    const CacheConfigOptions &InOptions,
                                    const DocConfig &InCurrentConfig);
-std::vector<SchemaField>
-ParseSchemaFields(const fs::path &InSchemaPath,
-                  std::vector<std::string> &OutWarnings);
-std::vector<std::string> BuildSchemaExamples(const std::string &InType);
-std::string JoinMarkdownRowCells(const std::vector<std::string> &InRow);
-bool RowContainsAllTerms(const std::vector<std::string> &InRow,
-                         const std::vector<std::string> &InTerms);
-bool TryResolveRuleProvenance(const fs::path &InRepoRoot,
-                              const RuleProvenanceProbe &InProbe,
-                              std::string &OutResolvedEvidence);
-std::string BuildTopicPhaseIdentityNormalized(const std::string &InTopicKey,
-                                              const std::string &InPhaseKey);
-std::vector<ActivePhaseRecord>
-CollectActivePhaseRecords(const fs::path &InRepoRoot,
-                          const Inventory &InInventory,
-                          const std::vector<DocumentRecord> &InPlaybooks,
-                          std::vector<std::string> &OutWarnings);
-std::set<std::string>
-BuildHeadingIdSet(const std::vector<HeadingRecord> &InHeadings);
-bool IsPlaybookPhaseEntryReady(const fs::path &InPlaybookAbsolutePath,
-                               const std::string &InPhaseKey);
+bool IsSupportedSchemaType(const std::string &InType);
+std::vector<RuleEntry> BuildRules(const fs::path &InRepoRoot,
+                                  std::vector<std::string> &OutWarnings);
+bool HasIndexedHeadingPrefix(const std::string &InHeadingText);
+std::string ExtractPhaseKeyFromCell(const std::string &InCellValue);
+PhaseEntryGateResult
+EvaluatePhaseEntryGate(const fs::path &InRepoRoot,
+                       const std::vector<DocumentRecord> &InPlans,
+                       const std::vector<DocumentRecord> &InPlaybooks,
+                       std::vector<std::string> &OutWarnings);
+ArtifactRoleBoundaryResult EvaluateArtifactRoleBoundaries(
+    const fs::path &InRepoRoot, const std::vector<DocumentRecord> &InPlaybooks,
+    const std::vector<DocumentRecord> &InImplementations,
+    std::vector<std::string> &OutWarnings);
+PlaybookSchemaResult
+EvaluatePlaybookSchema(const fs::path &InRepoRoot,
+                       const std::vector<DocumentRecord> &InPlaybooks,
+                       std::vector<std::string> &OutWarnings);
 std::vector<SectionSchemaEntry>
 BuildSectionSchemaEntries(const std::string &InType,
                           const fs::path &InRepoRoot = fs::path());
 fs::path ResolveSchemaFilePath(const std::string &InType,
                                const fs::path &InRepoRoot);
-void AppendGraphEdgeUnique(std::vector<GraphEdge> &InOutEdges,
-                           std::set<std::string> &InOutEdgeKeys,
-                           const std::string &InFromNodeId,
-                           const std::string &InToNodeId,
-                           const std::string &InKind, int InDepth);
-void AddDriftItem(std::vector<DriftItem> &InOutDrifts, const std::string &InId,
-                  const std::string &InSeverity, const std::string &InTopicKey,
-                  const std::string &InPath, const std::string &InMessage);
-int SeverityRank(const std::string &InSeverity);
-void PrintUsage();
-void PrintCommandUsage(const std::string &InCommand);
 
-// From UniPlanCommandPlan.cpp
-PlanCommandOptions
-ParsePlanCommandOptions(const std::vector<std::string> &InTokens);
-PhaseCommandOptions
-ParsePhaseCommandOptions(const std::vector<std::string> &InTokens);
-int RunPlanCommand(const PlanCommandOptions &InOptions, const bool InUseCache,
-                   const DocConfig &InConfig);
-int RunPhaseExtendedCommand(const PhaseCommandOptions &InOptions,
-                            const bool InUseCache, const DocConfig &InConfig);
-
-// From UniPlanCommandEvidence.cpp
-int RunEvidenceCommand(const std::vector<std::string> &InArgs,
-                       const bool InUseCache, const DocConfig &InConfig);
-int RunTagCommand(const std::vector<std::string> &InArgs);
-
-// From UniPlanCommandSearch.cpp
-int RunSearchCommand(const std::vector<std::string> &InArgs);
+// From UniPlanCommandBundle.cpp
+bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
+                          const std::string &InTopicKey,
+                          FTopicBundle &OutBundle, std::string &OutError);
+std::vector<FTopicBundle> LoadAllBundles(const fs::path &InRepoRoot,
+                                         std::vector<std::string> &OutWarnings);
+int RunTopicCommand(const std::vector<std::string> &InArgs,
+                    const std::string &InRepoRoot);
+int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
+int RunBundleChangelogCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot);
+int RunBundleVerificationCommand(const std::vector<std::string> &InArgs,
+                                 const std::string &InRepoRoot);
+int RunBundleTimelineCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot);
+int RunBundleBlockersCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot);
+int RunBundleValidateCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot);
+int RunTopicSetCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
+int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
+int RunJobSetCommand(const std::vector<std::string> &InArgs,
+                     const std::string &InRepoRoot);
+int RunTaskSetCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+int RunChangelogAddCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot);
+int RunVerificationAddCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot);
 
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>

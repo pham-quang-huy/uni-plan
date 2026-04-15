@@ -1,515 +1,229 @@
 #include "UniPlanJsonIO.h"
 #include "UniPlanJson.h"
+#include "UniPlanSchemaValidation.h"
 
+#include <algorithm>
 #include <fstream>
+#include <regex>
+#include <set>
 #include <sstream>
 
 namespace UniPlan
 {
 
 // ---------------------------------------------------------------------------
-// Serialization helpers: C++ structs -> JSON
-// ---------------------------------------------------------------------------
-
-static JsonValue SerializeTableCell(const FTableCell &InCell)
-{
-    return InCell.mValue;
-}
-
-static JsonValue SerializeTable(const FStructuredTable &InTable)
-{
-    JsonValue Table = JsonValue::object();
-    Table["table_id"] = InTable.mTableID;
-    Table["section_id"] = InTable.mSectionID;
-
-    JsonValue Headers = JsonValue::array();
-    for (const std::string &Header : InTable.mHeaders)
-    {
-        Headers.push_back(Header);
-    }
-    Table["headers"] = std::move(Headers);
-
-    JsonValue Rows = JsonValue::array();
-    for (const std::vector<FTableCell> &Row : InTable.mRows)
-    {
-        JsonValue JsonRow = JsonValue::array();
-        for (const FTableCell &Cell : Row)
-        {
-            JsonRow.push_back(SerializeTableCell(Cell));
-        }
-        Rows.push_back(std::move(JsonRow));
-    }
-    Table["rows"] = std::move(Rows);
-
-    return Table;
-}
-
-static JsonValue SerializeSection(const FSectionContent &InSection)
-{
-    JsonValue Section = JsonValue::object();
-    Section["heading"] = InSection.mHeading;
-    Section["level"] = InSection.mLevel;
-
-    if (!InSection.mContent.empty())
-    {
-        Section["content"] = InSection.mContent;
-    }
-
-    if (!InSection.mFields.empty())
-    {
-        JsonValue Fields = JsonValue::object();
-        for (const auto &Pair : InSection.mFields)
-        {
-            Fields[Pair.first] = Pair.second;
-        }
-        Section["fields"] = std::move(Fields);
-    }
-
-    if (!InSection.mTables.empty())
-    {
-        JsonValue Tables = JsonValue::array();
-        for (const FStructuredTable &Table : InSection.mTables)
-        {
-            Tables.push_back(SerializeTable(Table));
-        }
-        Section["tables"] = std::move(Tables);
-    }
-
-    if (!InSection.mSubsectionIDs.empty())
-    {
-        JsonValue SubsectionIDs = JsonValue::array();
-        for (const std::string &ID : InSection.mSubsectionIDs)
-        {
-            SubsectionIDs.push_back(ID);
-        }
-        Section["subsection_ids"] = std::move(SubsectionIDs);
-    }
-
-    return Section;
-}
-
-static JsonValue SerializeReference(const FDocumentReference &InRef)
-{
-    JsonValue Ref = JsonValue::object();
-    Ref["target_path"] = InRef.mTargetPath;
-    Ref["relation_type"] = InRef.mRelationType;
-    return Ref;
-}
-
-static JsonValue SerializeDocument(const FDocument &InDocument)
-{
-    JsonValue Root = JsonValue::object();
-
-    // Envelope
-    const std::string TypeStr = ToString(InDocument.mIdentity.mType);
-    Root["$schema"] = "uni-plan://" + TypeStr + "/v1";
-    Root["schema_version"] = InDocument.mSchemaVersion;
-    Root["doc_type"] = TypeStr;
-    Root["topic_key"] = InDocument.mIdentity.mTopicKey;
-    Root["phase_key"] = InDocument.mIdentity.mPhaseKey;
-    Root["file_path"] = InDocument.mIdentity.mFilePath;
-    Root["title"] = InDocument.mTitle;
-    Root["status"] = ToString(InDocument.mStatus);
-    Root["status_raw"] = InDocument.mStatusRaw;
-    Root["content_hash"] = InDocument.mIdentity.mContentHash;
-
-    // Tags
-    JsonValue Tags = JsonValue::array();
-    for (const FTag &Tag : InDocument.mTags)
-    {
-        Tags.push_back(Tag.mValue);
-    }
-    Root["tags"] = std::move(Tags);
-
-    // Sections
-    JsonValue Sections = JsonValue::object();
-    for (const auto &Pair : InDocument.mSections)
-    {
-        Sections[Pair.first] = SerializeSection(Pair.second);
-    }
-    Root["sections"] = std::move(Sections);
-
-    // Top-level tables
-    JsonValue Tables = JsonValue::array();
-    for (const FStructuredTable &Table : InDocument.mTables)
-    {
-        Tables.push_back(SerializeTable(Table));
-    }
-    Root["tables"] = std::move(Tables);
-
-    // References
-    JsonValue References = JsonValue::array();
-    for (const FDocumentReference &Ref : InDocument.mReferences)
-    {
-        References.push_back(SerializeReference(Ref));
-    }
-    Root["references"] = std::move(References);
-
-    return Root;
-}
-
-// ---------------------------------------------------------------------------
-// Deserialization helpers: JSON -> C++ structs
+// JSON access helpers
 // ---------------------------------------------------------------------------
 
 static std::string GetString(const JsonValue &InJson, const std::string &InKey,
                              const std::string &InDefault = "")
 {
     if (InJson.contains(InKey) && InJson[InKey].is_string())
-    {
         return InJson[InKey].get<std::string>();
-    }
     return InDefault;
 }
 
-static int GetInt(const JsonValue &InJson, const std::string &InKey,
-                  int InDefault = 0)
-{
-    if (InJson.contains(InKey) && InJson[InKey].is_number_integer())
-    {
-        return InJson[InKey].get<int>();
-    }
-    return InDefault;
-}
-
-static FStructuredTable DeserializeTable(const JsonValue &InJson)
-{
-    FStructuredTable Table;
-    Table.mTableID = GetInt(InJson, "table_id");
-    Table.mSectionID = GetString(InJson, "section_id");
-
-    if (InJson.contains("headers") && InJson["headers"].is_array())
-    {
-        for (const auto &Header : InJson["headers"])
-        {
-            if (Header.is_string())
-            {
-                Table.mHeaders.push_back(Header.get<std::string>());
-            }
-        }
-    }
-
-    if (InJson.contains("rows") && InJson["rows"].is_array())
-    {
-        for (const auto &Row : InJson["rows"])
-        {
-            if (!Row.is_array())
-            {
-                continue;
-            }
-            std::vector<FTableCell> CellRow;
-            for (const auto &Cell : Row)
-            {
-                FTableCell TableCell;
-                if (Cell.is_string())
-                {
-                    TableCell.mValue = Cell.get<std::string>();
-                }
-                else if (Cell.is_object() && Cell.contains("value"))
-                {
-                    TableCell.mValue = GetString(Cell, "value");
-                }
-                CellRow.push_back(std::move(TableCell));
-            }
-            Table.mRows.push_back(std::move(CellRow));
-        }
-    }
-
-    return Table;
-}
-
-static FSectionContent DeserializeSection(const std::string &InID,
-                                          const JsonValue &InJson)
-{
-    FSectionContent Section;
-    Section.mSectionID = InID;
-    Section.mHeading = GetString(InJson, "heading", InID);
-    Section.mLevel = GetInt(InJson, "level", 2);
-    Section.mContent = GetString(InJson, "content");
-
-    if (InJson.contains("fields") && InJson["fields"].is_object())
-    {
-        for (const auto &Item : InJson["fields"].items())
-        {
-            if (Item.value().is_string())
-            {
-                Section.mFields[Item.key()] = Item.value().get<std::string>();
-            }
-        }
-    }
-
-    if (InJson.contains("tables") && InJson["tables"].is_array())
-    {
-        for (const auto &TableJson : InJson["tables"])
-        {
-            if (TableJson.is_object())
-            {
-                Section.mTables.push_back(DeserializeTable(TableJson));
-            }
-        }
-    }
-
-    if (InJson.contains("subsection_ids") &&
-        InJson["subsection_ids"].is_array())
-    {
-        for (const auto &ID : InJson["subsection_ids"])
-        {
-            if (ID.is_string())
-            {
-                Section.mSubsectionIDs.push_back(ID.get<std::string>());
-            }
-        }
-    }
-
-    return Section;
-}
-
-static FDocumentReference DeserializeReference(const JsonValue &InJson)
-{
-    FDocumentReference Ref;
-    Ref.mTargetPath = GetString(InJson, "target_path");
-    Ref.mRelationType = GetString(InJson, "relation_type");
-    return Ref;
-}
-
-static bool DeserializeDocument(const JsonValue &InRoot, FDocument &OutDocument,
-                                std::string &OutError)
-{
-    // Validate required envelope fields
-    if (!InRoot.contains("doc_type") || !InRoot["doc_type"].is_string())
-    {
-        OutError = "Missing required field 'doc_type'";
-        return false;
-    }
-    if (!InRoot.contains("topic_key") || !InRoot["topic_key"].is_string())
-    {
-        OutError = "Missing required field 'topic_key'";
-        return false;
-    }
-
-    // Identity
-    const std::string DocTypeStr = GetString(InRoot, "doc_type");
-    OutDocument.mIdentity.mType = DocumentTypeFromString(DocTypeStr);
-    OutDocument.mIdentity.mTopicKey = GetString(InRoot, "topic_key");
-    OutDocument.mIdentity.mPhaseKey = GetString(InRoot, "phase_key");
-    OutDocument.mIdentity.mFilePath = GetString(InRoot, "file_path");
-    OutDocument.mIdentity.mContentHash = GetString(InRoot, "content_hash");
-
-    // Envelope metadata
-    OutDocument.mTitle = GetString(InRoot, "title");
-    OutDocument.mStatus =
-        PhaseStatusFromString(GetString(InRoot, "status", "unknown"));
-    OutDocument.mStatusRaw = GetString(InRoot, "status_raw");
-    OutDocument.mGeneratedUTC = GetString(InRoot, "generated_utc");
-    OutDocument.mSchemaVersion = GetInt(InRoot, "schema_version", 1);
-
-    // Tags
-    if (InRoot.contains("tags") && InRoot["tags"].is_array())
-    {
-        for (const auto &TagJson : InRoot["tags"])
-        {
-            if (TagJson.is_string())
-            {
-                FTag Tag;
-                Tag.mValue = TagJson.get<std::string>();
-                OutDocument.mTags.push_back(std::move(Tag));
-            }
-        }
-    }
-
-    // Sections
-    if (InRoot.contains("sections") && InRoot["sections"].is_object())
-    {
-        for (const auto &Item : InRoot["sections"].items())
-        {
-            if (Item.value().is_object())
-            {
-                OutDocument.mSections[Item.key()] =
-                    DeserializeSection(Item.key(), Item.value());
-            }
-        }
-    }
-
-    // Top-level tables
-    if (InRoot.contains("tables") && InRoot["tables"].is_array())
-    {
-        for (const auto &TableJson : InRoot["tables"])
-        {
-            if (TableJson.is_object())
-            {
-                OutDocument.mTables.push_back(DeserializeTable(TableJson));
-            }
-        }
-    }
-
-    // References
-    if (InRoot.contains("references") && InRoot["references"].is_array())
-    {
-        for (const auto &RefJson : InRoot["references"])
-        {
-            if (RefJson.is_object())
-            {
-                OutDocument.mReferences.push_back(
-                    DeserializeReference(RefJson));
-            }
-        }
-    }
-
-    return true;
-}
-
 // ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-bool TryWriteDocumentJson(const FDocument &InDocument, const fs::path &InPath,
-                          std::string &OutError)
-{
-    try
-    {
-        const JsonValue Root = SerializeDocument(InDocument);
-        const std::string Content = Root.dump(2);
-
-        std::ofstream Stream(InPath, std::ios::out | std::ios::trunc);
-        if (!Stream.is_open())
-        {
-            OutError = "Failed to open file for writing: " + InPath.string();
-            return false;
-        }
-        Stream << Content << "\n";
-        Stream.close();
-
-        if (Stream.fail())
-        {
-            OutError = "Write failed: " + InPath.string();
-            return false;
-        }
-        return true;
-    }
-    catch (const std::exception &Ex)
-    {
-        OutError = std::string("JSON write error: ") + Ex.what();
-        return false;
-    }
-}
-
-bool TryReadDocumentJson(const fs::path &InPath, FDocument &OutDocument,
-                         std::string &OutError)
-{
-    try
-    {
-        std::ifstream Stream(InPath);
-        if (!Stream.is_open())
-        {
-            OutError = "Failed to open file: " + InPath.string();
-            return false;
-        }
-
-        std::ostringstream Buffer;
-        Buffer << Stream.rdbuf();
-        const std::string Content = Buffer.str();
-
-        if (Content.empty())
-        {
-            OutError = "File is empty: " + InPath.string();
-            return false;
-        }
-
-        const JsonValue Root = JsonValue::parse(Content);
-
-        if (!Root.is_object())
-        {
-            OutError = "Root is not a JSON object: " + InPath.string();
-            return false;
-        }
-
-        return DeserializeDocument(Root, OutDocument, OutError);
-    }
-    catch (const JsonValue::parse_error &Ex)
-    {
-        OutError = std::string("JSON parse error: ") + Ex.what();
-        return false;
-    }
-    catch (const std::exception &Ex)
-    {
-        OutError = std::string("JSON read error: ") + Ex.what();
-        return false;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Topic bundle serialization
+// Serialization helpers: C++ structs -> JSON
 // ---------------------------------------------------------------------------
 
 static JsonValue SerializeChangeLogEntry(const FChangeLogEntry &InEntry)
 {
     JsonValue Entry = JsonValue::object();
+    if (InEntry.mPhase < 0)
+        Entry["phase"] = nullptr;
+    else
+        Entry["phase"] = InEntry.mPhase;
     Entry["date"] = InEntry.mDate;
     Entry["change"] = InEntry.mChange;
-    if (!InEntry.mFiles.empty())
-        Entry["files"] = InEntry.mFiles;
-    if (!InEntry.mEvidence.empty())
-        Entry["evidence"] = InEntry.mEvidence;
+    Entry["affected"] = InEntry.mAffected;
+    Entry["type"] = ToString(InEntry.mType);
+    Entry["actor"] = ToString(InEntry.mActor);
     return Entry;
 }
 
 static JsonValue SerializeVerificationEntry(const FVerificationEntry &InEntry)
 {
     JsonValue Entry = JsonValue::object();
+    if (InEntry.mPhase < 0)
+        Entry["phase"] = nullptr;
+    else
+        Entry["phase"] = InEntry.mPhase;
     Entry["date"] = InEntry.mDate;
     Entry["check"] = InEntry.mCheck;
     Entry["result"] = InEntry.mResult;
-    if (!InEntry.mDetail.empty())
-        Entry["detail"] = InEntry.mDetail;
+    Entry["detail"] = InEntry.mDetail;
     return Entry;
 }
 
-static JsonValue SerializeTopicBundle(const FTopicBundle &InBundle)
+// ---------------------------------------------------------------------------
+// V3 domain-driven serialization (plan-v3)
+// All record fields always written. No field omission.
+// Tasks nested inside jobs. Tracking inline in phases.
+// Changelogs/verifications as flat arrays with scope.
+// ---------------------------------------------------------------------------
+
+static JsonValue SerializeStringArray(const std::vector<std::string> &InArray)
+{
+    JsonValue Arr = JsonValue::array();
+    for (const std::string &Item : InArray)
+        Arr.push_back(Item);
+    return Arr;
+}
+
+static JsonValue SerializeLaneRecord(const FLaneRecord &InLane)
+{
+    JsonValue Lane = JsonValue::object();
+    Lane["status"] = ToString(InLane.mStatus);
+    Lane["scope"] = InLane.mScope;
+    Lane["exit_criteria"] = InLane.mExitCriteria;
+    return Lane;
+}
+
+static JsonValue SerializeTaskRecord(const FTaskRecord &InTask)
+{
+    JsonValue Task = JsonValue::object();
+    Task["status"] = ToString(InTask.mStatus);
+    Task["description"] = InTask.mDescription;
+    Task["evidence"] = InTask.mEvidence;
+    Task["notes"] = InTask.mNotes;
+    Task["completed_at"] = InTask.mCompletedAt;
+    return Task;
+}
+
+static JsonValue SerializeJobRecord(const FJobRecord &InJob)
+{
+    JsonValue Job = JsonValue::object();
+    Job["wave"] = InJob.mWave;
+    Job["lane"] = InJob.mLane;
+    Job["status"] = ToString(InJob.mStatus);
+    Job["scope"] = InJob.mScope;
+    Job["output"] = InJob.mOutput;
+    Job["exit_criteria"] = InJob.mExitCriteria;
+    JsonValue Tasks = JsonValue::array();
+    for (const FTaskRecord &Task : InJob.mTasks)
+        Tasks.push_back(SerializeTaskRecord(Task));
+    Job["tasks"] = std::move(Tasks);
+    Job["started_at"] = InJob.mStartedAt;
+    Job["completed_at"] = InJob.mCompletedAt;
+    return Job;
+}
+
+static JsonValue SerializeTestingRecord(const FTestingRecord &InTest)
+{
+    JsonValue Test = JsonValue::object();
+    Test["session"] = InTest.mSession;
+    Test["actor"] = ToString(InTest.mActor);
+    Test["step"] = InTest.mStep;
+    Test["action"] = InTest.mAction;
+    Test["expected"] = InTest.mExpected;
+    Test["evidence"] = InTest.mEvidence;
+    return Test;
+}
+
+static JsonValue SerializeFileManifestItem(const FFileManifestItem &InItem)
+{
+    JsonValue Item = JsonValue::object();
+    Item["file"] = InItem.mFilePath;
+    Item["action"] = ToString(InItem.mAction);
+    Item["description"] = InItem.mDescription;
+    return Item;
+}
+
+static JsonValue SerializePhaseRecord(const FPhaseRecord &InPhase)
+{
+    JsonValue Phase = JsonValue::object();
+    Phase["scope"] = InPhase.mScope;
+    Phase["output"] = InPhase.mOutput;
+
+    // Lifecycle
+    const FPhaseLifecycle &LC = InPhase.mLifecycle;
+    Phase["status"] = ToString(LC.mStatus);
+    Phase["done"] = LC.mDone;
+    Phase["remaining"] = LC.mRemaining;
+    Phase["blockers"] = LC.mBlockers;
+    Phase["started_at"] = LC.mStartedAt;
+    Phase["completed_at"] = LC.mCompletedAt;
+    Phase["agent_context"] = LC.mAgentContext;
+
+    // Execution taxonomy
+    JsonValue Lanes = JsonValue::array();
+    for (const FLaneRecord &Lane : InPhase.mLanes)
+        Lanes.push_back(SerializeLaneRecord(Lane));
+    Phase["lanes"] = std::move(Lanes);
+
+    JsonValue Jobs = JsonValue::array();
+    for (const FJobRecord &Job : InPhase.mJobs)
+        Jobs.push_back(SerializeJobRecord(Job));
+    Phase["jobs"] = std::move(Jobs);
+
+    // Evidence
+    JsonValue Testing = JsonValue::array();
+    for (const FTestingRecord &Test : InPhase.mTesting)
+        Testing.push_back(SerializeTestingRecord(Test));
+    Phase["testing"] = std::move(Testing);
+
+    JsonValue Manifest = JsonValue::array();
+    for (const FFileManifestItem &Item : InPhase.mFileManifest)
+        Manifest.push_back(SerializeFileManifestItem(Item));
+    Phase["file_manifest"] = std::move(Manifest);
+
+    // Design material
+    const FPhaseDesignMaterial &DM = InPhase.mDesign;
+    Phase["investigation"] = DM.mInvestigation;
+    Phase["code_snippets"] = DM.mCodeSnippets;
+    Phase["dependencies"] = DM.mDependencies;
+    Phase["readiness_gate"] = DM.mReadinessGate;
+    Phase["handoff"] = DM.mHandoff;
+    Phase["code_entity_contract"] = DM.mCodeEntityContract;
+    Phase["best_practices"] = DM.mBestPractices;
+    Phase["validation_commands"] = DM.mValidationCommands;
+    Phase["multi_platforming"] = DM.mMultiPlatforming;
+
+    return Phase;
+}
+
+static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
 {
     JsonValue Root = JsonValue::object();
-    Root["$schema"] = "uni-plan://plan-bundle/v1";
-    Root["schema_version"] = InBundle.mSchemaVersion;
-    Root["topic_key"] = InBundle.mTopicKey;
-    Root["status"] = InBundle.mStatus;
+    Root["$schema"] = "plan-v4";
+    Root["topic"] = InBundle.mTopicKey;
+    Root["status"] = ToString(InBundle.mStatus);
 
-    // Plan
-    Root["plan"] = SerializeDocument(InBundle.mPlan);
+    // Plan metadata at root
+    const FPlanMetadata &Meta = InBundle.mMetadata;
+    Root["title"] = Meta.mTitle;
+    Root["summary"] = Meta.mSummary;
+    Root["goals"] = Meta.mGoals;
+    Root["non_goals"] = Meta.mNonGoals;
+    Root["risks"] = Meta.mRisks;
+    Root["acceptance_criteria"] = Meta.mAcceptanceCriteria;
+    Root["problem_statement"] = Meta.mProblemStatement;
+    Root["validation_commands"] = Meta.mValidationCommands;
+    Root["baseline_audit"] = Meta.mBaselineAudit;
+    Root["execution_strategy"] = Meta.mExecutionStrategy;
+    Root["locked_decisions"] = Meta.mLockedDecisions;
+    Root["source_references"] = Meta.mSourceReferences;
+    Root["dependencies"] = Meta.mDependencies;
 
-    // Implementation
-    Root["implementation"] = SerializeDocument(InBundle.mImplementation);
+    // Phases (with inline tracking, index-based)
+    JsonValue Phases = JsonValue::array();
+    for (const FPhaseRecord &Phase : InBundle.mPhases)
+        Phases.push_back(SerializePhaseRecord(Phase));
+    Root["phases"] = std::move(Phases);
 
-    // Playbooks
-    JsonValue Playbooks = JsonValue::object();
-    for (const auto &Pair : InBundle.mPlaybooks)
-    {
-        Playbooks[Pair.first] = SerializeDocument(Pair.second);
-    }
-    Root["playbooks"] = std::move(Playbooks);
+    Root["next_actions"] = InBundle.mNextActions;
 
-    // ChangeLogs
-    JsonValue ChangeLogs = JsonValue::object();
-    for (const auto &Pair : InBundle.mChangeLogs)
-    {
-        JsonValue Entries = JsonValue::array();
-        for (const FChangeLogEntry &Entry : Pair.second)
-        {
-            Entries.push_back(SerializeChangeLogEntry(Entry));
-        }
-        ChangeLogs[Pair.first] = std::move(Entries);
-    }
+    // Changelogs (flat array with scope)
+    JsonValue ChangeLogs = JsonValue::array();
+    for (const FChangeLogEntry &Entry : InBundle.mChangeLogs)
+        ChangeLogs.push_back(SerializeChangeLogEntry(Entry));
     Root["changelogs"] = std::move(ChangeLogs);
 
-    // Verifications
-    JsonValue Verifications = JsonValue::object();
-    for (const auto &Pair : InBundle.mVerifications)
-    {
-        JsonValue Entries = JsonValue::array();
-        for (const FVerificationEntry &Entry : Pair.second)
-        {
-            Entries.push_back(SerializeVerificationEntry(Entry));
-        }
-        Verifications[Pair.first] = std::move(Entries);
-    }
+    // Verifications (flat array with scope)
+    JsonValue Verifications = JsonValue::array();
+    for (const FVerificationEntry &Entry : InBundle.mVerifications)
+        Verifications.push_back(SerializeVerificationEntry(Entry));
     Root["verifications"] = std::move(Verifications);
 
     return Root;
@@ -518,16 +232,21 @@ static JsonValue SerializeTopicBundle(const FTopicBundle &InBundle)
 static FChangeLogEntry DeserializeChangeLogEntry(const JsonValue &InJson)
 {
     FChangeLogEntry Entry;
+    if (InJson.count("phase") && InJson["phase"].is_number())
+        Entry.mPhase = InJson["phase"].get<int>();
     Entry.mDate = GetString(InJson, "date");
     Entry.mChange = GetString(InJson, "change");
-    Entry.mFiles = GetString(InJson, "files");
-    Entry.mEvidence = GetString(InJson, "evidence");
+    Entry.mAffected = GetString(InJson, "affected");
+    Entry.mType = ParseChangeTypeLenient(GetString(InJson, "type"));
+    Entry.mActor = ParseTestingActorLenient(GetString(InJson, "actor"));
     return Entry;
 }
 
 static FVerificationEntry DeserializeVerificationEntry(const JsonValue &InJson)
 {
     FVerificationEntry Entry;
+    if (InJson.count("phase") && InJson["phase"].is_number())
+        Entry.mPhase = InJson["phase"].get<int>();
     Entry.mDate = GetString(InJson, "date");
     Entry.mCheck = GetString(InJson, "check");
     Entry.mResult = GetString(InJson, "result");
@@ -535,100 +254,366 @@ static FVerificationEntry DeserializeVerificationEntry(const JsonValue &InJson)
     return Entry;
 }
 
-static bool DeserializeTopicBundle(const JsonValue &InRoot,
-                                   FTopicBundle &OutBundle,
-                                   std::string &OutError)
+static bool DeserializeLaneRecordStrict(const JsonValue &InJson,
+                                        FLaneRecord &OutLane,
+                                        const std::string &InContext,
+                                        std::string &OutError)
 {
-    OutBundle.mTopicKey = GetString(InRoot, "topic_key");
-    OutBundle.mStatus = GetString(InRoot, "status");
-    OutBundle.mSchemaVersion = GetInt(InRoot, "schema_version", 1);
+    if (!RequireExecutionStatus(InJson, "status", OutLane.mStatus, InContext,
+                                OutError))
+        return false;
+    if (!RequireString(InJson, "scope", OutLane.mScope, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "exit_criteria", OutLane.mExitCriteria,
+                       InContext, OutError))
+        return false;
+    return true;
+}
 
-    if (OutBundle.mTopicKey.empty())
+static bool DeserializeTaskRecordStrict(const JsonValue &InJson,
+                                        FTaskRecord &OutTask,
+                                        const std::string &InContext,
+                                        std::string &OutError)
+{
+    if (!RequireExecutionStatus(InJson, "status", OutTask.mStatus, InContext,
+                                OutError))
+        return false;
+    if (!RequireString(InJson, "description", OutTask.mDescription, InContext,
+                       OutError))
+        return false;
+    if (!RequireString(InJson, "evidence", OutTask.mEvidence, InContext,
+                       OutError))
+        return false;
+    OptionalString(InJson, "notes", OutTask.mNotes);
+    OptionalString(InJson, "completed_at", OutTask.mCompletedAt);
+    return true;
+}
+
+static bool DeserializeJobRecordStrict(const JsonValue &InJson,
+                                       FJobRecord &OutJob,
+                                       const std::string &InContext,
+                                       std::string &OutError)
+{
+    if (InJson.contains("wave") && InJson["wave"].is_number())
+        OutJob.mWave = InJson["wave"].get<int>();
+    else
     {
-        OutError = "Missing required field 'topic_key'";
+        OutError = InContext + ".wave: expected integer";
         return false;
     }
-
-    // Plan
-    if (InRoot.contains("plan") && InRoot["plan"].is_object())
+    if (InJson.contains("lane") && InJson["lane"].is_number())
+        OutJob.mLane = InJson["lane"].get<int>();
+    else
     {
-        if (!DeserializeDocument(InRoot["plan"], OutBundle.mPlan, OutError))
+        OutError = InContext + ".lane: expected integer";
+        return false;
+    }
+    if (!RequireExecutionStatus(InJson, "status", OutJob.mStatus, InContext,
+                                OutError))
+        return false;
+    if (!RequireString(InJson, "scope", OutJob.mScope, InContext, OutError))
+        return false;
+    OptionalString(InJson, "output", OutJob.mOutput);
+    if (!RequireString(InJson, "exit_criteria", OutJob.mExitCriteria, InContext,
+                       OutError))
+        return false;
+    if (!RequireArray(InJson, "tasks", InContext, OutError))
+        return false;
+    for (size_t I = 0; I < InJson["tasks"].size(); ++I)
+    {
+        const auto &TJ = InJson["tasks"][I];
+        if (!TJ.is_object())
         {
-            OutError = "Failed to parse plan: " + OutError;
+            OutError = InContext + ".tasks[" + std::to_string(I) +
+                       "]: expected object";
+            return false;
+        }
+        FTaskRecord Task;
+        const std::string TaskCtx =
+            InContext + ".tasks[" + std::to_string(I) + "]";
+        if (!DeserializeTaskRecordStrict(TJ, Task, TaskCtx, OutError))
+            return false;
+        OutJob.mTasks.push_back(std::move(Task));
+    }
+    OptionalString(InJson, "started_at", OutJob.mStartedAt);
+    OptionalString(InJson, "completed_at", OutJob.mCompletedAt);
+    return true;
+}
+
+static bool DeserializeTestingRecordStrict(const JsonValue &InJson,
+                                           FTestingRecord &OutTest,
+                                           const std::string &InContext,
+                                           std::string &OutError)
+{
+    if (!RequireString(InJson, "session", OutTest.mSession, InContext,
+                       OutError))
+        return false;
+    if (!RequireTestingActor(InJson, "actor", OutTest.mActor, InContext,
+                             OutError))
+        return false;
+    if (!RequireString(InJson, "step", OutTest.mStep, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "action", OutTest.mAction, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "expected", OutTest.mExpected, InContext,
+                       OutError))
+        return false;
+    if (!RequireString(InJson, "evidence", OutTest.mEvidence, InContext,
+                       OutError))
+        return false;
+    return true;
+}
+
+static bool DeserializeFileManifestStrict(const JsonValue &InJson,
+                                          FFileManifestItem &OutItem,
+                                          const std::string &InContext,
+                                          std::string &OutError)
+{
+    if (!RequireString(InJson, "file", OutItem.mFilePath, InContext, OutError))
+        return false;
+    if (!RequireFileAction(InJson, "action", OutItem.mAction, InContext,
+                           OutError))
+        return false;
+    if (!RequireString(InJson, "description", OutItem.mDescription, InContext,
+                       OutError))
+        return false;
+    return true;
+}
+
+static bool DeserializeChangeLogStrict(const JsonValue &InJson,
+                                       FChangeLogEntry &OutEntry,
+                                       const std::string &InContext,
+                                       std::string &OutError)
+{
+    if (InJson.count("phase") && InJson["phase"].is_number())
+        OutEntry.mPhase = InJson["phase"].get<int>();
+    if (!RequireString(InJson, "date", OutEntry.mDate, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "change", OutEntry.mChange, InContext, OutError))
+        return false;
+    OptionalString(InJson, "affected", OutEntry.mAffected);
+    OutEntry.mType = ParseChangeTypeLenient(GetString(InJson, "type"));
+    OutEntry.mActor = ParseTestingActorLenient(GetString(InJson, "actor"));
+    return true;
+}
+
+static bool DeserializeVerificationStrict(const JsonValue &InJson,
+                                          FVerificationEntry &OutEntry,
+                                          const std::string &InContext,
+                                          std::string &OutError)
+{
+    if (InJson.count("phase") && InJson["phase"].is_number())
+        OutEntry.mPhase = InJson["phase"].get<int>();
+    if (!RequireString(InJson, "date", OutEntry.mDate, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "check", OutEntry.mCheck, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "result", OutEntry.mResult, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "detail", OutEntry.mDetail, InContext, OutError))
+        return false;
+    return true;
+}
+
+static bool DeserializePhaseRecordStrict(const JsonValue &InJson,
+                                         FPhaseRecord &OutPhase,
+                                         const std::string &InContext,
+                                         std::string &OutError)
+{
+    // Lifecycle — required fields
+    FPhaseLifecycle &LC = OutPhase.mLifecycle;
+    if (!RequireExecutionStatus(InJson, "status", LC.mStatus, InContext,
+                                OutError))
+        return false;
+    if (!RequireString(InJson, "done", LC.mDone, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "remaining", LC.mRemaining, InContext, OutError))
+        return false;
+    if (!RequireString(InJson, "blockers", LC.mBlockers, InContext, OutError))
+        return false;
+
+    // Lifecycle — optional fields
+    OptionalString(InJson, "started_at", LC.mStartedAt);
+    OptionalString(InJson, "completed_at", LC.mCompletedAt);
+    OptionalString(InJson, "agent_context", LC.mAgentContext);
+
+    // Phase core
+    OptionalString(InJson, "scope", OutPhase.mScope);
+    OptionalString(InJson, "output", OutPhase.mOutput);
+
+    // Design material
+    FPhaseDesignMaterial &DM = OutPhase.mDesign;
+    OptionalString(InJson, "investigation", DM.mInvestigation);
+    OptionalString(InJson, "code_snippets", DM.mCodeSnippets);
+    OptionalString(InJson, "dependencies", DM.mDependencies);
+    OptionalString(InJson, "readiness_gate", DM.mReadinessGate);
+    OptionalString(InJson, "handoff", DM.mHandoff);
+    OptionalString(InJson, "code_entity_contract", DM.mCodeEntityContract);
+    OptionalString(InJson, "best_practices", DM.mBestPractices);
+    OptionalString(InJson, "validation_commands", DM.mValidationCommands);
+    OptionalString(InJson, "multi_platforming", DM.mMultiPlatforming);
+
+    // Optional arrays with strict record validation
+    if (InJson.contains("lanes") && InJson["lanes"].is_array())
+    {
+        for (size_t I = 0; I < InJson["lanes"].size(); ++I)
+        {
+            const std::string Ctx =
+                InContext + ".lanes[" + std::to_string(I) + "]";
+            FLaneRecord Lane;
+            if (!DeserializeLaneRecordStrict(InJson["lanes"][I], Lane, Ctx,
+                                             OutError))
+                return false;
+            OutPhase.mLanes.push_back(std::move(Lane));
+        }
+    }
+
+    if (InJson.contains("jobs") && InJson["jobs"].is_array())
+    {
+        for (size_t I = 0; I < InJson["jobs"].size(); ++I)
+        {
+            const std::string Ctx =
+                InContext + ".jobs[" + std::to_string(I) + "]";
+            FJobRecord Job;
+            if (!DeserializeJobRecordStrict(InJson["jobs"][I], Job, Ctx,
+                                            OutError))
+                return false;
+            OutPhase.mJobs.push_back(std::move(Job));
+        }
+    }
+
+    if (InJson.contains("testing") && InJson["testing"].is_array())
+    {
+        for (size_t I = 0; I < InJson["testing"].size(); ++I)
+        {
+            const std::string Ctx =
+                InContext + ".testing[" + std::to_string(I) + "]";
+            FTestingRecord Test;
+            if (!DeserializeTestingRecordStrict(InJson["testing"][I], Test, Ctx,
+                                                OutError))
+                return false;
+            OutPhase.mTesting.push_back(std::move(Test));
+        }
+    }
+
+    if (InJson.contains("file_manifest") && InJson["file_manifest"].is_array())
+    {
+        for (size_t I = 0; I < InJson["file_manifest"].size(); ++I)
+        {
+            const std::string Ctx =
+                InContext + ".file_manifest[" + std::to_string(I) + "]";
+            FFileManifestItem Item;
+            if (!DeserializeFileManifestStrict(InJson["file_manifest"][I], Item,
+                                               Ctx, OutError))
+                return false;
+            OutPhase.mFileManifest.push_back(std::move(Item));
+        }
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// DeserializeTopicBundleV4 — strict plan-v4 deserializer.
+// Rejects missing required fields, invalid enum values, wrong types.
+// ---------------------------------------------------------------------------
+
+static bool DeserializeTopicBundleV4(const JsonValue &InRoot,
+                                     FTopicBundle &OutBundle,
+                                     std::string &OutError)
+{
+    const std::string Ctx = "plan-v4";
+
+    // Required root fields
+    if (!RequireString(InRoot, "topic", OutBundle.mTopicKey, Ctx, OutError))
+        return false;
+    {
+        std::string StatusStr;
+        if (!RequireString(InRoot, "status", StatusStr, Ctx, OutError))
+            return false;
+        if (!TopicStatusFromString(StatusStr, OutBundle.mStatus))
+        {
+            OutError = "plan-v4.status: invalid value '" + StatusStr +
+                       "', expected "
+                       "not_started|in_progress|completed|blocked|canceled";
             return false;
         }
     }
+    if (!RequireString(InRoot, "title", OutBundle.mMetadata.mTitle, Ctx,
+                       OutError))
+        return false;
 
-    // Implementation
-    if (InRoot.contains("implementation") &&
-        InRoot["implementation"].is_object())
+    // Required arrays
+    if (!RequireArray(InRoot, "phases", Ctx, OutError))
+        return false;
+    if (!RequireArray(InRoot, "changelogs", Ctx, OutError))
+        return false;
+    if (!RequireArray(InRoot, "verifications", Ctx, OutError))
+        return false;
+
+    // Optional plan metadata
+    FPlanMetadata &Meta = OutBundle.mMetadata;
+    OptionalString(InRoot, "summary", Meta.mSummary);
+    OptionalString(InRoot, "goals", Meta.mGoals);
+    OptionalString(InRoot, "non_goals", Meta.mNonGoals);
+    OptionalString(InRoot, "risks", Meta.mRisks);
+    OptionalString(InRoot, "acceptance_criteria", Meta.mAcceptanceCriteria);
+    OptionalString(InRoot, "problem_statement", Meta.mProblemStatement);
+    OptionalString(InRoot, "validation_commands", Meta.mValidationCommands);
+    OptionalString(InRoot, "baseline_audit", Meta.mBaselineAudit);
+    OptionalString(InRoot, "execution_strategy", Meta.mExecutionStrategy);
+    OptionalString(InRoot, "locked_decisions", Meta.mLockedDecisions);
+    OptionalString(InRoot, "source_references", Meta.mSourceReferences);
+    OptionalString(InRoot, "dependencies", Meta.mDependencies);
+    OptionalString(InRoot, "next_actions", OutBundle.mNextActions);
+
+    // Phases — strict validation per record
+    for (size_t I = 0; I < InRoot["phases"].size(); ++I)
     {
-        if (!DeserializeDocument(InRoot["implementation"],
-                                 OutBundle.mImplementation, OutError))
+        const auto &PJ = InRoot["phases"][I];
+        if (!PJ.is_object())
         {
-            OutError = "Failed to parse implementation: " + OutError;
+            OutError = "phases[" + std::to_string(I) + "]: expected object";
             return false;
         }
+        FPhaseRecord Phase;
+        const std::string PhaseCtx = "phases[" + std::to_string(I) + "]";
+        if (!DeserializePhaseRecordStrict(PJ, Phase, PhaseCtx, OutError))
+            return false;
+        OutBundle.mPhases.push_back(std::move(Phase));
     }
 
-    // Playbooks
-    if (InRoot.contains("playbooks") && InRoot["playbooks"].is_object())
+    // Changelogs — strict validation per entry
+    for (size_t I = 0; I < InRoot["changelogs"].size(); ++I)
     {
-        for (const auto &Item : InRoot["playbooks"].items())
+        const auto &CJ = InRoot["changelogs"][I];
+        if (!CJ.is_object())
         {
-            if (Item.value().is_object())
-            {
-                FDocument PlaybookDoc;
-                if (!DeserializeDocument(Item.value(), PlaybookDoc, OutError))
-                {
-                    OutError = "Failed to parse playbook '" + Item.key() +
-                               "': " + OutError;
-                    return false;
-                }
-                OutBundle.mPlaybooks[Item.key()] = std::move(PlaybookDoc);
-            }
+            OutError = "changelogs[" + std::to_string(I) + "]: expected object";
+            return false;
         }
+        FChangeLogEntry Entry;
+        const std::string EntryCtx = "changelogs[" + std::to_string(I) + "]";
+        if (!DeserializeChangeLogStrict(CJ, Entry, EntryCtx, OutError))
+            return false;
+        OutBundle.mChangeLogs.push_back(std::move(Entry));
     }
 
-    // ChangeLogs
-    if (InRoot.contains("changelogs") && InRoot["changelogs"].is_object())
+    // Verifications — strict validation per entry
+    for (size_t I = 0; I < InRoot["verifications"].size(); ++I)
     {
-        for (const auto &Item : InRoot["changelogs"].items())
+        const auto &VJ = InRoot["verifications"][I];
+        if (!VJ.is_object())
         {
-            if (Item.value().is_array())
-            {
-                std::vector<FChangeLogEntry> Entries;
-                for (const auto &EntryJson : Item.value())
-                {
-                    if (EntryJson.is_object())
-                    {
-                        Entries.push_back(DeserializeChangeLogEntry(EntryJson));
-                    }
-                }
-                OutBundle.mChangeLogs[Item.key()] = std::move(Entries);
-            }
+            OutError =
+                "verifications[" + std::to_string(I) + "]: expected object";
+            return false;
         }
-    }
-
-    // Verifications
-    if (InRoot.contains("verifications") && InRoot["verifications"].is_object())
-    {
-        for (const auto &Item : InRoot["verifications"].items())
-        {
-            if (Item.value().is_array())
-            {
-                std::vector<FVerificationEntry> Entries;
-                for (const auto &EntryJson : Item.value())
-                {
-                    if (EntryJson.is_object())
-                    {
-                        Entries.push_back(
-                            DeserializeVerificationEntry(EntryJson));
-                    }
-                }
-                OutBundle.mVerifications[Item.key()] = std::move(Entries);
-            }
-        }
+        FVerificationEntry Entry;
+        const std::string EntryCtx = "verifications[" + std::to_string(I) + "]";
+        if (!DeserializeVerificationStrict(VJ, Entry, EntryCtx, OutError))
+            return false;
+        OutBundle.mVerifications.push_back(std::move(Entry));
     }
 
     return true;
@@ -643,7 +628,7 @@ bool TryWriteTopicBundle(const FTopicBundle &InBundle, const fs::path &InPath,
 {
     try
     {
-        const JsonValue Root = SerializeTopicBundle(InBundle);
+        const JsonValue Root = SerializeTopicBundleV4(InBundle);
         const std::string Content = Root.dump(2);
 
         std::ofstream Stream(InPath, std::ios::out | std::ios::trunc);
@@ -698,16 +683,15 @@ bool TryReadTopicBundle(const fs::path &InPath, FTopicBundle &OutBundle,
             return false;
         }
 
-        // Check schema to distinguish bundle from single doc
+        // Only plan-v4 is supported
         const std::string Schema = GetString(Root, "$schema");
-        if (Schema.find("plan-bundle") == std::string::npos)
+        if (Schema != "plan-v4")
         {
-            OutError = "Not a plan-bundle file (schema: " + Schema +
-                       "): " + InPath.string();
+            OutError = "Unsupported schema '" + Schema +
+                       "' (expected plan-v4): " + InPath.string();
             return false;
         }
-
-        return DeserializeTopicBundle(Root, OutBundle, OutError);
+        return DeserializeTopicBundleV4(Root, OutBundle, OutError);
     }
     catch (const JsonValue::parse_error &Ex)
     {
@@ -720,5 +704,9 @@ bool TryReadTopicBundle(const fs::path &InPath, FTopicBundle &OutBundle,
         return false;
     }
 }
+
+// ---------------------------------------------------------------------------
+// V1 → V2 domain extraction
+// ---------------------------------------------------------------------------
 
 } // namespace UniPlan

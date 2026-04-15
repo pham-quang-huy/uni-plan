@@ -90,7 +90,9 @@ struct FWatchValidationSummary
     int mTotalChecks = 0;
     int mPassedChecks = 0;
     int mFailedChecks = 0;
-    int mCriticalFailures = 0;
+    int mErrorMajorCount = 0;
+    int mErrorMinorCount = 0;
+    int mWarningCount = 0;
     bool mbOk = true;
     std::vector<ValidateCheck> mFailedCheckDetails;
 };

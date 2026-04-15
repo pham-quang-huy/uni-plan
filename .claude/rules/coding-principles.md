@@ -1,6 +1,12 @@
 When writing or modifying C++ code in this repository, always follow these principles:
 
 1. **LONG-TERM FIX**: Never use workarounds, quick hacks, or backward-compat shims. Fix the root cause. If a bug is caused by a design flaw, fix the design — do not patch the caller.
+   - **DATA FIX GATE**: When data doesn't match expectations, STOP before writing any code. Answer these in order:
+     1. What is the semantic contract this field must uphold?
+     2. Which layer is producing the wrong value? (source doc, schema, extraction, serializer)
+     3. What should that layer guarantee instead?
+   - Only write code after identifying the responsible layer. Fix that layer — never add content-sniffing, pattern-matching, or fallback logic in the consumer.
+   - **Workaround smell**: any `if (value.find("..."))` that detects content to decide behavior is a workaround. Rewrite as a guarantee from the producer.
 2. **SOLID**: Single responsibility, open/closed, Liskov substitution, interface segregation, dependency inversion.
 3. **DOMAIN TYPES**: Use typed structs (F-prefix), enum classes (E-prefix) instead of raw strings, ints, bools, or untyped maps.
 4. **NO IF/ELSE HELL**: Replace long if/else chains with:

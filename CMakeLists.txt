@@ -36,10 +36,8 @@ add_executable(uni-plan
     Source/UniPlanOptionParsing.cpp
     Source/UniPlanJsonIO.cpp
     Source/UniPlanDocumentStore.cpp
-    Source/UniPlanMutation.cpp
-    Source/UniPlanCommandPlan.cpp
-    Source/UniPlanCommandEvidence.cpp
-    Source/UniPlanCommandSearch.cpp
+    Source/UniPlanSchemaValidation.cpp
+    Source/UniPlanCommandBundle.cpp
 )
 
 target_include_directories(uni-plan PRIVATE

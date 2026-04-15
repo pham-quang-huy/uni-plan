@@ -6,7 +6,9 @@ implicit_invocation: true
 
 # UPL Schema Audit
 
-Use this skill to audit the `Schemas/` directory for integrity and consistency.
+**Note**: Schema.md files are V3 legacy artifacts. They are still read by `uni-plan lint` for markdown document filename pattern validation, but are NOT used by V4 bundle validation (`ValidateAllBundles`). V4 validation is purely structural against `FTopicBundle` JSON data in `.Plan.json` files.
+
+Use this skill to audit the `Schemas/` directory for integrity and consistency (lint-only scope).
 
 ## Scope
 

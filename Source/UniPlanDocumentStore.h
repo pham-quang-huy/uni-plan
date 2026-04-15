@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UniPlanDocumentTypes.h"
+#include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
 #include <filesystem>
@@ -36,6 +37,21 @@ FSectionContent ResolveSectionFromDocument(const FDocument &InDocument,
 // Returns empty FStructuredTable with mTableID = -1 if not found.
 FStructuredTable ResolveTableFromDocument(const FDocument &InDocument,
                                           int InTableID);
+
+// Load a phase record from a playbook path (e.g.
+// "Docs/Plans/X.Plan.json#playbook:P1"). Uses the bundle
+// cache. Returns the FPhaseRecord directly — no table scanning.
+bool TryLoadPhaseRecord(const fs::path &InRepoRoot,
+                        const std::string &InPlaybookPath,
+                        FPhaseRecord &OutPhase, std::string &OutError);
+
+// Load a full FTopicBundle via the bundle cache. Path must be
+// a .Plan.json file (no fragment). Used by watch mode to extract
+// plan metadata (summary, goals, non-goals) from cached bundles.
+bool TryLoadTopicBundleCached(const fs::path &InRepoRoot,
+                              const std::string &InBundlePath,
+                              const FTopicBundle *&OutBundle,
+                              std::string &OutError);
 
 // Clear the in-memory bundle cache. Call between snapshot
 // rebuilds to pick up file changes.

@@ -32,7 +32,28 @@ static bool ParseBundlePath(const std::string &InPath, std::string &OutFilePath,
 }
 
 // ---------------------------------------------------------------------------
-// Extract sub-document from bundle by fragment
+// Synthesize helper — add a section from a V4 string field
+// ---------------------------------------------------------------------------
+
+static void AddSynthesizedSection(FDocument &OutDocument,
+                                  const std::string &InID,
+                                  const std::string &InContent)
+{
+    if (InContent.empty())
+    {
+        return;
+    }
+    FSectionContent Section;
+    Section.mSectionID = InID;
+    Section.mHeading = InID;
+    Section.mLevel = 2;
+    Section.mContent = InContent;
+    OutDocument.mSections[InID] = std::move(Section);
+}
+
+// ---------------------------------------------------------------------------
+// Extract sub-document from bundle by fragment.
+// Synthesizes FDocument from V4 domain fields.
 // ---------------------------------------------------------------------------
 
 static bool ExtractDocumentFromBundle(const FTopicBundle &InBundle,
@@ -41,119 +62,173 @@ static bool ExtractDocumentFromBundle(const FTopicBundle &InBundle,
 {
     if (InFragment == "plan")
     {
-        OutDocument = InBundle.mPlan;
+        OutDocument = FDocument{};
+        OutDocument.mIdentity.mType = EDocumentType::Plan;
+        OutDocument.mIdentity.mTopicKey = InBundle.mTopicKey;
+        const FPlanMetadata &Meta = InBundle.mMetadata;
+        OutDocument.mTitle = Meta.mTitle;
+        OutDocument.mStatus = PhaseStatusFromString(ToString(InBundle.mStatus));
+        OutDocument.mStatusRaw = ToString(InBundle.mStatus);
+        AddSynthesizedSection(OutDocument, "summary", Meta.mSummary);
+        AddSynthesizedSection(OutDocument, "goals_and_non_goals", Meta.mGoals);
+        AddSynthesizedSection(OutDocument, "risks", Meta.mRisks);
+        AddSynthesizedSection(OutDocument, "acceptance_criteria",
+                              Meta.mAcceptanceCriteria);
+        AddSynthesizedSection(OutDocument, "problem_statement",
+                              Meta.mProblemStatement);
+        AddSynthesizedSection(OutDocument, "validation_commands",
+                              Meta.mValidationCommands);
+        AddSynthesizedSection(OutDocument, "baseline_audit",
+                              Meta.mBaselineAudit);
+        AddSynthesizedSection(OutDocument, "execution_strategy",
+                              Meta.mExecutionStrategy);
+        AddSynthesizedSection(OutDocument, "locked_decisions",
+                              Meta.mLockedDecisions);
+        AddSynthesizedSection(OutDocument, "source_references",
+                              Meta.mSourceReferences);
+        AddSynthesizedSection(OutDocument, "dependencies", Meta.mDependencies);
+        AddSynthesizedSection(OutDocument, "next_actions",
+                              InBundle.mNextActions);
         return true;
     }
+
     if (InFragment == "implementation")
     {
-        OutDocument = InBundle.mImplementation;
+        OutDocument = FDocument{};
+        OutDocument.mIdentity.mType = EDocumentType::Implementation;
+        OutDocument.mIdentity.mTopicKey = InBundle.mTopicKey;
+        OutDocument.mTitle = InBundle.mMetadata.mTitle;
+        // Build a tracking table from phases
+        FSectionContent Section;
+        Section.mSectionID = "tracking";
+        Section.mHeading = "tracking";
+        Section.mLevel = 2;
+        FStructuredTable Table;
+        Table.mTableID = 0;
+        Table.mSectionID = "tracking";
+        Table.mHeaders = {"Phase", "Scope", "Status"};
+        for (size_t Index = 0; Index < InBundle.mPhases.size(); ++Index)
+        {
+            const FPhaseRecord &Phase = InBundle.mPhases[Index];
+            Table.mRows.push_back(
+                {FTableCell{std::to_string(Index)}, FTableCell{Phase.mScope},
+                 FTableCell{std::string(ToString(Phase.mLifecycle.mStatus))}});
+        }
+        Section.mTables.push_back(std::move(Table));
+        OutDocument.mSections["tracking"] = std::move(Section);
         return true;
     }
 
-    // playbook:<PhaseKey>
-    if (InFragment.substr(0, 9) == "playbook:")
+    // playbook:<PhaseIndex>
+    if (InFragment.size() > 9 && InFragment.substr(0, 9) == "playbook:")
     {
         const std::string PhaseKey = InFragment.substr(9);
-        const auto It = InBundle.mPlaybooks.find(PhaseKey);
-        if (It != InBundle.mPlaybooks.end())
+        int PhaseIndex = -1;
+        try
         {
-            OutDocument = It->second;
-            return true;
+            PhaseIndex = std::stoi(PhaseKey);
         }
-        return false;
+        catch (...)
+        {
+            return false;
+        }
+        if (PhaseIndex < 0 ||
+            PhaseIndex >= static_cast<int>(InBundle.mPhases.size()))
+        {
+            return false;
+        }
+        const FPhaseRecord &Phase =
+            InBundle.mPhases[static_cast<size_t>(PhaseIndex)];
+        OutDocument = FDocument{};
+        OutDocument.mIdentity.mType = EDocumentType::Playbook;
+        OutDocument.mIdentity.mTopicKey = InBundle.mTopicKey;
+        OutDocument.mTitle = Phase.mScope;
+        const std::string PhaseStatusStr(ToString(Phase.mLifecycle.mStatus));
+        OutDocument.mStatus = PhaseStatusFromString(PhaseStatusStr);
+        OutDocument.mStatusRaw = PhaseStatusStr;
+        AddSynthesizedSection(OutDocument, "scope", Phase.mScope);
+        AddSynthesizedSection(OutDocument, "output", Phase.mOutput);
+        AddSynthesizedSection(OutDocument, "investigation",
+                              Phase.mDesign.mInvestigation);
+        AddSynthesizedSection(OutDocument, "code_snippets",
+                              Phase.mDesign.mCodeSnippets);
+        AddSynthesizedSection(OutDocument, "dependencies", Phase.mDesign.mDependencies);
+        AddSynthesizedSection(OutDocument, "readiness_gate",
+                              Phase.mDesign.mReadinessGate);
+        AddSynthesizedSection(OutDocument, "handoff", Phase.mDesign.mHandoff);
+        AddSynthesizedSection(OutDocument, "validation_commands",
+                              Phase.mDesign.mValidationCommands);
+        return true;
     }
 
-    // changelog:<owner>  (owner = "plan", "implementation",
-    //                      or phase key like "P1")
-    if (InFragment.substr(0, 10) == "changelog:")
+    // changelog:<phase>
+    if (InFragment.size() >= 10 && InFragment.substr(0, 10) == "changelog:")
     {
         const std::string Owner = InFragment.substr(10);
-        const auto It = InBundle.mChangeLogs.find(Owner);
-        if (It != InBundle.mChangeLogs.end())
+        OutDocument = FDocument{};
+        OutDocument.mIdentity.mType = EDocumentType::ChangeLog;
+        OutDocument.mIdentity.mTopicKey = InBundle.mTopicKey;
+        FSectionContent Section;
+        Section.mSectionID = "entries";
+        Section.mHeading = "entries";
+        Section.mLevel = 2;
+        FStructuredTable Table;
+        Table.mTableID = 0;
+        Table.mSectionID = "entries";
+        Table.mHeaders = {"Date", "Change", "Files"};
+        bool Found = false;
+        for (const FChangeLogEntry &Entry : InBundle.mChangeLogs)
         {
-            // Build a synthetic FDocument with entries table
-            OutDocument = FDocument{};
-            OutDocument.mIdentity.mType = EDocumentType::ChangeLog;
-            OutDocument.mIdentity.mTopicKey = InBundle.mTopicKey;
-            FSectionContent Section;
-            Section.mSectionID = "entries";
-            Section.mHeading = "entries";
-            Section.mLevel = 2;
-            FStructuredTable Table;
-            Table.mTableID = 0;
-            Table.mSectionID = "entries";
-            Table.mHeaders = {"Date", "Change", "Files", "Evidence"};
-            for (const FChangeLogEntry &Entry : It->second)
-            {
-                Table.mRows.push_back(
-                    {FTableCell{Entry.mDate}, FTableCell{Entry.mChange},
-                     FTableCell{Entry.mFiles}, FTableCell{Entry.mEvidence}});
-            }
-            Section.mTables.push_back(std::move(Table));
-            OutDocument.mSections["entries"] = std::move(Section);
-            return true;
+            const std::string PhaseStr =
+                Entry.mPhase < 0 ? "" : std::to_string(Entry.mPhase);
+            if (PhaseStr != Owner)
+                continue;
+            Found = true;
+            Table.mRows.push_back({FTableCell{Entry.mDate},
+                                   FTableCell{Entry.mChange},
+                                   FTableCell{Entry.mAffected}});
         }
-        return false;
+        if (!Found)
+            return false;
+        Section.mTables.push_back(std::move(Table));
+        OutDocument.mSections["entries"] = std::move(Section);
+        return true;
     }
 
-    // verification:<owner>
-    if (InFragment.substr(0, 13) == "verification:")
+    // verification:<phase>
+    if (InFragment.size() >= 13 && InFragment.substr(0, 13) == "verification:")
     {
         const std::string Owner = InFragment.substr(13);
-        const auto It = InBundle.mVerifications.find(Owner);
-        if (It != InBundle.mVerifications.end())
+        OutDocument = FDocument{};
+        OutDocument.mIdentity.mType = EDocumentType::Verification;
+        OutDocument.mIdentity.mTopicKey = InBundle.mTopicKey;
+        FSectionContent Section;
+        Section.mSectionID = "entries";
+        Section.mHeading = "entries";
+        Section.mLevel = 2;
+        FStructuredTable Table;
+        Table.mTableID = 0;
+        Table.mSectionID = "entries";
+        Table.mHeaders = {"Date", "Check", "Result", "Detail"};
+        bool Found = false;
+        for (const FVerificationEntry &Entry : InBundle.mVerifications)
         {
-            OutDocument = FDocument{};
-            OutDocument.mIdentity.mType = EDocumentType::Verification;
-            OutDocument.mIdentity.mTopicKey = InBundle.mTopicKey;
-            FSectionContent Section;
-            Section.mSectionID = "entries";
-            Section.mHeading = "entries";
-            Section.mLevel = 2;
-            FStructuredTable Table;
-            Table.mTableID = 0;
-            Table.mSectionID = "entries";
-            Table.mHeaders = {"Date", "Check", "Result", "Detail"};
-            for (const FVerificationEntry &Entry : It->second)
-            {
-                Table.mRows.push_back(
-                    {FTableCell{Entry.mDate}, FTableCell{Entry.mCheck},
-                     FTableCell{Entry.mResult}, FTableCell{Entry.mDetail}});
-            }
-            Section.mTables.push_back(std::move(Table));
-            OutDocument.mSections["entries"] = std::move(Section);
-            return true;
+            const std::string PhaseStr =
+                Entry.mPhase < 0 ? "" : std::to_string(Entry.mPhase);
+            if (PhaseStr != Owner)
+                continue;
+            Found = true;
+            Table.mRows.push_back(
+                {FTableCell{Entry.mDate}, FTableCell{Entry.mCheck},
+                 FTableCell{Entry.mResult}, FTableCell{Entry.mDetail}});
         }
-        return false;
-    }
-
-    return false;
-}
-
-// ---------------------------------------------------------------------------
-// Update sub-document within bundle by fragment
-// ---------------------------------------------------------------------------
-
-static bool UpdateDocumentInBundle(FTopicBundle &InOutBundle,
-                                   const std::string &InFragment,
-                                   const FDocument &InDocument)
-{
-    if (InFragment == "plan")
-    {
-        InOutBundle.mPlan = InDocument;
+        if (!Found)
+            return false;
+        Section.mTables.push_back(std::move(Table));
+        OutDocument.mSections["entries"] = std::move(Section);
         return true;
     }
-    if (InFragment == "implementation")
-    {
-        InOutBundle.mImplementation = InDocument;
-        return true;
-    }
-    if (InFragment.substr(0, 9) == "playbook:")
-    {
-        const std::string PhaseKey = InFragment.substr(9);
-        InOutBundle.mPlaybooks[PhaseKey] = InDocument;
-        return true;
-    }
+
     return false;
 }
 
@@ -207,7 +282,13 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
 
     if (Ext == ".json")
     {
-        return TryReadDocumentJson(AbsPath, OutDocument, OutError);
+        // Read as bundle and synthesize plan document
+        FTopicBundle Bundle;
+        if (!TryReadTopicBundle(AbsPath, Bundle, OutError))
+        {
+            return false;
+        }
+        return ExtractDocumentFromBundle(Bundle, "plan", OutDocument);
     }
 
     if (Ext == ".md")
@@ -296,6 +377,35 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
                 }
             }
 
+            // Collect free-text content (skip tables, headings,
+            // and pipe-delimited rows that look like tables)
+            std::string ContentText;
+            for (int L = ContentStart; L <= SectionEnd; ++L)
+            {
+                if (TableLineSet.count(L) > 0)
+                    continue;
+                if (HeadingLineSet.count(L) > 0)
+                    continue;
+                const std::string &Line = Lines[static_cast<size_t>(L)];
+                const std::string Trimmed = Trim(Line);
+                if (Trimmed.empty())
+                    continue;
+                // Skip pipe-delimited lines (informal tables)
+                if (Trimmed.front() == '|')
+                    continue;
+                // Skip heading-formatted lines
+                if (Trimmed.front() == '#')
+                    continue;
+                // Skip horizontal rules
+                if (Trimmed.substr(0, 3) == "---" ||
+                    Trimmed.substr(0, 3) == "===")
+                    continue;
+                if (!ContentText.empty())
+                    ContentText += "\n";
+                ContentText += Trimmed;
+            }
+            Section.mContent = std::move(ContentText);
+
             // Collect subsection IDs
             for (size_t SI = HI + 1; SI < Headings.size(); ++SI)
             {
@@ -335,57 +445,14 @@ bool TrySaveDocument(const fs::path &InRepoRoot, const FDocument &InDocument,
 
     if (ParseBundlePath(FullPath, FilePath, Fragment))
     {
-        // Read existing bundle, update sub-doc, write back
-        const fs::path AbsPath = InRepoRoot / FilePath;
-        FTopicBundle Bundle;
-
-        // Read existing or create empty
-        if (fs::exists(AbsPath))
-        {
-            if (!TryReadTopicBundle(AbsPath, Bundle, OutError))
-            {
-                return false;
-            }
-        }
-
-        if (!UpdateDocumentInBundle(Bundle, Fragment, InDocument))
-        {
-            OutError = "Cannot update fragment: " + Fragment;
-            return false;
-        }
-
-        // Update bundle-level status from plan
-        if (Fragment == "plan")
-        {
-            Bundle.mStatus = ToString(InDocument.mStatus);
-        }
-
-        // Ensure parent directory
-        const fs::path ParentDir = AbsPath.parent_path();
-        std::error_code DirError;
-        fs::create_directories(ParentDir, DirError);
-        if (DirError)
-        {
-            OutError = "Failed to create directory: " + ParentDir.string();
-            return false;
-        }
-
-        return TryWriteTopicBundle(Bundle, AbsPath, OutError);
-    }
-
-    // No fragment — write as single-doc JSON
-    const fs::path AbsPath = InRepoRoot / FullPath;
-
-    const fs::path ParentDir = AbsPath.parent_path();
-    std::error_code DirError;
-    fs::create_directories(ParentDir, DirError);
-    if (DirError)
-    {
-        OutError = "Failed to create directory: " + ParentDir.string();
+        OutError = "FDocument save via fragment path is no longer "
+                   "supported — use typed V4 mutation APIs";
         return false;
     }
 
-    return TryWriteDocumentJson(InDocument, AbsPath, OutError);
+    OutError = "FDocument save without fragment path is no longer "
+               "supported — use TryWriteTopicBundle directly";
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +499,86 @@ FStructuredTable ResolveTableFromDocument(const FDocument &InDocument,
     FStructuredTable Empty;
     Empty.mTableID = -1;
     return Empty;
+}
+
+// ---------------------------------------------------------------------------
+// TryLoadPhaseRecord — load phase directly from bundle cache
+// ---------------------------------------------------------------------------
+
+bool TryLoadPhaseRecord(const fs::path &InRepoRoot,
+                        const std::string &InPlaybookPath,
+                        FPhaseRecord &OutPhase, std::string &OutError)
+{
+    std::string FilePath;
+    std::string Fragment;
+
+    if (!ParseBundlePath(InPlaybookPath, FilePath, Fragment))
+    {
+        OutError = "Not a fragment path: " + InPlaybookPath;
+        return false;
+    }
+
+    // Extract phase key from "playbook:P1"
+    if (Fragment.substr(0, 9) != "playbook:")
+    {
+        OutError = "Not a playbook fragment: " + Fragment;
+        return false;
+    }
+    const std::string PhaseKey = Fragment.substr(9);
+
+    // Load bundle (cache-aware)
+    const std::string CacheKey = InRepoRoot.string() + "/" + FilePath;
+    auto CacheIt = sBundleCache.find(CacheKey);
+    if (CacheIt == sBundleCache.end())
+    {
+        const fs::path AbsPath = InRepoRoot / FilePath;
+        FTopicBundle Bundle;
+        if (!TryReadTopicBundle(AbsPath, Bundle, OutError))
+        {
+            return false;
+        }
+        CacheIt = sBundleCache.emplace(CacheKey, std::move(Bundle)).first;
+    }
+
+    // Find phase by index (parse "P<N>" key → array index)
+    const FTopicBundle &Bundle = CacheIt->second;
+    if (PhaseKey.size() >= 2 && PhaseKey[0] == 'P')
+    {
+        int Idx = std::atoi(PhaseKey.c_str() + 1);
+        if (Idx >= 0 && static_cast<size_t>(Idx) < Bundle.mPhases.size())
+        {
+            OutPhase = Bundle.mPhases[static_cast<size_t>(Idx)];
+            return true;
+        }
+    }
+
+    OutError = "Phase not found: " + PhaseKey;
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// TryLoadTopicBundleCached — cache-aware full bundle access
+// ---------------------------------------------------------------------------
+
+bool TryLoadTopicBundleCached(const fs::path &InRepoRoot,
+                              const std::string &InBundlePath,
+                              const FTopicBundle *&OutBundle,
+                              std::string &OutError)
+{
+    const std::string CacheKey = InRepoRoot.string() + "/" + InBundlePath;
+    auto CacheIt = sBundleCache.find(CacheKey);
+    if (CacheIt == sBundleCache.end())
+    {
+        const fs::path AbsPath = InRepoRoot / InBundlePath;
+        FTopicBundle Bundle;
+        if (!TryReadTopicBundle(AbsPath, Bundle, OutError))
+        {
+            return false;
+        }
+        CacheIt = sBundleCache.emplace(CacheKey, std::move(Bundle)).first;
+    }
+    OutBundle = &CacheIt->second;
+    return true;
 }
 
 } // namespace UniPlan

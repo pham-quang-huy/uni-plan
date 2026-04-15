@@ -54,353 +54,201 @@ void PrintUsage()
     std::cout << "Usage:\n";
     std::cout << "  uni-plan --version\n";
     std::cout << "  uni-plan --help\n";
-    std::cout << "  uni-plan list --type <plan|playbook|implementation|pair> "
-                 "[--status <[!]filter>] [--repo-root <path>]\n";
-    std::cout << "  uni-plan phase [list] --topic <topic|path> [--status "
-                 "<[!]filter>] [--repo-root <path>]\n";
-    std::cout << "  uni-plan phase list [--status <[!]filter>] [--repo-root "
-                 "<path>]\n";
-    std::cout << "  uni-plan lint [--repo-root <path>] [--fail-on-warning]\n";
-    std::cout << "  uni-plan inventory [--repo-root <path>]\n";
-    std::cout << "  uni-plan orphan-check [--repo-root <path>]\n";
-    std::cout
-        << "  uni-plan artifacts --topic <topic|path> [--type "
-           "<all|plan|playbook|implementation|sidecar>] [--repo-root <path>]\n";
-    std::cout << "  uni-plan changelog --topic <topic|path> --for "
-                 "<plan|implementation|playbook> [--phase <phase-key>] "
+    std::cout << "\n";
+    std::cout << "Query commands (read from .Plan.json "
+                 "bundles):\n";
+    std::cout << "  uni-plan topic list [--status <filter>] "
                  "[--repo-root <path>]\n";
-    std::cout << "  uni-plan verification --topic <topic|path> --for "
-                 "<plan|implementation|playbook> [--phase <phase-key>] "
+    std::cout << "  uni-plan topic get --topic <topic> "
                  "[--repo-root <path>]\n";
-    std::cout << "  uni-plan schema --type "
-                 "<doc|plan|playbook|implementation|changelog|verification> "
+    std::cout << "  uni-plan phase list --topic <topic> "
+                 "[--status <filter>] [--repo-root <path>]\n";
+    std::cout << "  uni-plan phase get --topic <topic> "
+                 "--phase <index> [--brief|--execution|"
+                 "--reference] [--repo-root <path>]\n";
+    std::cout << "  uni-plan changelog --topic <topic> "
+                 "[--phase <N>] "
                  "[--repo-root <path>]\n";
-    std::cout << "  uni-plan rules [--repo-root <path>]\n";
-    std::cout << "  uni-plan validate [--repo-root <path>] [--strict]\n";
-    std::cout << "  uni-plan section resolve --doc <path> --section "
-                 "<section-id|heading> [--repo-root <path>]\n";
-    std::cout << "  uni-plan section schema [--type "
-                 "<doc|plan|playbook|implementation|changelog|verification>] "
+    std::cout << "  uni-plan verification --topic <topic> "
+                 "[--phase <N>] "
                  "[--repo-root <path>]\n";
-    std::cout
-        << "  uni-plan section content --doc <path> --id <section-id|heading> "
-           "[--line-char-limit <n>] [--repo-root <path>]\n";
-    std::cout
-        << "  uni-plan section list [--doc <path>] [--count] [--repo-root "
-           "<path>]\n";
-    std::cout
-        << "  uni-plan excerpt --doc <path> --section <section-id|heading> "
-           "[--context-lines <n>] [--repo-root <path>]\n";
-    std::cout << "  uni-plan table list --doc <path> [--repo-root <path>]\n";
-    std::cout
-        << "  uni-plan table get --doc <path> --table-id <id> [--repo-root "
-           "<path>]\n";
-    std::cout << "  uni-plan graph --topic <topic|path> [--depth <n>] "
+    std::cout << "  uni-plan timeline --topic <topic> "
+                 "[--since <yyyy-mm-dd>] "
                  "[--repo-root <path>]\n";
-    std::cout << "  uni-plan diagnose drift [--repo-root <path>]\n";
-    std::cout << "  uni-plan timeline --topic <topic|path> [--since "
-                 "<yyyy-mm-dd>] [--repo-root <path>]\n";
-    std::cout
-        << "  uni-plan blockers [--status <open|blocked|all>] [--repo-root "
-           "<path>]\n";
-    std::cout << "  uni-plan cache [info] [--repo-root <path>]\n";
-    std::cout << "  uni-plan cache clear [--repo-root <path>]\n";
-    std::cout
-        << "  uni-plan cache config --dir <path> [--enabled <true|false>] "
-           "[--verbose <true|false>]\n";
+    std::cout << "  uni-plan blockers [--topic <topic>] "
+                 "[--repo-root <path>]\n";
+    std::cout << "  uni-plan validate [--topic <topic>] "
+                 "[--repo-root <path>]\n";
+    std::cout << "\n";
+    std::cout << "Mutation commands (write to .Plan.json "
+                 "bundles):\n";
+    std::cout << "  uni-plan topic set --topic <topic> "
+                 "[--status <status>] [--next-actions "
+                 "<text>]\n";
+    std::cout << "  uni-plan phase set --topic <topic> "
+                 "--phase <index> [--status <status>] "
+                 "[--done <text>] [--remaining <text>] "
+                 "[--blockers <text>] [--context <text>]\n";
+    std::cout << "  uni-plan job set --topic <topic> "
+                 "--phase <index> --job <index> --status "
+                 "<status>\n";
+    std::cout << "  uni-plan task set --topic <topic> "
+                 "--phase <index> --job <index> --task "
+                 "<index> [--status <status>] [--evidence "
+                 "<text>] [--notes <text>]\n";
+    std::cout << "  uni-plan changelog add --topic <topic> "
+                 "--change <text> [--scope <N>] "
+                 "[--type <feat|fix|refactor|chore>] "
+                 "[--evidence <text>]\n";
+    std::cout << "  uni-plan verification add --topic "
+                 "<topic> --check <text> [--scope "
+                 "<N>] [--result <text>] [--detail "
+                 "<text>]\n";
+    std::cout << "\n";
+    std::cout << "Utility:\n";
+    std::cout << "  uni-plan cache [info|clear|config] "
+                 "[--repo-root <path>]\n";
+    std::cout << "  uni-plan watch [--repo-root <path>]\n";
+    std::cout << "\n";
     std::cout << "Output is JSON by default.\n";
     std::cout << "Global options:\n";
-    std::cout << "  --human       Output formatted tables with ANSI color for "
-                 "terminal reading.\n";
-    std::cout << "  --no-cache    Disable persisted inventory cache for this "
-                 "invocation.\n";
+    std::cout << "  --human       Formatted ANSI tables\n";
+    std::cout << "  --repo-root   Override repository root "
+                 "path\n";
 }
 
 // FCommandHelpEntry + kHuman* constants moved to DocTypes.h
 
 static const FCommandHelpEntry kCommandHelp[] = {
-    {"list",
-     "Usage: uni-plan list --type <plan|playbook|implementation|pair> "
-     "[options]\n\n",
-     "List discovered documents of a given type.\n\n",
-     "Required:\n"
-     "  --type <type>           Document type: plan, playbook, implementation, "
-     "pair\n\n",
-     "  --status <filter>       Filter by status. Prefix with ! to exclude "
-     "(e.g. !completed).\n"
-     "                          Values: "
-     "all|not_started|in_progress|completed|closed|blocked|canceled|unknown "
-     "[default: all]\n",
+    {"topic",
+     "Usage:\n"
+     "  uni-plan topic list [--status <filter>]\n"
+     "  uni-plan topic get --topic <topic>\n"
+     "  uni-plan topic set --topic <topic> [--status <s>] "
+     "[--next-actions <text>]\n\n",
+     "List, inspect, or update plan topics.\n\n", nullptr,
+     "  --status <filter>       Filter topics by status\n"
+     "  --next-actions <text>   Set next actions (set only)\n",
      kHumanTable,
      "Examples:\n"
-     "  uni-plan list --type plan\n"
-     "  uni-plan list --type plan --status in_progress\n"
-     "  uni-plan list --type plan --status !completed\n"
-     "  uni-plan list --type pair --status completed\n"
-     "  uni-plan list --type playbook --human\n"},
-    // "phase" is special-cased in PrintCommandUsage (multi-mode layout)
-    {"lint", "Usage: uni-plan lint [options]\n\n",
-     "Run documentation lint checks on the repository.\n\n", nullptr,
-     "  --fail-on-warning       Exit with code 1 if any warnings are found\n"
-     "  --strict                Alias for --fail-on-warning\n",
-     kHumanList,
-     "Examples:\n"
-     "  uni-plan lint\n"
-     "  uni-plan lint --strict\n"},
-    {"inventory", "Usage: uni-plan inventory [options]\n\n",
-     "List all discovered documentation files with metadata.\n\n", nullptr,
-     nullptr, kHumanTable,
-     "Examples:\n"
-     "  uni-plan inventory\n"
-     "  uni-plan inventory\n"},
-    {"orphan-check", "Usage: uni-plan orphan-check [options]\n\n",
-     "Find documentation files not linked to any known topic.\n\n", nullptr,
-     nullptr, kHumanList,
-     "Examples:\n"
-     "  uni-plan orphan-check\n"
-     "  uni-plan orphan-check\n"},
-    {"artifacts",
-     "Usage: uni-plan artifacts --topic <topic|path> [options]\n\n",
-     "Show all artifacts (plan, playbook, implementation, sidecar) for a "
-     "topic.\n\n",
+     "  uni-plan topic list --status in_progress\n"
+     "  uni-plan topic get --topic MultiPlatforming\n"
+     "  uni-plan topic set --topic X --status completed\n"},
+    {"phase",
+     "Usage:\n"
+     "  uni-plan phase list --topic <topic> [--status <filter>]\n"
+     "  uni-plan phase get --topic <topic> --phase <N> "
+     "[--brief|--execution|--reference]\n"
+     "  uni-plan phase set --topic <topic> --phase <N> "
+     "[--status <s>] [--done <text>] [--remaining <text>] "
+     "[--blockers <text>] [--context <text>]\n\n",
+     "List, inspect, or update phases within a topic.\n\n",
      "Required:\n"
-     "  --topic <topic|path>    Topic key or plan file path\n\n",
-     "  --type <filter>         Filter: "
-     "all|plan|playbook|implementation|sidecar [default: all]\n",
-     kHumanList,
+     "  --topic <topic>         Topic key\n"
+     "  --phase <N>             Phase index (integer)\n\n",
+     "  --brief                 Compact view for session resume\n"
+     "  --execution             Jobs/tasks only (no reference "
+     "material)\n"
+     "  --reference             Design material only (no "
+     "execution state)\n"
+     "  --context <text>        Agent continuation prompt\n",
+     kHumanTable,
      "Examples:\n"
-     "  uni-plan artifacts --topic DOC-TOOL-CLI-SCHEMA\n"
-     "  uni-plan artifacts --topic DOC-TOOL-CLI-SCHEMA --type playbook\n"},
+     "  uni-plan phase list --topic MultiPlatforming\n"
+     "  uni-plan phase get --topic X --phase 6 --brief\n"
+     "  uni-plan phase set --topic X --phase 6 --status "
+     "in_progress\n"},
+    {"job",
+     "Usage:\n"
+     "  uni-plan job set --topic <topic> --phase <N> --job "
+     "<J> --status <status>\n\n",
+     "Update job status within a phase.\n\n",
+     "Required:\n"
+     "  --topic, --phase, --job, --status\n\n",
+     nullptr, nullptr,
+     "Examples:\n"
+     "  uni-plan job set --topic X --phase 2 --job 0 "
+     "--status completed\n"},
+    {"task",
+     "Usage:\n"
+     "  uni-plan task set --topic <topic> --phase <N> --job "
+     "<J> --task <T> [--status <s>] [--evidence <text>] "
+     "[--notes <text>]\n\n",
+     "Update task status and evidence within a job.\n\n",
+     "Required:\n"
+     "  --topic, --phase, --job, --task\n\n",
+     "  --evidence <text>       Completion proof\n"
+     "  --notes <text>          Agent working notes\n",
+     nullptr,
+     "Examples:\n"
+     "  uni-plan task set --topic X --phase 2 --job 0 "
+     "--task 1 --status completed --evidence 'commit "
+     "abc'\n"},
     {"changelog",
-     "Usage: uni-plan changelog --topic <topic|path> --for "
-     "<plan|implementation|playbook> [options]\n\n",
-     "Show changelog entries for a topic's document.\n\n",
+     "Usage:\n"
+     "  uni-plan changelog --topic <topic> [--phase "
+     "<N>]\n"
+     "  uni-plan changelog add --topic <topic> --change "
+     "<text> [--scope <N>] [--type "
+     "<feat|fix|refactor|chore>] [--evidence <text>]\n\n",
+     "Query or append changelog entries.\n\n",
      "Required:\n"
-     "  --topic <topic|path>    Topic key or plan file path\n"
-     "  --for <type>            Document type: plan, implementation, "
-     "playbook\n\n",
-     "  --phase <phase-key>     Required when --for playbook\n", kHumanList,
+     "  --topic <topic>         Topic key\n\n",
+     "  --phase/--scope         Filter by phase index or "
+     "'plan' or phase index\n"
+     "  --type                  Change type (add only)\n",
+     kHumanTable,
      "Examples:\n"
-     "  uni-plan changelog --topic DOC-TOOL-CLI-SCHEMA --for plan\n"
-     "  uni-plan changelog --topic DOC-TOOL-CLI-SCHEMA --for playbook --phase "
-     "P9\n"},
+     "  uni-plan changelog --topic X --phase 2\n"
+     "  uni-plan changelog add --topic X --scope 2 "
+     "--change 'Implemented feature' --type feat\n"},
     {"verification",
-     "Usage: uni-plan verification --topic <topic|path> --for "
-     "<plan|implementation|playbook> [options]\n\n",
-     "Show verification entries for a topic's document.\n\n",
+     "Usage:\n"
+     "  uni-plan verification --topic <topic> [--phase "
+     "<N>]\n"
+     "  uni-plan verification add --topic <topic> --check "
+     "<text> [--scope <N>] [--result <text>]\n\n",
+     "Query or append verification entries.\n\n",
      "Required:\n"
-     "  --topic <topic|path>    Topic key or plan file path\n"
-     "  --for <type>            Document type: plan, implementation, "
-     "playbook\n\n",
-     "  --phase <phase-key>     Required when --for playbook\n", kHumanList,
-     "Examples:\n"
-     "  uni-plan verification --topic DOC-TOOL-CLI-SCHEMA --for plan\n"
-     "  uni-plan verification --topic DOC-TOOL-CLI-SCHEMA --for playbook "
-     "--phase P8\n"},
-    {"schema",
-     "Usage: uni-plan schema --type "
-     "<doc|plan|playbook|implementation|changelog|verification> "
-     "[options]\n\n",
-     "Show the expected section schema for a document type.\n\n",
-     "Required:\n"
-     "  --type <type>           Schema type: doc, plan, playbook, "
-     "implementation\n\n",
-     nullptr, kHumanList,
-     "Examples:\n"
-     "  uni-plan schema --type plan\n"
-     "  uni-plan schema --type playbook --human\n"
-     "  uni-plan schema --type doc\n"},
-    {"rules", "Usage: uni-plan rules [options]\n\n",
-     "List documentation governance rules with provenance.\n\n", nullptr,
-     nullptr, kHumanTable,
-     "Examples:\n"
-     "  uni-plan rules\n"
-     "  uni-plan rules\n"},
-    {"validate", "Usage: uni-plan validate [options]\n\n",
-     "Run validation checks on documentation structure and lifecycle.\n\n",
-     nullptr, "  --strict                Fail (exit 1) on any check failure\n",
+     "  --topic <topic>         Topic key\n\n",
+     "  --scope                 Filter by phase index or "
+     "'plan'\n",
      kHumanTable,
      "Examples:\n"
-     "  uni-plan validate\n"
-     "  uni-plan validate --strict\n"},
-    {"excerpt",
-     "Usage: uni-plan excerpt --doc <path> --section <section-id|heading> "
-     "[options]\n\n",
-     "Extract the source text of a section from a document.\n\n",
+     "  uni-plan verification --topic X\n"
+     "  uni-plan verification add --topic X --scope 2 "
+     "--check 'build passes' --result pass\n"},
+    {"timeline",
+     "Usage: uni-plan timeline --topic <topic> [--since "
+     "<yyyy-mm-dd>]\n\n",
+     "Chronological timeline of changelog + verification "
+     "entries.\n\n",
      "Required:\n"
-     "  --doc <path>            Document file path\n"
-     "  --section <id|heading>  Section identifier or heading text\n\n",
-     "  --context-lines <n>     Number of context lines around the section "
-     "[default: 0]\n",
-     kHumanDisplay,
-     "Examples:\n"
-     "  uni-plan excerpt --doc Tools/Doc/Docs/Plans/DocToolCliSchema.Plan.md "
-     "--section summary\n"
-     "  uni-plan excerpt --doc Tools/Doc/Docs/Plans/DocToolCliSchema.Plan.md "
-     "--section summary\n"},
-    {"graph", "Usage: uni-plan graph --topic <topic|path> [options]\n\n",
-     "Show the document dependency graph for a topic.\n\n",
-     "Required:\n"
-     "  --topic <topic|path>    Topic key or plan file path\n\n",
-     "  --depth <n>             Maximum traversal depth [default: unlimited]\n",
-     kHumanTables,
-     "Examples:\n"
-     "  uni-plan graph --topic DOC-TOOL-CLI-SCHEMA\n"
-     "  uni-plan graph --topic DOC-TOOL-CLI-SCHEMA --depth 2\n"},
-    {"diagnose", "Usage: uni-plan diagnose drift [options]\n\n",
-     "Detect documentation drift across the repository.\n\n", nullptr, nullptr,
+     "  --topic <topic>         Topic key\n\n",
+     "  --since <date>          Only show entries after "
+     "this date\n",
      kHumanTable,
      "Examples:\n"
-     "  uni-plan diagnose drift\n"
-     "  uni-plan diagnose drift\n"},
-    {"timeline", "Usage: uni-plan timeline --topic <topic|path> [options]\n\n",
-     "Show the chronological timeline of changes for a topic.\n\n",
-     "Required:\n"
-     "  --topic <topic|path>    Topic key or plan file path\n\n",
-     "  --since <yyyy-mm-dd>    Only show entries after this date\n",
-     kHumanTable,
-     "Examples:\n"
-     "  uni-plan timeline --topic DOC-TOOL-CLI-SCHEMA\n"
-     "  uni-plan timeline --topic DOC-TOOL-CLI-SCHEMA --since 2026-02-20\n"},
-    {"blockers", "Usage: uni-plan blockers [options]\n\n",
-     "List blocking items across all topics.\n\n", nullptr,
-     "  --status <filter>       Filter by status. Prefix with ! to exclude "
-     "(e.g. !open).\n"
-     "                          Values: all|open|blocked [default: all]\n",
-     kHumanTable,
+     "  uni-plan timeline --topic MultiPlatforming\n"
+     "  uni-plan timeline --topic X --since 2026-04-01\n"},
+    {"blockers", "Usage: uni-plan blockers [--topic <topic>]\n\n",
+     "List phases with blocked status or non-trivial "
+     "blockers.\n\n",
+     nullptr, "  --topic <topic>         Filter to single topic\n", kHumanTable,
      "Examples:\n"
      "  uni-plan blockers\n"
-     "  uni-plan blockers --status !blocked\n"},
+     "  uni-plan blockers --topic MultiPlatforming\n"},
+    {"validate", "Usage: uni-plan validate [--topic <topic>]\n\n",
+     "Validate .Plan.json bundles against schema.\n\n", nullptr,
+     "  --topic <topic>         Validate single topic\n", kHumanTable,
+     "Examples:\n"
+     "  uni-plan validate\n"
+     "  uni-plan validate --topic MultiPlatforming\n"},
 };
 
 void PrintCommandUsage(const std::string &InCommand)
 {
-    // Special-case: section (multi-subcommand layout)
-    if (InCommand == "section")
-    {
-        std::cout
-            << "Subcommands:\n"
-               "  uni-plan section resolve --doc <path> --section <id|heading> "
-               "[options]\n"
-               "  uni-plan section schema  [--type "
-               "<doc|plan|playbook|implementation|changelog|verification>] "
-               "[options]\n"
-               "  uni-plan section content --doc <path> --id <id|heading> "
-               "[--line-char-limit <n>] [options]\n"
-               "  uni-plan section list    [--doc <path>] [--count] "
-               "[options]\n\n"
-               "section resolve: Resolve a section heading to its location in "
-               "a "
-               "document.\n"
-               "section schema:  List canonical sections for a document type.\n"
-               "section content: Extract section content with optional table "
-               "rendering.\n"
-               "section list:    List sections across all docs or for a single "
-               "document.\n\n"
-               "Options (resolve):\n"
-               "  --doc <path>            Document file path (required)\n"
-               "  --section <id|heading>  Section identifier or heading text "
-               "(required)\n\n"
-               "Options (schema):\n"
-               "  --type "
-               "<doc|plan|playbook|implementation|changelog|verification> "
-               "Schema type "
-               "[default: "
-               "doc]\n\n"
-               "Options (content):\n"
-               "  --doc <path>            Document file path (required)\n"
-               "  --id <id|heading>       Section identifier or heading text "
-               "(required)\n"
-               "  --line-char-limit <n>   Truncate each line to n characters "
-               "(0=unlimited)\n\n"
-               "Options (list):\n"
-               "  --doc <path>            Document file path (omit to scan all "
-               "docs)\n"
-               "  --count                 Show occurrence counts (inventory "
-               "mode)\n\n"
-               "Common options:\n"
-               "  --human                 Output as formatted ANSI display "
-               "(renders tables)\n"
-               "  --repo-root <path>      Override repository root\n\n"
-               "Examples:\n"
-               "  uni-plan section resolve --doc "
-               "Docs/Plans/AudioSFXSystem.Plan.md "
-               "--section summary\n"
-               "  uni-plan section schema --type playbook --human\n"
-               "  uni-plan section schema --type plan --human\n"
-               "  uni-plan section content --doc "
-               "Docs/Plans/AudioSFXSystem.Plan.md "
-               "--id summary --human\n"
-               "  uni-plan section content --doc "
-               "Docs/Plans/AudioSFXSystem.Plan.md "
-               "--id implementation_phases --human --line-char-limit 80\n"
-               "  uni-plan section list --count --human\n"
-               "  uni-plan section list --doc "
-               "Docs/Plans/AudioSFXSystem.Plan.md "
-               "--human\n";
-        return;
-    }
-    // Special-case: table (multi-subcommand layout)
-    if (InCommand == "table")
-    {
-        std::cout
-            << "Subcommands:\n"
-               "  uni-plan table list --doc <path> [options]\n"
-               "  uni-plan table get  --doc <path> --table-id <id> "
-               "[options]\n\n"
-               "table list: List all markdown tables in a document.\n"
-               "table get:  Extract a specific table by ID.\n\n"
-               "Required:\n"
-               "  --doc <path>            Document file path\n"
-               "  --table-id <id>         Table ID (for 'get' only)\n\n"
-               "Options:\n"
-            << kHumanTable
-            << "  --repo-root <path>      Override repository root\n\n"
-               "Examples:\n"
-               "  uni-plan table list --doc "
-               "Tools/Doc/Docs/Plans/DocToolCliSchema.Plan.md\n"
-               "  uni-plan table get --doc "
-               "Tools/Doc/Docs/Plans/DocToolCliSchema.Plan.md --table-id 1\n";
-        return;
-    }
-    // Special-case: phase (two modes: single-plan vs all-plans)
-    if (InCommand == "phase")
-    {
-        std::cout
-            << "List implementation phases from plan implementation_phases "
-               "tables.\n\n"
-               "Modes:\n"
-               "  uni-plan phase --topic <topic|path> [options]     Single "
-               "plan\n"
-               "  uni-plan phase list [options]                     All plans "
-               "(tree view)\n\n"
-               "Single-plan mode:\n"
-               "  Show phases for one plan. --topic is required.\n\n"
-               "All-plans mode:\n"
-               "  List every plan that has phases, with its phases nested "
-               "below.\n"
-               "  Omit --topic to enter this mode.\n\n"
-               "Options:\n"
-               "  --topic <topic|path>    Topic key (e.g., "
-               "DOC-TOOL-CLI-SCHEMA) or "
-               "plan file path\n"
-               "  --status <filter>       Filter by status. Prefix with ! to "
-               "exclude (e.g. !completed).\n"
-               "                          Values: "
-               "all|not_started|in_progress|completed|closed|blocked|canceled|"
-               "unknown [default: all]\n"
-            << kHumanTable
-            << "  --repo-root <path>      Override repository root\n\n"
-               "Examples:\n"
-               "  uni-plan phase --topic DOC-TOOL-CLI-SCHEMA\n"
-               "  uni-plan phase --topic DOC-TOOL-CLI-SCHEMA --status "
-               "!completed "
-               "--human\n"
-               "  uni-plan phase list\n"
-               "  uni-plan phase list --human\n"
-               "  uni-plan phase list --status completed\n";
-        return;
-    }
+    // Removed: section, table (dead .md commands)
     // Special-case: cache (multi-subcommand layout)
     if (InCommand == "cache")
     {
@@ -531,1543 +379,90 @@ int RunMain(const int InArgc, char *InArgv[])
     const std::string Command = Tokens[0];
     try
     {
-        if (Command == "list")
+        // V4 bundle-native commands
+        const std::string CWD = fs::current_path().string();
+
+        if (Command == "topic")
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,
                                                 Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("list");
-                return 0;
-            }
-            const ListOptions Options = ParseListOptions(Args);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-            if (Options.mbHuman)
-            {
-                return RunListHuman(ParsedInventory, Options.mKind,
-                                    Options.mStatus);
-            }
-            if (!Options.mbJson)
-            {
-                return RunListText(ParsedInventory, Options.mKind,
-                                   Options.mStatus);
-            }
-            return RunListJson(ParsedInventory, Options.mKind, Options.mStatus);
+            return RunTopicCommand(Args, CWD);
         }
 
         if (Command == "phase")
         {
-            if (ContainsHelpFlag(
-                    std::vector<std::string>(Tokens.begin() + 1, Tokens.end())))
-            {
-                PrintCommandUsage("phase");
-                return 0;
-            }
-
-            // Check for extended phase subcommands (detail, transition)
-            if (Tokens.size() > 1)
-            {
-                const std::string Sub = ToLower(Tokens[1]);
-                if (Sub == "detail" || Sub == "transition")
-                {
-                    const std::vector<std::string> SubArgs(Tokens.begin() + 1,
-                                                           Tokens.end());
-                    const PhaseCommandOptions PhaseOpts =
-                        ParsePhaseCommandOptions(SubArgs);
-                    return RunPhaseExtendedCommand(PhaseOpts, UseCache, Config);
-                }
-            }
-
-            bool bListAll = false;
-            size_t ArgsStartIndex = 1;
-            if (Tokens.size() > 1)
-            {
-                const std::string MaybeSubcommand = ToLower(Tokens[1]);
-                if (MaybeSubcommand == "list")
-                {
-                    ArgsStartIndex = 2;
-                    bListAll = true;
-                }
-                else if (!IsOptionToken(Tokens[1]))
-                {
-                    throw UsageError("Unknown phase subcommand: " + Tokens[1]);
-                }
-            }
-
-            const std::vector<std::string> Args(
-                Tokens.begin() + static_cast<std::ptrdiff_t>(ArgsStartIndex),
-                Tokens.end());
-            const PhaseOptions Options = ParsePhaseOptions(Args);
-
-            // If --topic was provided, revert to single-plan mode
-            if (!Options.mTopic.empty())
-            {
-                bListAll = false;
-            }
-
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-
-            if (bListAll)
-            {
-                // All-plans mode: list every plan with its phases
-                std::vector<std::string> Warnings = ParsedInventory.mWarnings;
-                const std::vector<PhaseListAllEntry> Entries =
-                    BuildPhaseListAll(RepoRoot, ParsedInventory,
-                                      Options.mStatus, Warnings);
-                NormalizeWarnings(Warnings);
-
-                if (Options.mbHuman)
-                {
-                    return RunPhaseListAllHuman(Options.mStatus, Entries,
-                                                Warnings);
-                }
-                if (!Options.mbJson)
-                {
-                    return RunPhaseListAllText(Options.mStatus, Entries,
-                                               Warnings);
-                }
-                return RunPhaseListAllJson(GetUtcNow(), ToGenericPath(RepoRoot),
-                                           Options.mStatus, Entries, Warnings);
-            }
-
-            // Single-plan mode: requires --topic
-            if (Options.mTopic.empty())
-            {
-                throw UsageError(
-                    "Missing required option --topic (or use 'uni-plan "
-                    "phase list' for all plans)");
-            }
-
-            const std::string TopicKey =
-                ResolveTopicKeyFromInventory(ParsedInventory, Options.mTopic);
-            const DocumentRecord *Plan =
-                FindSingleRecordByTopic(ParsedInventory.mPlans, TopicKey);
-            if (Plan == nullptr)
-            {
-                throw UsageError("Resolved topic has no plan document: " +
-                                 TopicKey);
-            }
-
-            std::vector<std::string> Warnings = ParsedInventory.mWarnings;
-            const std::vector<PhaseItem> Items = CollectPhaseItemsFromPlan(
-                RepoRoot, *Plan, ParsedInventory.mPlaybooks, Options.mStatus,
-                Warnings);
-            NormalizeWarnings(Warnings);
-
-            if (Options.mbHuman)
-            {
-                return RunPhaseHuman(TopicKey, Plan->mPath, Options.mStatus,
-                                     Items, Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunPhaseText(TopicKey, Plan->mPath, Options.mStatus,
-                                    Items, Warnings);
-            }
-            return RunPhaseJson(GetUtcNow(), ToGenericPath(RepoRoot), TopicKey,
-                                Plan->mPath, Options.mStatus, Items, Warnings);
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            return RunBundlePhaseCommand(Args, CWD);
         }
 
-        if (Command == "lint")
+        if (Command == "changelog")
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,
                                                 Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("lint");
-                return 0;
-            }
-            const LintOptions Options = ParseLintOptions(Args);
-            const LintResult Result = BuildLintResult(Options.mRepoRoot);
-            if (Options.mbHuman)
-            {
-                RunLintHuman(Result);
-            }
-            else if (!Options.mbJson)
-            {
-                RunLintText(Result);
-            }
-            else
-            {
-                RunLintJson(Result);
-            }
-            return (Options.mbFailOnWarning && Result.mWarningCount > 0) ? 1
-                                                                         : 0;
+            return RunBundleChangelogCommand(Args, CWD);
         }
 
-        if (Command == "inventory")
+        if (Command == "verification")
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,
                                                 Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("inventory");
-                return 0;
-            }
-            const InventoryOptions Options = ParseInventoryOptions(Args);
-            const InventoryResult Result =
-                BuildDocInventoryResult(Options.mRepoRoot);
-            if (Options.mbHuman)
-            {
-                return RunInventoryHuman(Result);
-            }
-            if (!Options.mbJson)
-            {
-                return RunInventoryText(Result);
-            }
-            return RunInventoryJson(Result);
-        }
-
-        if (Command == "orphan-check")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("orphan-check");
-                return 0;
-            }
-            const OrphanCheckOptions Options = ParseOrphanCheckOptions(Args);
-            const OrphanCheckResult Result =
-                BuildOrphanCheckResult(Options.mRepoRoot);
-            if (Options.mbHuman)
-            {
-                return RunOrphanCheckHuman(Result);
-            }
-            if (!Options.mbJson)
-            {
-                return RunOrphanCheckText(Result);
-            }
-            return RunOrphanCheckJson(Result);
-        }
-
-        if (Command == "artifacts")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("artifacts");
-                return 0;
-            }
-            const ArtifactsOptions Options = ParseArtifactsOptions(Args);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-            const std::string TopicKey =
-                ResolveTopicKeyFromInventory(ParsedInventory, Options.mTopic);
-            if (Options.mbHuman)
-            {
-                return RunArtifactsHuman(ParsedInventory, TopicKey,
-                                         Options.mKind);
-            }
-            if (!Options.mbJson)
-            {
-                return RunArtifactsText(ParsedInventory, TopicKey,
-                                        Options.mKind);
-            }
-            return RunArtifactsJson(ParsedInventory, TopicKey, Options.mKind);
-        }
-
-        if (Command == "changelog" || Command == "verification")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage(Command);
-                return 0;
-            }
-            const bool IsChangelog = (Command == "changelog");
-            const EvidenceOptions Options = ParseEvidenceOptions(Args, Command);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-            const std::string TopicKey =
-                ResolveTopicKeyFromInventory(ParsedInventory, Options.mTopic);
-            const std::vector<SidecarRecord> TopicSidecars =
-                CollectSidecarsByTopic(ParsedInventory.mSidecars, TopicKey);
-            const std::string SidecarDocKind =
-                IsChangelog ? kSidecarChangeLog : kSidecarVerification;
-            const std::vector<SidecarRecord> EvidenceSidecars =
-                ResolveEvidenceSidecars(TopicSidecars, Options.mDocClass,
-                                        Options.mPhaseKey, SidecarDocKind);
-
-            std::vector<std::string> Warnings = ParsedInventory.mWarnings;
-            if (EvidenceSidecars.empty())
-            {
-                AddWarning(Warnings, "No " + Command +
-                                         " sidecar found for topic '" +
-                                         TopicKey + "' and doc class '" +
-                                         Options.mDocClass + "'.");
-            }
-
-            std::vector<EvidenceEntry> Entries;
-            for (const SidecarRecord &Sidecar : EvidenceSidecars)
-            {
-                const fs::path AbsolutePath =
-                    RepoRoot / fs::path(Sidecar.mPath);
-                std::vector<EvidenceEntry> SidecarEntries =
-                    ParseEvidenceEntriesFromFile(AbsolutePath, Sidecar.mPath,
-                                                 Sidecar.mPhaseKey, Warnings);
-                Entries.insert(Entries.end(), SidecarEntries.begin(),
-                               SidecarEntries.end());
-            }
-            NormalizeWarnings(Warnings);
-
-            const char *SchemaId =
-                IsChangelog ? kChangelogSchema : kVerificationSchema;
-            const std::string Label =
-                IsChangelog ? "Changelog" : "Verification";
-            if (Options.mbHuman)
-            {
-                return RunEvidenceHuman(Label, TopicKey, Options.mDocClass,
-                                        Entries, Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunEvidenceText(Label, TopicKey, Options.mDocClass,
-                                       Entries, Warnings);
-            }
-            return RunEvidenceJson(SchemaId, ParsedInventory.mGeneratedUtc,
-                                   ParsedInventory.mRepoRoot, TopicKey,
-                                   Options.mDocClass, Entries, Warnings);
-        }
-
-        if (Command == "schema")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("schema");
-                return 0;
-            }
-            const SchemaOptions Options = ParseSchemaOptions(Args);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            const fs::path SchemaPath =
-                ResolveSchemaFilePath(Options.mType, RepoRoot);
-            std::vector<std::string> Warnings;
-            const std::vector<SchemaField> Fields =
-                ParseSchemaFields(SchemaPath, Warnings);
-            const std::vector<std::string> Examples =
-                BuildSchemaExamples(Options.mType);
-            NormalizeWarnings(Warnings);
-
-            const std::string GeneratedUtc = GetUtcNow();
-            const std::string RepoRootPath = ToGenericPath(RepoRoot);
-            if (Options.mbHuman)
-            {
-                return RunSchemaHuman(Options.mType, Fields, Examples,
-                                      Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunSchemaText(Options.mType, Fields, Examples, Warnings);
-            }
-            return RunSchemaJson(GeneratedUtc, RepoRootPath, Options.mType,
-                                 Fields, Examples, Warnings);
-        }
-
-        if (Command == "rules")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("rules");
-                return 0;
-            }
-            const RulesOptions Options = ParseRulesOptions(Args);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            std::vector<std::string> Warnings;
-            const std::vector<RuleEntry> Rules = BuildRules(RepoRoot, Warnings);
-            NormalizeWarnings(Warnings);
-            if (Options.mbHuman)
-            {
-                return RunRulesHuman(Rules, Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunRulesText(Rules, Warnings);
-            }
-            return RunRulesJson(GetUtcNow(), ToGenericPath(RepoRoot), Rules,
-                                Warnings);
-        }
-
-        if (Command == "validate")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("validate");
-                return 0;
-            }
-            const ValidateOptions Options = ParseValidateOptions(Args);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-
-            std::vector<std::string> Errors;
-            std::vector<std::string> Warnings;
-            bool Ok = true;
-            const std::vector<ValidateCheck> Checks =
-                BuildValidateChecks(ParsedInventory, RepoRoot, Options.mbStrict,
-                                    Errors, Warnings, Ok);
-            if (Options.mbHuman)
-            {
-                RunValidateHuman(Options.mbStrict, Ok, Checks, Errors,
-                                 Warnings);
-            }
-            else if (!Options.mbJson)
-            {
-                RunValidateText(Options.mbStrict, Ok, Checks, Errors, Warnings);
-            }
-            else
-            {
-                RunValidateJson(ParsedInventory.mGeneratedUtc,
-                                ParsedInventory.mRepoRoot, Options.mbStrict, Ok,
-                                Checks, Errors, Warnings);
-            }
-            return Ok ? 0 : 1;
-        }
-
-        if (Command == "section")
-        {
-            if (ContainsHelpFlag(
-                    std::vector<std::string>(Tokens.begin() + 1, Tokens.end())))
-            {
-                PrintCommandUsage("section");
-                return 0;
-            }
-            if (Tokens.size() < 2)
-            {
-                throw UsageError("Missing subcommand for section (expected: "
-                                 "resolve|schema|content|list)");
-            }
-
-            const std::string Subcommand = ToLower(Tokens[1]);
-
-            if (Subcommand == "resolve")
-            {
-                const std::vector<std::string> Args(Tokens.begin() + 2,
-                                                    Tokens.end());
-                const SectionResolveOptions Options =
-                    ParseSectionResolveOptions(Args);
-                const ResolvedDocument Doc =
-                    ReadAndParseDocument(Options, Options.mDocPath);
-
-                std::vector<std::string> Warnings;
-                const SectionResolution Resolution = ResolveSectionByQuery(
-                    Doc.mLines, Doc.mHeadings, Options.mSection);
-                if (!Resolution.mbFound)
-                {
-                    AddWarning(
-                        Warnings,
-                        "Section query did not match document headings: " +
-                            Options.mSection);
-                }
-                NormalizeWarnings(Warnings);
-
-                if (Options.mbHuman)
-                {
-                    RunSectionResolveHuman(Doc.mRelativePath, Resolution,
-                                           Warnings);
-                }
-                else if (!Options.mbJson)
-                {
-                    RunSectionResolveText(Doc.mRelativePath, Resolution,
-                                          Warnings);
-                }
-                else
-                {
-                    RunSectionResolveJson(
-                        GetUtcNow(), ToGenericPath(Doc.mRepoRoot),
-                        Doc.mRelativePath, Resolution, Warnings);
-                }
-                return Resolution.mbFound ? 0 : 1;
-            }
-
-            if (Subcommand == "schema")
-            {
-                const std::vector<std::string> Args(Tokens.begin() + 2,
-                                                    Tokens.end());
-                const SectionSchemaOptions Options =
-                    ParseSectionSchemaOptions(Args);
-                const fs::path RepoRoot =
-                    NormalizeRepoRootPath(Options.mRepoRoot);
-                const std::vector<SectionSchemaEntry> Entries =
-                    BuildSectionSchemaEntries(Options.mType, RepoRoot);
-
-                if (Options.mbHuman)
-                {
-                    return RunSectionSchemaHuman(Options.mType, Entries);
-                }
-                if (!Options.mbJson)
-                {
-                    return RunSectionSchemaText(Options.mType, Entries);
-                }
-                return RunSectionSchemaJson(GetUtcNow(),
-                                            ToGenericPath(RepoRoot),
-                                            Options.mType, Entries);
-            }
-
-            if (Subcommand == "content")
-            {
-                const std::vector<std::string> Args(Tokens.begin() + 2,
-                                                    Tokens.end());
-                const SectionContentOptions Options =
-                    ParseSectionContentOptions(Args);
-                const ResolvedDocument Doc =
-                    ReadAndParseDocument(Options, Options.mDocPath);
-                const SectionResolution Resolution = ResolveSectionByQuery(
-                    Doc.mLines, Doc.mHeadings, Options.mSection);
-                if (!Resolution.mbFound)
-                {
-                    throw std::runtime_error("Section not found: " +
-                                             Options.mSection);
-                }
-
-                // Extract content lines (skip the heading line itself).
-                const int ContentStartLine = Resolution.mStartLine + 1;
-                const int ContentEndLine = Resolution.mEndLine;
-                std::vector<std::string> ContentLines;
-                for (int LineNumber = ContentStartLine;
-                     LineNumber <= ContentEndLine; ++LineNumber)
-                {
-                    ContentLines.push_back(
-                        Doc.mLines[static_cast<size_t>(LineNumber - 1)]);
-                }
-
-                // Parse tables within the content line range.
-                // ParseMarkdownTables works on the full document, so we filter
-                // to tables that fall within our section content range.
-                const std::vector<MarkdownTableRecord> AllTables =
-                    ParseMarkdownTables(Doc.mLines, Doc.mHeadings);
-                std::vector<MarkdownTableRecord> SectionTables;
-                for (const MarkdownTableRecord &Table : AllTables)
-                {
-                    if (Table.mStartLine >= ContentStartLine &&
-                        Table.mEndLine <= ContentEndLine)
-                    {
-                        SectionTables.push_back(Table);
-                    }
-                }
-
-                std::vector<std::string> Warnings;
-                NormalizeWarnings(Warnings);
-
-                if (Options.mbHuman)
-                {
-                    return RunSectionContentHuman(
-                        Doc.mRelativePath, Resolution, Options.mLineCharLimit,
-                        ContentStartLine, ContentLines, SectionTables,
-                        Warnings);
-                }
-                if (!Options.mbJson)
-                {
-                    return RunSectionContentText(
-                        Doc.mRelativePath, Resolution, Options.mLineCharLimit,
-                        ContentStartLine, ContentLines, Warnings);
-                }
-                return RunSectionContentJson(
-                    GetUtcNow(), ToGenericPath(Doc.mRepoRoot),
-                    Doc.mRelativePath, Resolution, Options.mLineCharLimit,
-                    ContentStartLine, ContentLines, SectionTables, Warnings);
-            }
-
-            if (Subcommand == "list")
-            {
-                const std::vector<std::string> Args(Tokens.begin() + 2,
-                                                    Tokens.end());
-                const SectionListOptions Options =
-                    ParseSectionListOptions(Args);
-
-                if (!Options.mDocPath.empty())
-                {
-                    // Single-doc mode: show heading tree
-                    const ResolvedDocument Doc =
-                        ReadAndParseDocument(Options, Options.mDocPath);
-                    if (Options.mbHuman)
-                    {
-                        return RunSectionListDocHuman(Doc.mRelativePath,
-                                                      Doc.mHeadings);
-                    }
-                    if (!Options.mbJson)
-                    {
-                        return RunSectionListDocText(Doc.mRelativePath,
-                                                     Doc.mHeadings);
-                    }
-                    return RunSectionListDocJson(
-                        GetUtcNow(), ToGenericPath(Doc.mRepoRoot),
-                        Doc.mRelativePath, Doc.mHeadings);
-                }
-
-                // Inventory mode: scan all docs, aggregate literal headings.
-                const Inventory ParsedInventory =
-                    BuildInventory(Options.mRepoRoot, UseCache,
-                                   Config.mCacheDir, Config.mbCacheVerbose);
-                const fs::path RepoRoot =
-                    NormalizeRepoRootPath(Options.mRepoRoot);
-
-                std::map<std::string, SectionCount> SectionCounts;
-                auto CollectSections =
-                    [&](const std::vector<DocumentRecord> &InRecords)
-                {
-                    for (const DocumentRecord &Record : InRecords)
-                    {
-                        const fs::path AbsPath =
-                            ResolveDocumentAbsolutePath(RepoRoot, Record.mPath);
-                        std::vector<std::string> Lines;
-                        std::string ReadError;
-                        if (!TryReadFileLines(AbsPath, Lines, ReadError))
-                        {
-                            continue;
-                        }
-                        const std::vector<HeadingRecord> Headings =
-                            ParseHeadingRecords(Lines);
-                        for (const HeadingRecord &Heading : Headings)
-                        {
-                            SectionCount &Item = SectionCounts[Heading.mText];
-                            if (Item.mHeading.empty())
-                            {
-                                Item.mHeading = Heading.mText;
-                            }
-                            if (Item.mSectionId.empty())
-                            {
-                                Item.mSectionId = Heading.mSectionId;
-                            }
-                            Item.mCount += 1;
-                        }
-                    }
-                };
-                CollectSections(ParsedInventory.mPlans);
-                CollectSections(ParsedInventory.mPlaybooks);
-                CollectSections(ParsedInventory.mImplementations);
-
-                std::vector<SectionCount> SortedCounts;
-                SortedCounts.reserve(SectionCounts.size());
-                for (const auto &Pair : SectionCounts)
-                {
-                    SortedCounts.push_back(Pair.second);
-                }
-                std::sort(SortedCounts.begin(), SortedCounts.end(),
-                          [](const SectionCount &InA, const SectionCount &InB)
-                          {
-                              const std::string A = ToLower(InA.mHeading);
-                              const std::string B = ToLower(InB.mHeading);
-                              if (A == B)
-                              {
-                                  return InA.mSectionId < InB.mSectionId;
-                              }
-                              return A < B;
-                          });
-
-                if (Options.mbHuman)
-                {
-                    return RunSectionListHuman(SortedCounts, Options.mbCount);
-                }
-                if (!Options.mbJson)
-                {
-                    return RunSectionListText(SortedCounts, Options.mbCount);
-                }
-                return RunSectionListJson(GetUtcNow(), ToGenericPath(RepoRoot),
-                                          SortedCounts, Options.mbCount);
-            }
-
-            throw UsageError("Unknown section subcommand: " + Subcommand);
-        }
-
-        if (Command == "excerpt")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("excerpt");
-                return 0;
-            }
-            const ExcerptOptions Options = ParseExcerptOptions(Args);
-            const ResolvedDocument Doc =
-                ReadAndParseDocument(Options, Options.mDocPath);
-            const SectionResolution Resolution = ResolveSectionByQuery(
-                Doc.mLines, Doc.mHeadings, Options.mSection);
-            if (!Resolution.mbFound)
-            {
-                throw std::runtime_error("Section not found for excerpt: " +
-                                         Options.mSection);
-            }
-
-            const int ExcerptStartLine =
-                (std::max)(1, Resolution.mStartLine - Options.mContextLines);
-            const int ExcerptEndLine =
-                (std::min)(static_cast<int>(Doc.mLines.size()),
-                           Resolution.mEndLine + Options.mContextLines);
-            std::vector<std::string> ExcerptLines;
-            for (int LineNumber = ExcerptStartLine;
-                 LineNumber <= ExcerptEndLine; ++LineNumber)
-            {
-                ExcerptLines.push_back(
-                    Doc.mLines[static_cast<size_t>(LineNumber - 1)]);
-            }
-
-            std::vector<std::string> Warnings;
-            if (Options.mbHuman)
-            {
-                return RunExcerptHuman(Doc.mRelativePath, Resolution,
-                                       ExcerptStartLine, ExcerptLines,
-                                       Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunExcerptText(Doc.mRelativePath, Resolution,
-                                      ExcerptStartLine, ExcerptLines, Warnings);
-            }
-            return RunExcerptJson(GetUtcNow(), ToGenericPath(Doc.mRepoRoot),
-                                  Doc.mRelativePath, Resolution,
-                                  Options.mContextLines, ExcerptStartLine,
-                                  ExcerptLines, Warnings);
-        }
-
-        if (Command == "table")
-        {
-            if (ContainsHelpFlag(
-                    std::vector<std::string>(Tokens.begin() + 1, Tokens.end())))
-            {
-                PrintCommandUsage("table");
-                return 0;
-            }
-            if (Tokens.size() < 2)
-            {
-                throw UsageError(
-                    "Missing subcommand for table (expected: list|get)");
-            }
-
-            const std::string Subcommand = ToLower(Tokens[1]);
-            if (Subcommand == "list")
-            {
-                const std::vector<std::string> Args(Tokens.begin() + 2,
-                                                    Tokens.end());
-                const TableListOptions Options = ParseTableListOptions(Args);
-                const ResolvedDocument Doc =
-                    ReadAndParseDocument(Options, Options.mDocPath);
-                const std::vector<MarkdownTableRecord> Tables =
-                    ParseMarkdownTables(Doc.mLines, Doc.mHeadings);
-                std::vector<std::string> Warnings;
-                if (Options.mbHuman)
-                {
-                    return RunTableListHuman(Doc.mRelativePath, Tables,
-                                             Warnings);
-                }
-                if (!Options.mbJson)
-                {
-                    return RunTableListText(Doc.mRelativePath, Tables,
-                                            Warnings);
-                }
-                return RunTableListJson(GetUtcNow(),
-                                        ToGenericPath(Doc.mRepoRoot),
-                                        Doc.mRelativePath, Tables, Warnings);
-            }
-
-            if (Subcommand == "get")
-            {
-                const std::vector<std::string> Args(Tokens.begin() + 2,
-                                                    Tokens.end());
-                const TableGetOptions Options = ParseTableGetOptions(Args);
-                const ResolvedDocument Doc =
-                    ReadAndParseDocument(Options, Options.mDocPath);
-                const std::vector<MarkdownTableRecord> Tables =
-                    ParseMarkdownTables(Doc.mLines, Doc.mHeadings);
-                const auto FoundTable = std::find_if(
-                    Tables.begin(), Tables.end(),
-                    [&Options](const MarkdownTableRecord &InTable)
-                    { return InTable.mTableId == Options.mTableId; });
-
-                if (FoundTable == Tables.end())
-                {
-                    throw UsageError("Unknown table id for --table-id: " +
-                                     std::to_string(Options.mTableId));
-                }
-
-                std::vector<std::string> Warnings;
-                if (Options.mbHuman)
-                {
-                    return RunTableGetHuman(Doc.mRelativePath, *FoundTable,
-                                            Warnings);
-                }
-                if (!Options.mbJson)
-                {
-                    return RunTableGetText(Doc.mRelativePath, *FoundTable,
-                                           Warnings);
-                }
-                return RunTableGetJson(
-                    GetUtcNow(), ToGenericPath(Doc.mRepoRoot),
-                    Doc.mRelativePath, *FoundTable, Warnings);
-            }
-
-            throw UsageError("Unknown table subcommand: " + Subcommand);
-        }
-
-        if (Command == "graph")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("graph");
-                return 0;
-            }
-            const GraphOptions Options = ParseGraphOptions(Args);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-            const std::string TopicKey =
-                ResolveTopicKeyFromInventory(ParsedInventory, Options.mTopic);
-
-            std::vector<std::string> Warnings = ParsedInventory.mWarnings;
-            const std::vector<MarkdownDocument> Documents =
-                EnumerateMarkdownDocuments(RepoRoot, Warnings);
-            const std::map<std::string, fs::path> PathMap =
-                BuildMarkdownPathMap(Documents);
-
-            std::map<std::string, std::set<std::string>> Outgoing;
-            std::map<std::string, std::set<std::string>> Incoming;
-            BuildReferenceGraph(RepoRoot, PathMap, Warnings, Outgoing,
-                                Incoming);
-
-            const std::vector<std::string> SeedPaths =
-                CollectTopicSeedPaths(ParsedInventory, TopicKey);
-            if (SeedPaths.empty())
-            {
-                AddWarning(Warnings, "No plan/implementation/playbook/sidecar "
-                                     "artifacts found for topic '" +
-                                         TopicKey + "'.");
-            }
-
-            std::map<std::string, int> DistanceByPath;
-            std::queue<std::string> WorkQueue;
-            for (const std::string &SeedPath : SeedPaths)
-            {
-                if (PathMap.count(SeedPath) == 0)
-                {
-                    AddWarning(Warnings,
-                               "Seed path missing from markdown corpus: '" +
-                                   SeedPath + "'.");
-                    continue;
-                }
-                if (DistanceByPath.count(SeedPath) > 0)
-                {
-                    continue;
-                }
-                DistanceByPath[SeedPath] = 0;
-                WorkQueue.push(SeedPath);
-            }
-
-            while (!WorkQueue.empty())
-            {
-                const std::string CurrentPath = WorkQueue.front();
-                WorkQueue.pop();
-                const int CurrentDepth = DistanceByPath[CurrentPath];
-                if (CurrentDepth >= Options.mDepth)
-                {
-                    continue;
-                }
-
-                std::set<std::string> Neighbors;
-                const auto OutgoingIt = Outgoing.find(CurrentPath);
-                if (OutgoingIt != Outgoing.end())
-                {
-                    Neighbors.insert(OutgoingIt->second.begin(),
-                                     OutgoingIt->second.end());
-                }
-                const auto IncomingIt = Incoming.find(CurrentPath);
-                if (IncomingIt != Incoming.end())
-                {
-                    Neighbors.insert(IncomingIt->second.begin(),
-                                     IncomingIt->second.end());
-                }
-
-                for (const std::string &NeighborPath : Neighbors)
-                {
-                    if (DistanceByPath.count(NeighborPath) > 0)
-                    {
-                        continue;
-                    }
-                    DistanceByPath[NeighborPath] = CurrentDepth + 1;
-                    WorkQueue.push(NeighborPath);
-                }
-            }
-
-            std::map<std::string, GraphNode> NodesById;
-            for (const auto &DistanceEntry : DistanceByPath)
-            {
-                EnsureGraphNode(DistanceEntry.first, NodesById);
-            }
-
-            std::vector<GraphEdge> Edges;
-            std::set<std::string> EdgeKeys;
-            for (const auto &OutgoingEntry : Outgoing)
-            {
-                const std::string &SourcePath = OutgoingEntry.first;
-                const auto SourceDistanceIt = DistanceByPath.find(SourcePath);
-                if (SourceDistanceIt == DistanceByPath.end())
-                {
-                    continue;
-                }
-
-                const std::string SourceNodeId =
-                    EnsureGraphNode(SourcePath, NodesById);
-                for (const std::string &TargetPath : OutgoingEntry.second)
-                {
-                    const auto TargetDistanceIt =
-                        DistanceByPath.find(TargetPath);
-                    if (TargetDistanceIt == DistanceByPath.end())
-                    {
-                        continue;
-                    }
-
-                    const std::string TargetNodeId =
-                        EnsureGraphNode(TargetPath, NodesById);
-                    const int EdgeDepth = (std::max)(SourceDistanceIt->second,
-                                                     TargetDistanceIt->second);
-                    AppendGraphEdgeUnique(Edges, EdgeKeys, SourceNodeId,
-                                          TargetNodeId, "references",
-                                          EdgeDepth);
-                }
-            }
-
-            std::vector<GraphNode> Nodes;
-            Nodes.reserve(NodesById.size());
-            for (const auto &NodeEntry : NodesById)
-            {
-                Nodes.push_back(NodeEntry.second);
-            }
-            std::sort(Nodes.begin(), Nodes.end(),
-                      [](const GraphNode &InLeft, const GraphNode &InRight)
-                      {
-                          if (InLeft.mId != InRight.mId)
-                          {
-                              return InLeft.mId < InRight.mId;
-                          }
-                          return InLeft.mPath < InRight.mPath;
-                      });
-            std::sort(Edges.begin(), Edges.end(),
-                      [](const GraphEdge &InLeft, const GraphEdge &InRight)
-                      {
-                          if (InLeft.mFromNodeId != InRight.mFromNodeId)
-                          {
-                              return InLeft.mFromNodeId < InRight.mFromNodeId;
-                          }
-                          if (InLeft.mToNodeId != InRight.mToNodeId)
-                          {
-                              return InLeft.mToNodeId < InRight.mToNodeId;
-                          }
-                          if (InLeft.mKind != InRight.mKind)
-                          {
-                              return InLeft.mKind < InRight.mKind;
-                          }
-                          return InLeft.mDepth < InRight.mDepth;
-                      });
-            NormalizeWarnings(Warnings);
-
-            if (Options.mbHuman)
-            {
-                return RunGraphHuman(TopicKey, Options.mDepth, Nodes, Edges,
-                                     Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunGraphText(TopicKey, Options.mDepth, Nodes, Edges,
-                                    Warnings);
-            }
-            return RunGraphJson(GetUtcNow(), ToGenericPath(RepoRoot), TopicKey,
-                                Options.mDepth, Nodes, Edges, Warnings);
-        }
-
-        if (Command == "diagnose")
-        {
-            if (ContainsHelpFlag(
-                    std::vector<std::string>(Tokens.begin() + 1, Tokens.end())))
-            {
-                PrintCommandUsage("diagnose");
-                return 0;
-            }
-            if (Tokens.size() < 2)
-            {
-                throw UsageError(
-                    "Missing subcommand for diagnose (expected: drift)");
-            }
-
-            const std::string Subcommand = ToLower(Tokens[1]);
-            if (Subcommand != "drift")
-            {
-                throw UsageError("Unknown diagnose subcommand: " + Subcommand);
-            }
-
-            const std::vector<std::string> Args(Tokens.begin() + 2,
-                                                Tokens.end());
-            const DiagnoseDriftOptions Options =
-                ParseDiagnoseDriftOptions(Args);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-
-            std::vector<std::string> Warnings = ParsedInventory.mWarnings;
-            const std::vector<MarkdownDocument> Documents =
-                EnumerateMarkdownDocuments(RepoRoot, Warnings);
-            const std::map<std::string, fs::path> PathMap =
-                BuildMarkdownPathMap(Documents);
-
-            std::map<std::string, std::set<std::string>> Outgoing;
-            std::map<std::string, std::set<std::string>> Incoming;
-            BuildReferenceGraph(RepoRoot, PathMap, Warnings, Outgoing,
-                                Incoming);
-
-            std::vector<DriftItem> Drifts;
-            const auto HasSidecar =
-                [&ParsedInventory](const std::string &InOwnerKind,
-                                   const std::string &InTopicKey,
-                                   const std::string &InPhaseKey,
-                                   const std::string &InDocKind) -> bool
-            {
-                for (const SidecarRecord &Sidecar : ParsedInventory.mSidecars)
-                {
-                    if (Sidecar.mOwnerKind == InOwnerKind &&
-                        Sidecar.mTopicKey == InTopicKey &&
-                        Sidecar.mPhaseKey == InPhaseKey &&
-                        Sidecar.mDocKind == InDocKind)
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            };
-
-            for (const TopicPairRecord &Pair : ParsedInventory.mPairs)
-            {
-                if (Pair.mPairState == "paired")
-                {
-                    continue;
-                }
-
-                std::string PairPath = Pair.mPlanPath;
-                if (PairPath.empty())
-                {
-                    PairPath = Pair.mImplementationPath;
-                }
-                if (PairPath.empty() && !Pair.mPlaybooks.empty())
-                {
-                    PairPath = Pair.mPlaybooks.front().mPath;
-                }
-
-                AddDriftItem(Drifts, "pair_state_" + Pair.mPairState, "error",
-                             Pair.mTopicKey, PairPath,
-                             "Topic pair-state drift detected: " +
-                                 Pair.mPairState);
-            }
-
-            for (const DocumentRecord &Plan : ParsedInventory.mPlans)
-            {
-                if (!HasSidecar("Plan", Plan.mTopicKey, "", kSidecarChangeLog))
-                {
-                    AddDriftItem(Drifts, "missing_plan_changelog_sidecar",
-                                 "warning", Plan.mTopicKey, Plan.mPath,
-                                 "Plan is missing detached changelog sidecar.");
-                }
-                if (!HasSidecar("Plan", Plan.mTopicKey, "",
-                                kSidecarVerification))
-                {
-                    AddDriftItem(
-                        Drifts, "missing_plan_verification_sidecar", "warning",
-                        Plan.mTopicKey, Plan.mPath,
-                        "Plan is missing detached verification sidecar.");
-                }
-            }
-
-            for (const DocumentRecord &Implementation :
-                 ParsedInventory.mImplementations)
-            {
-                if (!HasSidecar("Impl", Implementation.mTopicKey, "",
-                                kSidecarChangeLog))
-                {
-                    AddDriftItem(Drifts,
-                                 "missing_implementation_changelog_sidecar",
-                                 "warning", Implementation.mTopicKey,
-                                 Implementation.mPath,
-                                 "Implementation tracker is missing detached "
-                                 "changelog sidecar.");
-                }
-                if (!HasSidecar("Impl", Implementation.mTopicKey, "",
-                                kSidecarVerification))
-                {
-                    AddDriftItem(Drifts,
-                                 "missing_implementation_verification_sidecar",
-                                 "warning", Implementation.mTopicKey,
-                                 Implementation.mPath,
-                                 "Implementation tracker is missing detached "
-                                 "verification sidecar.");
-                }
-            }
-
-            for (const DocumentRecord &Playbook : ParsedInventory.mPlaybooks)
-            {
-                if (!HasSidecar("Playbook", Playbook.mTopicKey,
-                                Playbook.mPhaseKey, kSidecarChangeLog))
-                {
-                    AddDriftItem(Drifts, "missing_playbook_changelog_sidecar",
-                                 "warning", Playbook.mTopicKey, Playbook.mPath,
-                                 "Playbook is missing detached changelog "
-                                 "sidecar for phase '" +
-                                     Playbook.mPhaseKey + "'.");
-                }
-                if (!HasSidecar("Playbook", Playbook.mTopicKey,
-                                Playbook.mPhaseKey, kSidecarVerification))
-                {
-                    AddDriftItem(Drifts,
-                                 "missing_playbook_verification_sidecar",
-                                 "warning", Playbook.mTopicKey, Playbook.mPath,
-                                 "Playbook is missing detached verification "
-                                 "sidecar for phase '" +
-                                     Playbook.mPhaseKey + "'.");
-                }
-            }
-
-            const auto HasReference =
-                [&Outgoing](const std::string &InSourcePath,
-                            const std::string &InTargetPath) -> bool
-            {
-                const auto SourceIt = Outgoing.find(InSourcePath);
-                if (SourceIt == Outgoing.end())
-                {
-                    return false;
-                }
-                return SourceIt->second.count(InTargetPath) > 0;
-            };
-
-            for (const TopicPairRecord &Pair : ParsedInventory.mPairs)
-            {
-                if (Pair.mPlanPath.empty() || Pair.mImplementationPath.empty())
-                {
-                    continue;
-                }
-
-                if (!HasReference(Pair.mPlanPath, Pair.mImplementationPath))
-                {
-                    AddDriftItem(Drifts, "plan_missing_implementation_link",
-                                 "warning", Pair.mTopicKey, Pair.mPlanPath,
-                                 "Plan does not reference paired "
-                                 "implementation tracker path.");
-                }
-                if (!HasReference(Pair.mImplementationPath, Pair.mPlanPath))
-                {
-                    AddDriftItem(Drifts, "implementation_missing_plan_link",
-                                 "warning", Pair.mTopicKey,
-                                 Pair.mImplementationPath,
-                                 "Implementation tracker does not reference "
-                                 "paired plan path.");
-                }
-
-                for (const DocumentRecord &Playbook : Pair.mPlaybooks)
-                {
-                    if (!HasReference(Playbook.mPath, Pair.mPlanPath))
-                    {
-                        AddDriftItem(
-                            Drifts, "playbook_missing_plan_link", "warning",
-                            Pair.mTopicKey, Playbook.mPath,
-                            "Playbook does not reference paired plan path.");
-                    }
-                    if (!HasReference(Playbook.mPath, Pair.mImplementationPath))
-                    {
-                        AddDriftItem(Drifts,
-                                     "playbook_missing_implementation_link",
-                                     "warning", Pair.mTopicKey, Playbook.mPath,
-                                     "Playbook does not reference paired "
-                                     "implementation path.");
-                    }
-                }
-            }
-
-            const auto ResolveIndexPathForRecord =
-                [](const DocumentRecord &InRecord) -> std::string
-            {
-                if (InRecord.mPath.rfind("Docs/", 0) == 0)
-                {
-                    return "Docs/INDEX.md";
-                }
-
-                const size_t DocsMarker = InRecord.mPath.find("/Docs/");
-                if (DocsMarker == std::string::npos)
-                {
-                    return "";
-                }
-                return InRecord.mPath.substr(
-                           0, DocsMarker + std::string("/Docs/").size()) +
-                       "README.md";
-            };
-
-            const auto CheckIndexLink = [&](const DocumentRecord &InRecord)
-            {
-                const std::string IndexPath =
-                    ResolveIndexPathForRecord(InRecord);
-                if (IndexPath.empty() || PathMap.count(IndexPath) == 0)
-                {
-                    return;
-                }
-                if (HasReference(IndexPath, InRecord.mPath))
-                {
-                    return;
-                }
-
-                AddDriftItem(
-                    Drifts, "index_missing_doc_link", "warning",
-                    InRecord.mTopicKey, IndexPath,
-                    "Index/readme path does not reference core document '" +
-                        InRecord.mPath + "'.");
-            };
-
-            for (const DocumentRecord &Plan : ParsedInventory.mPlans)
-            {
-                CheckIndexLink(Plan);
-            }
-            for (const DocumentRecord &Playbook : ParsedInventory.mPlaybooks)
-            {
-                CheckIndexLink(Playbook);
-            }
-            for (const DocumentRecord &Implementation :
-                 ParsedInventory.mImplementations)
-            {
-                CheckIndexLink(Implementation);
-            }
-
-            std::sort(Drifts.begin(), Drifts.end(),
-                      [](const DriftItem &InLeft, const DriftItem &InRight)
-                      {
-                          const int LeftRank = SeverityRank(InLeft.mSeverity);
-                          const int RightRank = SeverityRank(InRight.mSeverity);
-                          if (LeftRank != RightRank)
-                          {
-                              return LeftRank < RightRank;
-                          }
-                          if (InLeft.mTopicKey != InRight.mTopicKey)
-                          {
-                              return InLeft.mTopicKey < InRight.mTopicKey;
-                          }
-                          if (InLeft.mPath != InRight.mPath)
-                          {
-                              return InLeft.mPath < InRight.mPath;
-                          }
-                          if (InLeft.mId != InRight.mId)
-                          {
-                              return InLeft.mId < InRight.mId;
-                          }
-                          return InLeft.mMessage < InRight.mMessage;
-                      });
-            NormalizeWarnings(Warnings);
-            const bool Ok = Drifts.empty();
-            if (Options.mbHuman)
-            {
-                return RunDiagnoseDriftHuman(Ok, Drifts, Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunDiagnoseDriftText(Ok, Drifts, Warnings);
-            }
-            return RunDiagnoseDriftJson(GetUtcNow(), ToGenericPath(RepoRoot),
-                                        Ok, Drifts, Warnings);
+            return RunBundleVerificationCommand(Args, CWD);
         }
 
         if (Command == "timeline")
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,
                                                 Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("timeline");
-                return 0;
-            }
-            const TimelineOptions Options = ParseTimelineOptions(Args);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-            const std::string TopicKey =
-                ResolveTopicKeyFromInventory(ParsedInventory, Options.mTopic);
-            const std::vector<SidecarRecord> TopicSidecars =
-                CollectSidecarsByTopic(ParsedInventory.mSidecars, TopicKey);
-
-            std::vector<std::string> Warnings = ParsedInventory.mWarnings;
-            std::vector<TimelineItem> Items;
-            bool HasChangeLogSidecar = false;
-            for (const SidecarRecord &Sidecar : TopicSidecars)
-            {
-                if (Sidecar.mDocKind != kSidecarChangeLog)
-                {
-                    continue;
-                }
-                HasChangeLogSidecar = true;
-
-                const fs::path AbsolutePath =
-                    RepoRoot / fs::path(Sidecar.mPath);
-                const std::vector<EvidenceEntry> Entries =
-                    ParseEvidenceEntriesFromFile(AbsolutePath, Sidecar.mPath,
-                                                 Sidecar.mPhaseKey, Warnings);
-                for (const EvidenceEntry &Entry : Entries)
-                {
-                    const std::map<std::string, std::string> FieldMap =
-                        BuildFieldMap(Entry.mFields);
-                    const std::string Date =
-                        GetFirstFieldValue(FieldMap, {"date"});
-                    if (!Options.mSince.empty())
-                    {
-                        if (!Date.empty() && LooksLikeIsoDate(Date))
-                        {
-                            if (Date < Options.mSince)
-                            {
-                                continue;
-                            }
-                        }
-                        else if (!Date.empty())
-                        {
-                            AddWarning(Warnings,
-                                       "Timeline row in '" + Sidecar.mPath +
-                                           "' has non-ISO date '" + Date +
-                                           "' (expected YYYY-MM-DD).");
-                        }
-                    }
-
-                    TimelineItem Item;
-                    Item.mDate = Date;
-                    Item.mDocClass =
-                        ToDocClassFromOwnerKind(Sidecar.mOwnerKind);
-                    Item.mPhaseKey = Sidecar.mPhaseKey;
-                    Item.mSourcePath = Sidecar.mPath;
-                    Item.mUpdate = GetFirstFieldValue(
-                        FieldMap,
-                        {"update", "changes", "change", "summary", "item"});
-                    if (Item.mUpdate.empty())
-                    {
-                        Item.mUpdate = "Row " +
-                                       std::to_string(Entry.mRowIndex) +
-                                       " update";
-                    }
-                    Item.mEvidence =
-                        GetFirstFieldValue(FieldMap, {"evidence", "validation",
-                                                      "notes", "details"});
-                    Items.push_back(std::move(Item));
-                }
-            }
-
-            if (!HasChangeLogSidecar)
-            {
-                AddWarning(Warnings, "No changelog sidecars found for topic '" +
-                                         TopicKey + "'.");
-            }
-
-            std::sort(
-                Items.begin(), Items.end(),
-                [](const TimelineItem &InLeft, const TimelineItem &InRight)
-                {
-                    const bool LeftHasDate = !InLeft.mDate.empty();
-                    const bool RightHasDate = !InRight.mDate.empty();
-                    if (LeftHasDate != RightHasDate)
-                    {
-                        return LeftHasDate;
-                    }
-                    if (InLeft.mDate != InRight.mDate)
-                    {
-                        return InLeft.mDate < InRight.mDate;
-                    }
-                    if (InLeft.mDocClass != InRight.mDocClass)
-                    {
-                        return InLeft.mDocClass < InRight.mDocClass;
-                    }
-                    if (InLeft.mPhaseKey != InRight.mPhaseKey)
-                    {
-                        return InLeft.mPhaseKey < InRight.mPhaseKey;
-                    }
-                    if (InLeft.mSourcePath != InRight.mSourcePath)
-                    {
-                        return InLeft.mSourcePath < InRight.mSourcePath;
-                    }
-                    return InLeft.mUpdate < InRight.mUpdate;
-                });
-            NormalizeWarnings(Warnings);
-            if (Options.mbHuman)
-            {
-                return RunTimelineHuman(TopicKey, Options.mSince, Items,
-                                        Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunTimelineText(TopicKey, Options.mSince, Items,
-                                       Warnings);
-            }
-            return RunTimelineJson(GetUtcNow(), ToGenericPath(RepoRoot),
-                                   TopicKey, Options.mSince, Items, Warnings);
+            return RunBundleTimelineCommand(Args, CWD);
         }
 
         if (Command == "blockers")
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,
                                                 Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                PrintCommandUsage("blockers");
-                return 0;
-            }
-            const BlockersOptions Options = ParseBlockersOptions(Args);
-            const fs::path RepoRoot = NormalizeRepoRootPath(Options.mRepoRoot);
-            const Inventory ParsedInventory =
-                BuildInventory(Options.mRepoRoot, UseCache, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-
-            std::vector<std::string> Warnings = ParsedInventory.mWarnings;
-            std::vector<BlockerItem> Items;
-            const auto TryAppendItem =
-                [&Items, &Options](const BlockerItem &InItem)
-            {
-                if (!MatchesBlockerStatusFilter(Options.mStatus,
-                                                InItem.mStatus))
-                {
-                    return;
-                }
-                Items.push_back(InItem);
-            };
-
-            for (const TopicPairRecord &Pair : ParsedInventory.mPairs)
-            {
-                if (Pair.mPairState == "paired")
-                {
-                    continue;
-                }
-
-                BlockerItem Item;
-                Item.mTopicKey = Pair.mTopicKey;
-                Item.mSourcePath = Pair.mPlanPath;
-                if (Item.mSourcePath.empty())
-                {
-                    Item.mSourcePath = Pair.mImplementationPath;
-                }
-                if (Item.mSourcePath.empty() && !Pair.mPlaybooks.empty())
-                {
-                    Item.mSourcePath = Pair.mPlaybooks.front().mPath;
-                }
-                Item.mKind = "pair_state";
-                Item.mStatus = "blocked";
-                Item.mPriority = "high";
-                Item.mAction = "Resolve pair-state drift.";
-                if (Pair.mPairState == "missing_implementation")
-                {
-                    Item.mAction = "Create paired implementation tracker.";
-                }
-                else if (Pair.mPairState == "missing_phase_playbook")
-                {
-                    Item.mAction =
-                        "Create phase-scoped playbook for active phase.";
-                }
-                else if (Pair.mPairState == "orphan_implementation")
-                {
-                    Item.mAction = "Create paired plan owner or relocate "
-                                   "implementation tracker.";
-                }
-                else if (Pair.mPairState == "orphan_playbook")
-                {
-                    Item.mAction = "Create paired plan and implementation for "
-                                   "this playbook topic.";
-                }
-                Item.mNotes = "pair_state=" + Pair.mPairState;
-                TryAppendItem(Item);
-            }
-
-            const auto AppendDocumentBlockers =
-                [&RepoRoot, &Warnings,
-                 &TryAppendItem](const std::vector<DocumentRecord> &InRecords,
-                                 const std::string &InDocClass)
-            {
-                for (const DocumentRecord &Record : InRecords)
-                {
-                    const std::vector<BlockerItem> DocumentItems =
-                        CollectBlockerItemsFromDocument(RepoRoot, Record,
-                                                        InDocClass, Warnings);
-                    for (const BlockerItem &Item : DocumentItems)
-                    {
-                        TryAppendItem(Item);
-                    }
-                }
-            };
-
-            AppendDocumentBlockers(ParsedInventory.mPlans, "plan");
-            AppendDocumentBlockers(ParsedInventory.mPlaybooks, "playbook");
-            AppendDocumentBlockers(ParsedInventory.mImplementations,
-                                   "implementation");
-
-            std::vector<BlockerItem> UniqueItems;
-            std::set<std::string> ItemKeys;
-            for (const BlockerItem &Item : Items)
-            {
-                const std::string Key =
-                    Item.mTopicKey + "|" + Item.mSourcePath + "|" + Item.mKind +
-                    "|" + Item.mStatus + "|" + Item.mPhaseKey + "|" +
-                    Item.mPriority + "|" + Item.mAction + "|" + Item.mOwner +
-                    "|" + Item.mNotes;
-                if (ItemKeys.insert(Key).second)
-                {
-                    UniqueItems.push_back(Item);
-                }
-            }
-
-            std::sort(UniqueItems.begin(), UniqueItems.end(),
-                      [](const BlockerItem &InLeft, const BlockerItem &InRight)
-                      {
-                          const int LeftRank =
-                              BlockerStatusRank(InLeft.mStatus);
-                          const int RightRank =
-                              BlockerStatusRank(InRight.mStatus);
-                          if (LeftRank != RightRank)
-                          {
-                              return LeftRank < RightRank;
-                          }
-                          if (InLeft.mTopicKey != InRight.mTopicKey)
-                          {
-                              return InLeft.mTopicKey < InRight.mTopicKey;
-                          }
-                          if (InLeft.mSourcePath != InRight.mSourcePath)
-                          {
-                              return InLeft.mSourcePath < InRight.mSourcePath;
-                          }
-                          if (InLeft.mPhaseKey != InRight.mPhaseKey)
-                          {
-                              return InLeft.mPhaseKey < InRight.mPhaseKey;
-                          }
-                          if (InLeft.mAction != InRight.mAction)
-                          {
-                              return InLeft.mAction < InRight.mAction;
-                          }
-                          return InLeft.mKind < InRight.mKind;
-                      });
-            NormalizeWarnings(Warnings);
-
-            if (Options.mbHuman)
-            {
-                return RunBlockersHuman(Options.mStatus, UniqueItems, Warnings);
-            }
-            if (!Options.mbJson)
-            {
-                return RunBlockersText(Options.mStatus, UniqueItems, Warnings);
-            }
-            return RunBlockersJson(GetUtcNow(), ToGenericPath(RepoRoot),
-                                   Options.mStatus, UniqueItems, Warnings);
+            return RunBundleBlockersCommand(Args, CWD);
         }
+
+        if (Command == "validate")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            return RunBundleValidateCommand(Args, CWD);
+        }
+
+        if (Command == "job")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            if (!Args.empty() && Args[0] == "set")
+            {
+                const std::vector<std::string> SubArgs(Args.begin() + 1,
+                                                       Args.end());
+                return RunJobSetCommand(SubArgs, CWD);
+            }
+            throw UsageError("job requires subcommand: set");
+        }
+
+        if (Command == "task")
+        {
+            const std::vector<std::string> Args(Tokens.begin() + 1,
+                                                Tokens.end());
+            if (!Args.empty() && Args[0] == "set")
+            {
+                const std::vector<std::string> SubArgs(Args.begin() + 1,
+                                                       Args.end());
+                return RunTaskSetCommand(SubArgs, CWD);
+            }
+            throw UsageError("task requires subcommand: set");
+        }
+
+        // --- Old .md-based commands removed ---
+        // list, phase (old), lint, inventory, orphan-check,
+        // artifacts, changelog (old), verification (old), schema,
+        // rules, validate (old), section, excerpt, table, graph,
+        // diagnose, timeline (old), blockers (old), plan, evidence,
+        // tag, search — all replaced by V4 bundle-native commands.
 
         if (Command == "cache")
         {
@@ -2155,294 +550,8 @@ int RunMain(const int InArgc, char *InArgv[])
             throw UsageError("Unknown cache subcommand: " + Subcommand);
         }
 
-        if (Command == "plan")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                std::cout << "Usage:\n"
-                          << "  uni-plan plan info --topic <topic>\n"
-                          << "  uni-plan plan field --topic <topic> "
-                             "--section <id> --field <name>\n"
-                          << "  uni-plan plan field --topic <topic> "
-                             "--section <id> --field <name> "
-                             "--value <val>\n";
-                return 0;
-            }
-            const PlanCommandOptions Options = ParsePlanCommandOptions(Args);
-            return RunPlanCommand(Options, UseCache, Config);
-        }
-
-        if (Command == "evidence")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                std::cout << "Usage:\n"
-                          << "  uni-plan evidence add --topic <topic>"
-                             " --for <plan|impl|playbook>"
-                             " --type <changelog|verification>"
-                             " --date <date> --update <text>\n";
-                return 0;
-            }
-            return RunEvidenceCommand(Args, UseCache, Config);
-        }
-
-        if (Command == "tag")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                std::cout << "Usage:\n"
-                          << "  uni-plan tag set --target "
-                             "<topic|topic:phase>"
-                             " --tags <tag1,tag2,...>\n"
-                          << "  uni-plan tag get --target "
-                             "<topic|topic:phase>\n"
-                          << "  uni-plan tag query --tags "
-                             "<tag1,tag2> [--mode and|or]\n";
-                return 0;
-            }
-            return RunTagCommand(Args);
-        }
-
-        if (Command == "search")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                std::cout << "Usage:\n"
-                          << "  uni-plan search --query <text> "
-                             "[--type <plan|playbook|impl>] "
-                             "[--status <filter>] "
-                             "[--section <id>] "
-                             "[--limit <n>]\n";
-                return 0;
-            }
-            return RunSearchCommand(Args);
-        }
-
-        if (Command == "bundle")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (ContainsHelpFlag(Args))
-            {
-                std::cout << "Usage:\n"
-                          << "  uni-plan bundle --all --repo-root "
-                             "<path>\n"
-                          << "  uni-plan bundle --topic <key> "
-                             "--repo-root <path>\n"
-                          << "Merges multi-file .json into single "
-                             "<Topic>.Plan.json bundles in "
-                             "Docs/Plans/.\n";
-                return 0;
-            }
-
-            std::string Topic;
-            bool bAll = false;
-            BaseOptions BundleOpts;
-            std::vector<std::string> BundleArgs = Args;
-            ConsumeCommonOptions(BundleArgs, BundleOpts, true);
-            for (size_t Index = 0; Index < BundleArgs.size(); ++Index)
-            {
-                if (BundleArgs[Index] == "--topic" &&
-                    Index + 1 < BundleArgs.size())
-                    Topic = BundleArgs[++Index];
-                else if (BundleArgs[Index] == "--all")
-                    bAll = true;
-            }
-
-            const fs::path BundleRoot =
-                NormalizeRepoRootPath(BundleOpts.mRepoRoot);
-
-            // Build inventory from old multi-file format
-            const Inventory Inv =
-                BuildInventory(BundleRoot.string(), false, Config.mCacheDir,
-                               Config.mbCacheVerbose);
-
-            // Collect topics
-            std::set<std::string> TopicKeys;
-            if (bAll)
-            {
-                for (const auto &Plan : Inv.mPlans)
-                    TopicKeys.insert(Plan.mTopicKey);
-                for (const auto &Impl : Inv.mImplementations)
-                    TopicKeys.insert(Impl.mTopicKey);
-            }
-            else if (!Topic.empty())
-            {
-                TopicKeys.insert(ResolveTopicKeyFromInventory(Inv, Topic));
-            }
-            else
-            {
-                std::cerr << "bundle requires --all or "
-                             "--topic\n";
-                return 2;
-            }
-
-            // Ensure output directory
-            const fs::path OutDir = BundleRoot / "Docs" / "Plans";
-            fs::create_directories(OutDir);
-
-            int Bundled = 0;
-            int Failed = 0;
-
-            for (const std::string &Key : TopicKeys)
-            {
-                if (Key.empty())
-                    continue;
-
-                FTopicBundle Bundle;
-                Bundle.mTopicKey = Key;
-                Bundle.mSchemaVersion = 1;
-
-                // Load plan
-                const DocumentRecord *rpPlan =
-                    FindSingleRecordByTopic(Inv.mPlans, Key);
-                if (rpPlan)
-                {
-                    std::string Err;
-                    TryLoadDocument(BundleRoot, rpPlan->mPath, Bundle.mPlan,
-                                    Err);
-                    Bundle.mStatus = rpPlan->mStatus;
-                }
-
-                // Load implementation
-                const DocumentRecord *rpImpl =
-                    FindSingleRecordByTopic(Inv.mImplementations, Key);
-                if (rpImpl)
-                {
-                    std::string Err;
-                    TryLoadDocument(BundleRoot, rpImpl->mPath,
-                                    Bundle.mImplementation, Err);
-                }
-
-                // Load playbooks
-                for (const DocumentRecord &PB : Inv.mPlaybooks)
-                {
-                    if (PB.mTopicKey != Key)
-                        continue;
-                    FDocument PBDoc;
-                    std::string Err;
-                    if (TryLoadDocument(BundleRoot, PB.mPath, PBDoc, Err))
-                    {
-                        Bundle.mPlaybooks[PB.mPhaseKey] = std::move(PBDoc);
-                    }
-                }
-
-                // Load changelog/verification sidecars
-                for (const SidecarRecord &SC : Inv.mSidecars)
-                {
-                    if (SC.mTopicKey != Key)
-                        continue;
-
-                    FDocument SCDoc;
-                    std::string Err;
-                    if (!TryLoadDocument(BundleRoot, SC.mPath, SCDoc, Err))
-                        continue;
-
-                    // Extract entries from the sidecar
-                    std::string OwnerKey;
-                    if (SC.mOwnerKind == "Plan")
-                        OwnerKey = "plan";
-                    else if (SC.mOwnerKind == "Impl")
-                        OwnerKey = "implementation";
-                    else
-                        OwnerKey = SC.mPhaseKey;
-
-                    // Find entries table — check multiple
-                    // possible section names (entries,
-                    // change_entries, verification_entries)
-                    auto EntIt = SCDoc.mSections.find("entries");
-                    if (EntIt == SCDoc.mSections.end() ||
-                        EntIt->second.mTables.empty())
-                    {
-                        EntIt = SCDoc.mSections.find("change_entries");
-                    }
-                    if (EntIt == SCDoc.mSections.end() ||
-                        EntIt->second.mTables.empty())
-                    {
-                        EntIt = SCDoc.mSections.find("verification_entries");
-                    }
-                    if (EntIt == SCDoc.mSections.end() ||
-                        EntIt->second.mTables.empty())
-                    {
-                        EntIt = SCDoc.mSections.find("verification");
-                    }
-                    if (EntIt == SCDoc.mSections.end() ||
-                        EntIt->second.mTables.empty())
-                    {
-                        EntIt = SCDoc.mSections.find("checks");
-                    }
-                    if (EntIt == SCDoc.mSections.end() ||
-                        EntIt->second.mTables.empty())
-                        continue;
-
-                    const FStructuredTable &Table = EntIt->second.mTables[0];
-
-                    if (SC.mDocKind == "ChangeLog")
-                    {
-                        auto &Entries = Bundle.mChangeLogs[OwnerKey];
-                        for (const auto &Row : Table.mRows)
-                        {
-                            FChangeLogEntry Entry;
-                            if (Row.size() > 0)
-                                Entry.mDate = Row[0].mValue;
-                            if (Row.size() > 1)
-                                Entry.mChange = Row[1].mValue;
-                            if (Row.size() > 2)
-                                Entry.mFiles = Row[2].mValue;
-                            if (Row.size() > 3)
-                                Entry.mEvidence = Row[3].mValue;
-                            Entries.push_back(std::move(Entry));
-                        }
-                    }
-                    else
-                    {
-                        auto &Entries = Bundle.mVerifications[OwnerKey];
-                        for (const auto &Row : Table.mRows)
-                        {
-                            FVerificationEntry Entry;
-                            if (Row.size() > 0)
-                                Entry.mDate = Row[0].mValue;
-                            if (Row.size() > 1)
-                                Entry.mCheck = Row[1].mValue;
-                            if (Row.size() > 2)
-                                Entry.mResult = Row[2].mValue;
-                            if (Row.size() > 3)
-                                Entry.mDetail = Row[3].mValue;
-                            Entries.push_back(std::move(Entry));
-                        }
-                    }
-                }
-
-                // Write bundle
-                const fs::path OutPath = OutDir / (Key + ".Plan.json");
-                std::string WriteError;
-                if (TryWriteTopicBundle(Bundle, OutPath, WriteError))
-                {
-                    Bundled++;
-                }
-                else
-                {
-                    Failed++;
-                    std::cerr << "Failed to bundle " << Key << ": "
-                              << WriteError << "\n";
-                }
-            }
-
-            std::cout << "{\"schema\":\"uni-plan-bundle-v1\""
-                      << ",\"ok\":" << (Failed == 0 ? "true" : "false")
-                      << ",\"bundled\":" << Bundled << ",\"failed\":" << Failed
-                      << ",\"topic_count\":"
-                      << static_cast<int>(TopicKeys.size()) << "}\n";
-            return Failed > 0 ? 1 : 0;
-        }
+        // bundle command removed — .md→.json migration is
+        // complete. .Plan.json files are the sole source of truth.
 
 #ifdef UPLAN_WATCH
         if (Command == "watch")

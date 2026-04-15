@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan-v4",
+  "title": "Plan Bundle V4",
+  "description": "Single-file governance bundle for one topic. Schema tag: plan-v4. All text fields are strings (not arrays). All entity arrays use index-based identity (no key/id fields).",
+  "type": "object",
+  "required": ["$schema", "topic", "status", "title", "phases", "changelogs", "verifications"],
+  "properties": {
+    "$schema": {
+      "const": "plan-v4"
+    },
+    "topic": {
+      "type": "string",
+      "description": "Topic key in PascalCase (e.g. MultiPlatforming, ClientServer)"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["not_started", "in_progress", "completed", "blocked", "canceled"],
+      "description": "Overall topic status"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable plan title"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Narrative overview of the plan"
+    },
+    "goals": {
+      "type": "string",
+      "description": "What the plan aims to achieve. Newline-separated if multiple."
+    },
+    "non_goals": {
+      "type": "string",
+      "description": "What is explicitly out of scope. Newline-separated if multiple."
+    },
+    "risks": {
+      "type": "string",
+      "description": "Risk register with impact, likelihood, and mitigations"
+    },
+    "acceptance_criteria": {
+      "type": "string",
+      "description": "Measurable criteria for plan completion"
+    },
+    "problem_statement": {
+      "type": "string",
+      "description": "Current state vs target state analysis"
+    },
+    "validation_commands": {
+      "type": "string",
+      "description": "Build/test commands to validate the plan's output"
+    },
+    "baseline_audit": {
+      "type": "string",
+      "description": "Quantitative analysis of current state: file inventories, LOC counts, duplication hotspots, architecture assessment"
+    },
+    "execution_strategy": {
+      "type": "string",
+      "description": "Implementation approach: phase sequence, dependency graph, methodology"
+    },
+    "locked_decisions": {
+      "type": "string",
+      "description": "Frozen architectural decisions that cannot be revisited without plan amendment"
+    },
+    "source_references": {
+      "type": "string",
+      "description": "External references: documentation links, API specs, prior art"
+    },
+    "dependencies": {
+      "type": "string",
+      "description": "Cross-topic dependencies at plan level"
+    },
+    "next_actions": {
+      "type": "string",
+      "description": "Prioritized immediate next steps"
+    },
+    "phases": {
+      "type": "array",
+      "description": "Ordered array of phases. Index IS identity (phase 0 = first element).",
+      "items": { "$ref": "#/$defs/phase_record" }
+    },
+    "changelogs": {
+      "type": "array",
+      "description": "Flat array of changelog entries with scope field",
+      "items": { "$ref": "#/$defs/changelog_entry" }
+    },
+    "verifications": {
+      "type": "array",
+      "description": "Flat array of verification entries with scope field",
+      "items": { "$ref": "#/$defs/verification_entry" }
+    }
+  },
+  "$defs": {
+    "execution_status": {
+      "type": "string",
+      "enum": ["not_started", "in_progress", "completed", "blocked"]
+    },
+    "phase_record": {
+      "type": "object",
+      "description": "One phase of the plan. No key/id field — array index is identity.",
+      "required": ["status", "done", "remaining", "blockers"],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "description": "Phase objective/scope"
+        },
+        "output": {
+          "type": "string",
+          "description": "Expected deliverables"
+        },
+        "status": { "$ref": "#/$defs/execution_status" },
+        "done": {
+          "type": "string",
+          "description": "Work completed so far"
+        },
+        "remaining": {
+          "type": "string",
+          "description": "Work still to do"
+        },
+        "blockers": {
+          "type": "string",
+          "description": "Current blockers"
+        },
+        "started_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp — when phase moved to in_progress"
+        },
+        "completed_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp — when phase moved to completed"
+        },
+        "agent_context": {
+          "type": "string",
+          "description": "Continuation prompt for the next agent session"
+        },
+        "investigation": {
+          "type": "string",
+          "description": "Research findings, baseline analysis"
+        },
+        "code_snippets": {
+          "type": "string",
+          "description": "Reference code: before/after examples, prototype implementations"
+        },
+        "code_entity_contract": {
+          "type": "string",
+          "description": "Entity signatures, interfaces, and contracts the phase must implement"
+        },
+        "best_practices": {
+          "type": "string",
+          "description": "Industry patterns, prior art research (UE5 RHI, Diligent, etc.)"
+        },
+        "dependencies": {
+          "type": "string",
+          "description": "Phase-level dependencies on other phases or external inputs"
+        },
+        "readiness_gate": {
+          "type": "string",
+          "description": "Entry checklist that must be satisfied before starting the phase"
+        },
+        "handoff": {
+          "type": "string",
+          "description": "Completion deliverables and handoff criteria"
+        },
+        "validation_commands": {
+          "type": "string",
+          "description": "Phase-specific build/test commands"
+        },
+        "multi_platforming": {
+          "type": "string",
+          "description": "Platform-specific concerns for this phase"
+        },
+        "lanes": {
+          "type": "array",
+          "description": "Execution lanes. Index is identity.",
+          "items": { "$ref": "#/$defs/lane_record" }
+        },
+        "jobs": {
+          "type": "array",
+          "description": "Jobs in the wave/lane board. Index is identity.",
+          "items": { "$ref": "#/$defs/job_record" }
+        },
+        "testing": {
+          "type": "array",
+          "description": "Testing/validation session records",
+          "items": { "$ref": "#/$defs/testing_record" }
+        },
+        "file_manifest": {
+          "type": "array",
+          "description": "Target file manifest for the phase",
+          "items": { "$ref": "#/$defs/file_manifest_item" }
+        }
+      }
+    },
+    "lane_record": {
+      "type": "object",
+      "description": "One execution lane. No id field — array index is identity.",
+      "required": ["status", "scope", "exit_criteria"],
+      "properties": {
+        "status": { "$ref": "#/$defs/execution_status" },
+        "scope": {
+          "type": "string",
+          "description": "Lane scope/owner"
+        },
+        "exit_criteria": {
+          "type": "string",
+          "description": "Criteria to close this lane"
+        }
+      }
+    },
+    "job_record": {
+      "type": "object",
+      "description": "One job in the wave/lane board. No id field — array index is identity.",
+      "required": ["wave", "lane", "status", "scope", "exit_criteria", "tasks"],
+      "properties": {
+        "wave": {
+          "type": "integer",
+          "description": "Wave group index (0-based)"
+        },
+        "lane": {
+          "type": "integer",
+          "description": "Lane index (0-based, references lanes array)"
+        },
+        "status": { "$ref": "#/$defs/execution_status" },
+        "scope": {
+          "type": "string",
+          "description": "What the job covers"
+        },
+        "output": {
+          "type": "string",
+          "description": "What the job produces"
+        },
+        "exit_criteria": {
+          "type": "string",
+          "description": "Criteria to mark the job complete"
+        },
+        "tasks": {
+          "type": "array",
+          "description": "Checklist tasks. Index is identity.",
+          "items": { "$ref": "#/$defs/task_record" }
+        },
+        "started_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp — when job started"
+        },
+        "completed_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp — when job completed"
+        }
+      }
+    },
+    "task_record": {
+      "type": "object",
+      "description": "One checklist task within a job. No id field — array index is identity.",
+      "required": ["status", "description", "evidence"],
+      "properties": {
+        "status": { "$ref": "#/$defs/execution_status" },
+        "description": {
+          "type": "string",
+          "description": "What to do"
+        },
+        "evidence": {
+          "type": "string",
+          "description": "Proof of completion (commit SHA, test output, etc.)"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Agent annotations, blockers, context"
+        },
+        "completed_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp — when task was completed"
+        }
+      }
+    },
+    "testing_record": {
+      "type": "object",
+      "required": ["session", "actor", "step", "action", "expected", "evidence"],
+      "properties": {
+        "session": { "type": "string" },
+        "actor": {
+          "type": "string",
+          "enum": ["human", "ai", "automated"]
+        },
+        "step": { "type": "string" },
+        "action": { "type": "string" },
+        "expected": { "type": "string" },
+        "evidence": { "type": "string" }
+      }
+    },
+    "file_manifest_item": {
+      "type": "object",
+      "required": ["file", "action", "description"],
+      "properties": {
+        "file": { "type": "string" },
+        "action": {
+          "type": "string",
+          "enum": ["create", "modify", "delete"]
+        },
+        "description": { "type": "string" }
+      }
+    },
+    "changelog_entry": {
+      "type": "object",
+      "required": ["phase", "date", "change"],
+      "properties": {
+        "phase": {
+          "type": ["integer", "null"],
+          "description": "Phase index (0, 1, ...) or null for topic-level entries"
+        },
+        "date": { "type": "string" },
+        "change": { "type": "string" },
+        "affected": {
+          "type": "string",
+          "description": "Entity refs affected (e.g. \"phases[0].jobs[2]\")"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["feat", "fix", "refactor", "chore"],
+          "description": "Category of change"
+        },
+        "actor": {
+          "type": "string",
+          "enum": ["human", "ai", "automated"],
+          "description": "Who made the change"
+        }
+      }
+    },
+    "verification_entry": {
+      "type": "object",
+      "required": ["phase", "date", "check", "result"],
+      "properties": {
+        "phase": {
+          "type": ["integer", "null"],
+          "description": "Phase index (0, 1, ...) or null for topic-level entries"
+        },
+        "date": { "type": "string" },
+        "check": { "type": "string" },
+        "result": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}
