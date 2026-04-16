@@ -146,6 +146,12 @@ struct FTopicBundle
 
     std::vector<FChangeLogEntry> mChangeLogs;
     std::vector<FVerificationEntry> mVerifications;
+
+    // Runtime-only: path where this bundle was loaded from.
+    // Not serialized to JSON. Set by TryLoadBundleByTopic and
+    // LoadAllBundles. Used by WriteBundleBack to write back
+    // to the same location.
+    std::string mBundlePath;
 };
 
 } // namespace UniPlan

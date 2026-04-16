@@ -18,53 +18,73 @@ namespace UniPlan
 {
 
 // ---------------------------------------------------------------------------
-// TryLoadBundleByTopic — deterministic path lookup
+// TryLoadBundleByTopic — recursive search for <TopicKey>.Plan.json
 // ---------------------------------------------------------------------------
 
 bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
                           const std::string &InTopicKey,
                           FTopicBundle &OutBundle, std::string &OutError)
 {
-    const fs::path BundlePath =
-        InRepoRoot / "Docs" / "Plans" / (InTopicKey + ".Plan.json");
-    if (!fs::exists(BundlePath))
+    const std::string TargetName = InTopicKey + ".Plan.json";
+    std::error_code EC;
+    for (auto Iterator = fs::recursive_directory_iterator(InRepoRoot, EC);
+         Iterator != fs::recursive_directory_iterator(); ++Iterator)
     {
-        OutError = "Bundle not found: " + BundlePath.string();
-        return false;
+        if (EC)
+            break;
+        if (Iterator->is_directory() &&
+            ShouldSkipRecursionDirectory(Iterator->path()))
+        {
+            Iterator.disable_recursion_pending();
+            continue;
+        }
+        if (!Iterator->is_regular_file())
+            continue;
+        if (Iterator->path().filename().string() != TargetName)
+            continue;
+        if (!TryReadTopicBundle(Iterator->path(), OutBundle, OutError))
+            return false;
+        OutBundle.mBundlePath = Iterator->path().string();
+        return true;
     }
-    return TryReadTopicBundle(BundlePath, OutBundle, OutError);
+    OutError = "Bundle not found: " + TargetName +
+               " (searched recursively from " + InRepoRoot.string() + ")";
+    return false;
 }
 
 // ---------------------------------------------------------------------------
-// LoadAllBundles — scan Docs/Plans/*.Plan.json
+// LoadAllBundles — recursive scan for all *.Plan.json
 // ---------------------------------------------------------------------------
 
 std::vector<FTopicBundle> LoadAllBundles(const fs::path &InRepoRoot,
                                          std::vector<std::string> &OutWarnings)
 {
     std::vector<FTopicBundle> Bundles;
-    const fs::path PlansDir = InRepoRoot / "Docs" / "Plans";
-    if (!fs::is_directory(PlansDir))
-    {
-        OutWarnings.push_back("Plans directory not found: " +
-                              PlansDir.string());
-        return Bundles;
-    }
-
     static const std::regex BundleRegex(R"(^([A-Za-z0-9]+)\.Plan\.json$)");
 
-    for (const auto &Entry : fs::directory_iterator(PlansDir))
+    std::error_code EC;
+    for (auto Iterator = fs::recursive_directory_iterator(InRepoRoot, EC);
+         Iterator != fs::recursive_directory_iterator(); ++Iterator)
     {
-        if (!Entry.is_regular_file())
+        if (EC)
+            break;
+        if (Iterator->is_directory() &&
+            ShouldSkipRecursionDirectory(Iterator->path()))
+        {
+            Iterator.disable_recursion_pending();
             continue;
-        const std::string Filename = Entry.path().filename().string();
+        }
+        if (!Iterator->is_regular_file())
+            continue;
+        const std::string Filename = Iterator->path().filename().string();
         std::smatch Match;
         if (!std::regex_match(Filename, Match, BundleRegex))
             continue;
         FTopicBundle Bundle;
         std::string Error;
-        if (TryReadTopicBundle(Entry.path(), Bundle, Error))
+        if (TryReadTopicBundle(Iterator->path(), Bundle, Error))
         {
+            Bundle.mBundlePath = Iterator->path().string();
             Bundles.push_back(std::move(Bundle));
         }
         else
@@ -278,7 +298,8 @@ int RunTopicCommand(const std::vector<std::string> &InArgs,
 {
     if (InArgs.empty() || ContainsHelpFlag(InArgs))
     {
-        throw UsageError("topic requires a subcommand: list, get, set");
+        throw UsageError("topic requires a subcommand: list, get, set, "
+                         "start, complete, block, status");
     }
 
     const std::string Sub = InArgs[0];
@@ -798,7 +819,10 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
 {
     if (InArgs.empty() || ContainsHelpFlag(InArgs))
     {
-        throw UsageError("phase requires a subcommand: list, get, set");
+        throw UsageError("phase requires a subcommand: list, get, set, "
+                         "start, complete, block, unblock, progress, "
+                         "complete-jobs, log, verify, next, readiness, "
+                         "wave-status");
     }
 
     const std::string Sub = InArgs[0];
@@ -1788,13 +1812,18 @@ static void AppendAutoChangelog(FTopicBundle &InOutBundle,
     InOutBundle.mChangeLogs.push_back(std::move(Entry));
 }
 
-// Shared: write bundle to the deterministic path
+// Shared: write bundle back to its source path
 static int WriteBundleBack(const FTopicBundle &InBundle,
                            const fs::path &InRepoRoot, std::string &OutError)
 {
-    const fs::path Path =
-        InRepoRoot / "Docs" / "Plans" / (InBundle.mTopicKey + ".Plan.json");
-    return TryWriteTopicBundle(InBundle, Path, OutError) ? 0 : 1;
+    if (InBundle.mBundlePath.empty())
+    {
+        OutError = "Bundle has no source path (was it loaded via "
+                   "TryLoadBundleByTopic?)";
+        return 1;
+    }
+    return TryWriteTopicBundle(InBundle, InBundle.mBundlePath, OutError) ? 0
+                                                                         : 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -2786,6 +2815,7 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
     Changes.push_back({"completed_at", {"", UTC}});
     Changes.push_back({"done", {Phase.mLifecycle.mDone, Options.mDone}});
     Phase.mLifecycle.mDone = Options.mDone;
+    Changes.push_back({"remaining", {Phase.mLifecycle.mRemaining, ""}});
     Phase.mLifecycle.mRemaining.clear();
 
     AppendAutoChangelog(Bundle, Target,
@@ -3224,6 +3254,7 @@ int RunTopicBlockCommand(const std::vector<std::string> &InArgs,
     std::vector<Change> Changes;
 
     Changes.push_back({"status", {"in_progress", "blocked"}});
+    Changes.push_back({"reason", {"", Options.mReason}});
     Bundle.mStatus = ETopicStatus::Blocked;
 
     AppendAutoChangelog(Bundle, "plan", "Topic blocked: " + Options.mReason);
