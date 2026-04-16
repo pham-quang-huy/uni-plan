@@ -8,6 +8,8 @@ implicit_invocation: true
 
 Use this skill to execute plan phases with proper governance gates and automatic re-auditing.
 
+Treat the bundle itself as the execution source of truth. Use `phase[n]`-style references in bundle text and evidence, and only mention legacy phase keys when quoting a real historical filename. Prefer CLI mutations, but honor explicit user requests for direct manual bundle repair and re-validate immediately after.
+
 ## Required Context
 
 Before executing, read the topic bundle:
@@ -45,7 +47,7 @@ Before marking a phase `in_progress`, verify ALL gates:
 |------|-------------|-------|
 | Design material | Phase has non-empty investigation and design fields | `uni-plan phase get --topic <T> --phase <N> --reference` |
 | Content depth | Design material is substantive, not empty stubs | Review `--reference` output |
-| Testing | For testable phases: testing records exist | `uni-plan phase get --topic <T> --phase <N> --execution` |
+| Testing | For testable active phases: testing records exist with both manual and automation-capable coverage | `uni-plan phase get --topic <T> --phase <N> --execution` |
 | Validation clean | No ErrorMajor issues for this topic | `uni-plan validate --topic <T>` |
 
 If any gate is not met, populate the phase design material first.

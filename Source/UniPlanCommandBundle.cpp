@@ -1816,9 +1816,9 @@ static void AppendAutoChangelog(FTopicBundle &InOutBundle,
 {
     FChangeLogEntry Entry;
     // Extract phase index only if target is phase-scoped (starts with
-    // "phases[") Top-level targets like "verifications[N]" or "plan" are
+    // "phase[") Top-level targets like "verifications[N]" or "plan" are
     // topic-level (-1)
-    if (InTarget.compare(0, 7, "phases[") == 0)
+    if (InTarget.compare(0, 6, "phase[") == 0)
     {
         const size_t Open = InTarget.find('[');
         const size_t Close = InTarget.find(']');
@@ -1978,7 +1978,7 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
     FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "]";
 
     using Change = std::pair<std::string, std::pair<std::string, std::string>>;
     std::vector<Change> Changes;
@@ -2118,7 +2118,7 @@ int RunJobSetCommand(const std::vector<std::string> &InArgs,
 
     FJobRecord &Job =
         Bundle.mPhases[Options.mPhaseIndex].mJobs[Options.mJobIndex];
-    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+    const std::string Target = "phase[" + std::to_string(Options.mPhaseIndex) +
                                "].jobs[" + std::to_string(Options.mJobIndex) +
                                "]";
 
@@ -2247,7 +2247,7 @@ int RunTaskSetCommand(const std::vector<std::string> &InArgs,
     FTaskRecord &Task = Bundle.mPhases[Options.mPhaseIndex]
                             .mJobs[Options.mJobIndex]
                             .mTasks[Options.mTaskIndex];
-    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+    const std::string Target = "phase[" + std::to_string(Options.mPhaseIndex) +
                                "].jobs[" + std::to_string(Options.mJobIndex) +
                                "].tasks[" + std::to_string(Options.mTaskIndex) +
                                "]";
@@ -2857,7 +2857,7 @@ int RunPhaseStartCommand(const std::vector<std::string> &InArgs,
     FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "]";
 
     // Gate: phase must be not_started
     if (Phase.mLifecycle.mStatus != EExecutionStatus::NotStarted)
@@ -2947,7 +2947,7 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
     FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "]";
 
     // Gate: phase must be in_progress
     if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
@@ -3040,7 +3040,7 @@ int RunPhaseBlockCommand(const std::vector<std::string> &InArgs,
     FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "]";
 
     // Gate: phase must be in_progress
     if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
@@ -3100,7 +3100,7 @@ int RunPhaseUnblockCommand(const std::vector<std::string> &InArgs,
     FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "]";
 
     // Gate: phase must be blocked
     if (Phase.mLifecycle.mStatus != EExecutionStatus::Blocked)
@@ -3159,7 +3159,7 @@ int RunPhaseProgressCommand(const std::vector<std::string> &InArgs,
     FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "]";
 
     // Gate: phase must be in_progress
     if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
@@ -3220,7 +3220,7 @@ int RunPhaseCompleteJobsCommand(const std::vector<std::string> &InArgs,
     FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "]";
 
     // Gate: phase must be in_progress
     if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
@@ -3570,7 +3570,7 @@ int RunLaneSetCommand(const std::vector<std::string> &InArgs,
     }
 
     FLaneRecord &Lane = Phase.mLanes[static_cast<size_t>(Options.mLaneIndex)];
-    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+    const std::string Target = "phase[" + std::to_string(Options.mPhaseIndex) +
                                "].lanes[" + std::to_string(Options.mLaneIndex) +
                                "]";
 
@@ -3671,7 +3671,7 @@ int RunTestingAddCommand(const std::vector<std::string> &InArgs,
     Phase.mTesting.push_back(std::move(Record));
 
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "].testing";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "].testing";
 
     AppendAutoChangelog(Bundle, Target,
                         "Testing record added to phase " +
@@ -3735,7 +3735,7 @@ int RunManifestAddCommand(const std::vector<std::string> &InArgs,
     Phase.mFileManifest.push_back(std::move(Item));
 
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "].file_manifest";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "].file_manifest";
 
     AppendAutoChangelog(Bundle, Target,
                         "File manifest entry added: " + Options.mFile);
@@ -3791,7 +3791,7 @@ int RunTestingSetCommand(const std::vector<std::string> &InArgs,
 
     FTestingRecord &Record =
         Phase.mTesting[static_cast<size_t>(Options.mIndex)];
-    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+    const std::string Target = "phase[" + std::to_string(Options.mPhaseIndex) +
                                "].testing[" + std::to_string(Options.mIndex) +
                                "]";
 
@@ -3955,7 +3955,7 @@ int RunManifestSetCommand(const std::vector<std::string> &InArgs,
 
     FFileManifestItem &Item =
         Phase.mFileManifest[static_cast<size_t>(Options.mIndex)];
-    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+    const std::string Target = "phase[" + std::to_string(Options.mPhaseIndex) +
                                "].file_manifest[" +
                                std::to_string(Options.mIndex) + "]";
 
@@ -4136,7 +4136,7 @@ int RunLaneAddCommand(const std::vector<std::string> &InArgs,
     Phase.mLanes.push_back(std::move(Lane));
 
     const std::string Target =
-        "phases[" + std::to_string(Options.mPhaseIndex) + "].lanes";
+        "phase[" + std::to_string(Options.mPhaseIndex) + "].lanes";
 
     AppendAutoChangelog(Bundle, Target,
                         "Lane added at index " +

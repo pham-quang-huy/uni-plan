@@ -18,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.46.0";
+static constexpr const char *kCliVersion = "0.47.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -722,7 +722,7 @@ struct ValidateCheck
     EValidationSeverity mSeverity = EValidationSeverity::Warning;
     bool mbOk = true;
     std::string mTopic; // which bundle (empty for aggregate checks)
-    std::string mPath;  // e.g. "phases[2].jobs[1].tasks[0]"
+    std::string mPath;  // e.g. "phase[2].jobs[1].tasks[0]"
     std::string mDetail;
     std::vector<std::string> mDiagnostics;
 };

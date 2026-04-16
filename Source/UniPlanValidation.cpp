@@ -150,7 +150,7 @@ static void EvalPhaseScope(const std::vector<FTopicBundle> &InBundles,
         {
             if (B.mPhases[I].mScope.empty())
                 Fail(OutChecks, "phase_scope", EValidationSeverity::ErrorMinor,
-                     B.mTopicKey, "phases[" + std::to_string(I) + "].scope",
+                     B.mTopicKey, "phase[" + std::to_string(I) + "].scope",
                      "empty scope");
         }
     }
@@ -181,7 +181,7 @@ static void EvalJobRequiredFields(const std::vector<FTopicBundle> &InBundles,
             for (size_t JI = 0; JI < Phase.mJobs.size(); ++JI)
             {
                 const FJobRecord &Job = Phase.mJobs[JI];
-                const std::string Path = "phases[" + std::to_string(PI) +
+                const std::string Path = "phase[" + std::to_string(PI) +
                                          "].jobs[" + std::to_string(JI) + "]";
                 if (Job.mScope.empty())
                     Fail(OutChecks, "job_required_fields",
@@ -215,7 +215,7 @@ static void EvalJobLaneRef(const std::vector<FTopicBundle> &InBundles,
                 {
                     Fail(OutChecks, "job_lane_ref",
                          EValidationSeverity::ErrorMinor, B.mTopicKey,
-                         "phases[" + std::to_string(PI) + "].jobs[" +
+                         "phase[" + std::to_string(PI) + "].jobs[" +
                              std::to_string(JI) + "].lane",
                          "lane " + std::to_string(Job.mLane) +
                              " out of bounds (max " +
@@ -245,7 +245,7 @@ static void EvalTaskRequiredFields(const std::vector<FTopicBundle> &InBundles,
                     {
                         Fail(OutChecks, "task_required_fields",
                              EValidationSeverity::ErrorMinor, B.mTopicKey,
-                             "phases[" + std::to_string(PI) + "].jobs[" +
+                             "phase[" + std::to_string(PI) + "].jobs[" +
                                  std::to_string(JI) + "].tasks[" +
                                  std::to_string(TI) + "].description",
                              "empty description");
@@ -268,7 +268,7 @@ static void EvalLaneRequiredFields(const std::vector<FTopicBundle> &InBundles,
             for (size_t LI = 0; LI < Phase.mLanes.size(); ++LI)
             {
                 const FLaneRecord &Lane = Phase.mLanes[LI];
-                const std::string Path = "phases[" + std::to_string(PI) +
+                const std::string Path = "phase[" + std::to_string(PI) +
                                          "].lanes[" + std::to_string(LI) + "]";
                 if (Lane.mScope.empty())
                     Fail(OutChecks, "lane_required_fields",
@@ -389,7 +389,7 @@ static void EvalTestingRecordFields(const std::vector<FTopicBundle> &InBundles,
             for (size_t TI = 0; TI < Phase.mTesting.size(); ++TI)
             {
                 const FTestingRecord &TR = Phase.mTesting[TI];
-                const std::string Path = "phases[" + std::to_string(PI) +
+                const std::string Path = "phase[" + std::to_string(PI) +
                                          "].testing[" + std::to_string(TI) +
                                          "]";
                 if (TR.mSession.empty())
@@ -425,7 +425,7 @@ static void EvalFileManifestFields(const std::vector<FTopicBundle> &InBundles,
             for (size_t FI = 0; FI < Phase.mFileManifest.size(); ++FI)
             {
                 const FFileManifestItem &FM = Phase.mFileManifest[FI];
-                const std::string Path = "phases[" + std::to_string(PI) +
+                const std::string Path = "phase[" + std::to_string(PI) +
                                          "].file_manifest[" +
                                          std::to_string(FI) + "]";
                 if (FM.mFilePath.empty())
@@ -457,7 +457,7 @@ static void EvalTimestampFormat(const std::vector<FTopicBundle> &InBundles,
     {
         for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
         {
-            const std::string PP = "phases[" + std::to_string(PI) + "]";
+            const std::string PP = "phase[" + std::to_string(PI) + "]";
             CheckTS(B.mTopicKey, PP + ".started_at",
                     B.mPhases[PI].mLifecycle.mStartedAt);
             CheckTS(B.mTopicKey, PP + ".completed_at",
@@ -498,7 +498,7 @@ static void EvalPhaseTracking(const std::vector<FTopicBundle> &InBundles,
                 Phase.mLifecycle.mRemaining.empty())
             {
                 Fail(OutChecks, "phase_tracking", EValidationSeverity::Warning,
-                     B.mTopicKey, "phases[" + std::to_string(I) + "]",
+                     B.mTopicKey, "phase[" + std::to_string(I) + "]",
                      "in_progress but done and remaining are both empty");
             }
         }
@@ -516,6 +516,11 @@ static void EvalTestingActorCoverage(const std::vector<FTopicBundle> &InBundles,
             const FPhaseRecord &Phase = B.mPhases[PI];
             if (Phase.mTesting.empty())
                 continue;
+            if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress &&
+                Phase.mLifecycle.mStatus != EExecutionStatus::Blocked)
+            {
+                continue;
+            }
 
             bool bHasHuman = false;
             bool bHasAI = false;
@@ -545,7 +550,7 @@ static void EvalTestingActorCoverage(const std::vector<FTopicBundle> &InBundles,
             {
                 Fail(OutChecks, "testing_actor_coverage",
                      EValidationSeverity::Warning, B.mTopicKey,
-                     "phases[" + std::to_string(PI) + "].testing",
+                     "phase[" + std::to_string(PI) + "].testing",
                      "missing actors: " + Missing);
             }
         }

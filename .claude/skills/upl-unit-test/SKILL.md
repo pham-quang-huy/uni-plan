@@ -10,7 +10,7 @@ Build and run the uni-plan test suite, add new tests, or debug failures.
 
 ## Mandatory: Coverage Audit After Every Run
 
-After building and running tests, you MUST spawn a coverage audit agent. This is not optional.
+After building and running tests, you MUST perform a coverage audit. Use the coverage audit agent when the current runtime explicitly allows subagents; otherwise perform the audit manually from `Source/UniPlanForwardDecls.h` and the `Test/UniPlanTest*.cpp` inventory before reporting results.
 
 ```
 Agent({
@@ -20,7 +20,7 @@ Agent({
 })
 ```
 
-Do NOT report test results to the user until the agent has completed and you have reviewed its coverage matrix. If the matrix shows gaps, fix them before reporting.
+Do NOT report test results to the user until the coverage audit is complete and you have reviewed its matrix. If the matrix shows gaps, fix them before reporting.
 
 ## Quick Run
 

@@ -59,6 +59,7 @@ class FBundleTestFixture : public ::testing::Test
     // Assert ISO 8601 timestamp format
     static void AssertISOTimestamp(const std::string &InValue);
     static void AssertISODate(const std::string &InValue);
+    static void AssertNoLegacyPhasePath(const std::string &InValue);
 
   private:
     std::ostringstream mStdoutStream;

@@ -126,12 +126,18 @@ TEST_F(FBundleTestFixture, PhaseSetDoneAndRemaining)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["target"], "phase[1]");
+    AssertNoLegacyPhasePath(Json["target"].get<std::string>());
 
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
     EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mDone, "W1 done");
     EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mRemaining, "W2-W3");
     EXPECT_GT(Bundle.mChangeLogs.size(), ChangelogsBefore);
+    ASSERT_FALSE(Bundle.mChangeLogs.empty());
+    EXPECT_EQ(Bundle.mChangeLogs.back().mAffected, "phase[1]");
+    AssertNoLegacyPhasePath(Bundle.mChangeLogs.back().mAffected);
 }
 
 TEST_F(FBundleTestFixture, PhaseSetOutOfRangeFails)
@@ -378,6 +384,48 @@ TEST_F(FBundleTestFixture, VerificationAddMissingTopicFails)
                      mRepoRoot.string()),
                  UniPlan::UsageError);
     StopCapture();
+}
+
+TEST_F(FBundleTestFixture, ChangelogSetUpdatesEntry)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunChangelogSetCommand(
+        {"--topic", "SampleTopic", "--index", "0", "--phase", "2",
+         "--change", "Retargeted entry", "--type", "fix", "--affected",
+         "phase[2].jobs[0]", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["target"], "changelogs[0]");
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_FALSE(After.mChangeLogs.empty());
+    EXPECT_EQ(After.mChangeLogs[0].mPhase, 2);
+    EXPECT_EQ(After.mChangeLogs[0].mChange, "Retargeted entry");
+    EXPECT_EQ(After.mChangeLogs[0].mAffected, "phase[2].jobs[0]");
+    AssertNoLegacyPhasePath(After.mChangeLogs[0].mAffected);
+    EXPECT_EQ(After.mChangeLogs[0].mType, UniPlan::EChangeType::Fix);
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, ChangelogSetOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunChangelogSetCommand(
+        {"--topic", "SampleTopic", "--index", "99", "--change", "X",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
 }
 
 // ===================================================================

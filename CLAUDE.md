@@ -108,11 +108,11 @@ uni-plan/
 │   ├── Playbook.Schema.md     # Playbook schema
 │   ├── Implementation.Schema.md # Implementation tracker schema
 │   └── *ChangeLog.Schema.md / *Verification.Schema.md  # 6 sidecar schemas
-├── Docs/                      # uni-plan's own development plans
+├── Docs/                      # uni-plan's own development corpus
 │   ├── INDEX.md               # Plan discovery index
-│   ├── Plans/                 # Plan documents
-│   ├── Implementation/        # Implementation trackers
-│   └── Playbooks/             # Phase playbooks
+│   ├── Plans/                 # Active .Plan.json bundles
+│   ├── Implementation/        # Legacy markdown fixtures / historical references
+│   └── Playbooks/             # Legacy markdown fixtures / historical references
 ├── ThirdParty/                # FTXUI (terminal UI library)
 ├── Build/                     # CMake output directory
 ├── .claude/                   # Claude Code system
@@ -173,7 +173,7 @@ Before committing any `Source/` changes, verify `kCliVersion` was bumped appropr
 
 ### V4 bundle model
 
-Each topic is a single `.Plan.json` file in `Docs/Plans/`. The bundle contains all plan metadata, phases (with lifecycle + design material), changelogs, and verifications. There are no separate implementation trackers, playbook files, or sidecar files.
+Each active topic is a single `.Plan.json` file in `Docs/Plans/`. The bundle contains all plan metadata, phases (with lifecycle + design material), changelogs, and verifications. Legacy markdown implementation/playbook documents may still exist in this repo for regression coverage, fixture data, or historical reference, but they are not the active source of truth for bundle-governed topics.
 
 | Item | Location |
 |------|----------|
@@ -184,7 +184,9 @@ Each topic is a single `.Plan.json` file in `Docs/Plans/`. The bundle contains a
 
 ### Legacy .md naming (lint only)
 
-The `.md` naming patterns below apply to non-plan documentation (specs, ADRs, references). Plan/implementation/playbook topics are `.Plan.json` bundles.
+The `.md` naming patterns below apply to non-plan documentation plus legacy historical fixtures. Active plan execution uses `.Plan.json` bundles.
+
+Bundle entity references should use `phase[n]`, `lane[n]`, `wave[n]`, `job[n]`, and `task[n]` inside errors, changelogs, and docs. Legacy phase keys such as `P1` should only appear when quoting an actual historical filename.
 
 | Doc Type | Pattern | Placement |
 |----------|---------|-----------|
@@ -263,7 +265,7 @@ uni-plan verification add --topic <T> [--phase <N>] --check <text> [--result <te
 uni-plan verification set --topic <T> --index <N> [--check <t>] [--result <t>] [--detail <t>]
 uni-plan lane set --topic <T> --phase <N> --lane <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
 uni-plan lane add --topic <T> --phase <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
-uni-plan testing add --topic <T> --phase <N> --step <text> --action <text> --expected <text> [--actor <human|ai>] [--session <s>] [--evidence <t>]
+uni-plan testing add --topic <T> --phase <N> --step <text> --action <text> --expected <text> [--actor <human|ai|automated>] [--session <s>] [--evidence <t>]
 uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
 uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
 uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]

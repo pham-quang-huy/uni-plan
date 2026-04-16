@@ -8,6 +8,8 @@ implicit_invocation: true
 
 Use this skill to create governed V4 topic bundles for uni-plan's own development.
 
+Use index-based entity references inside the bundle (`phase[n]`, `lane[n]`, `wave[n]`, `job[n]`, `task[n]`). Legacy keys like `P0` belong only in quoted archival filenames or historical notes.
+
 ## Workflow
 
 ### Step 1: Investigation

@@ -242,6 +242,25 @@ TEST(OptionParsing, ManifestSetRequiresIndex)
         UniPlan::UsageError);
 }
 
+TEST(OptionParsing, ChangelogSetRequiresIndex)
+{
+    EXPECT_THROW(UniPlan::ParseChangelogSetOptions({"--topic", "X"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, ChangelogSetHappyPath)
+{
+    const auto O = UniPlan::ParseChangelogSetOptions(
+        {"--topic", "X", "--index", "2", "--phase", "topic", "--change",
+         "Updated", "--type", "fix", "--affected", "phase[2]"});
+    EXPECT_EQ(O.mTopic, "X");
+    EXPECT_EQ(O.mIndex, 2);
+    EXPECT_EQ(O.mPhase, -1);
+    EXPECT_EQ(O.mChange, "Updated");
+    EXPECT_EQ(O.mType, "fix");
+    EXPECT_EQ(O.mAffected, "phase[2]");
+}
+
 TEST(OptionParsing, LaneAddRequiresPhase)
 {
     EXPECT_THROW(UniPlan::ParseLaneAddOptions({"--topic", "X"}),

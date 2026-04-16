@@ -1,6 +1,7 @@
 #include "UniPlanTestFixture.h"
 
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJsonIO.h"
 #include "UniPlanTypes.h"
 
 #include <gtest/gtest.h>
@@ -422,6 +423,75 @@ TEST_F(FBundleTestFixture, ValidatePassesOnValidFixture)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
+}
+
+TEST_F(FBundleTestFixture, ValidateWarnsActivePhaseMissingActorCoverage)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FTestingRecord Record;
+    Record.mSession = "S1";
+    Record.mActor = UniPlan::ETestingActor::Human;
+    Record.mStep = "1";
+    Record.mAction = "Run smoke";
+    Record.mExpected = "Pass";
+    Bundle.mPhases[0].mTesting.push_back(std::move(Record));
+
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["valid"].get<bool>());
+    ASSERT_FALSE(Json["issues"].empty());
+    bool bFoundActorCoverage = false;
+    for (const auto &Issue : Json["issues"])
+    {
+        if (Issue["id"] == "testing_actor_coverage")
+        {
+            bFoundActorCoverage = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(bFoundActorCoverage);
+}
+
+TEST_F(FBundleTestFixture, ValidateIgnoresCompletedPhaseActorCoverage)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::Completed, 1,
+                         UniPlan::EExecutionStatus::Completed, true);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FTestingRecord Record;
+    Record.mSession = "S1";
+    Record.mActor = UniPlan::ETestingActor::Human;
+    Record.mStep = "1";
+    Record.mAction = "Run smoke";
+    Record.mExpected = "Pass";
+    Bundle.mPhases[0].mTesting.push_back(std::move(Record));
+
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["issues"].empty());
 }
 
 TEST_F(FBundleTestFixture, ValidateMissingTopicFails)

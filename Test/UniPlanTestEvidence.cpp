@@ -26,12 +26,14 @@ TEST_F(FBundleTestFixture, PhaseLogAppendsChangelog)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_TRUE(Json["ok"].get<bool>());
+    EXPECT_EQ(Json["target"], "changelogs");
 
     UniPlan::FTopicBundle After;
     ASSERT_TRUE(ReloadBundle("SampleTopic", After));
     EXPECT_EQ(After.mChangeLogs.size(), CountBefore + 1);
     EXPECT_EQ(After.mChangeLogs.back().mChange, "Test log entry");
     EXPECT_EQ(After.mChangeLogs.back().mPhase, 0);
+    EXPECT_TRUE(After.mChangeLogs.back().mAffected.empty());
 }
 
 TEST_F(FBundleTestFixture, PhaseLogRejectsOutOfRange)
@@ -66,6 +68,9 @@ TEST_F(FBundleTestFixture, PhaseVerifyAppendsVerification)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["ok"].get<bool>());
+    EXPECT_EQ(Json["target"], "verifications");
 
     UniPlan::FTopicBundle After;
     ASSERT_TRUE(ReloadBundle("SampleTopic", After));

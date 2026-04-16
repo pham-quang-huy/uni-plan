@@ -20,6 +20,9 @@ TEST_F(FBundleTestFixture, PhaseStartHappyPath)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["target"], "phase[0]");
+    AssertNoLegacyPhasePath(Json["target"].get<std::string>());
 
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("T", Bundle));
@@ -27,6 +30,9 @@ TEST_F(FBundleTestFixture, PhaseStartHappyPath)
               UniPlan::EExecutionStatus::InProgress);
     AssertISOTimestamp(Bundle.mPhases[0].mLifecycle.mStartedAt);
     EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mAgentContext, "test ctx");
+    ASSERT_FALSE(Bundle.mChangeLogs.empty());
+    EXPECT_EQ(Bundle.mChangeLogs.back().mAffected, "phase[0]");
+    AssertNoLegacyPhasePath(Bundle.mChangeLogs.back().mAffected);
 }
 
 TEST_F(FBundleTestFixture, PhaseStartRejectsNonNotStarted)
@@ -87,6 +93,9 @@ TEST_F(FBundleTestFixture, PhaseCompleteHappyPath)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["target"], "phase[0]");
+    AssertNoLegacyPhasePath(Json["target"].get<std::string>());
 
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("T", Bundle));
@@ -95,6 +104,17 @@ TEST_F(FBundleTestFixture, PhaseCompleteHappyPath)
     EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mDone, "All done");
     AssertISOTimestamp(Bundle.mPhases[0].mLifecycle.mCompletedAt);
     EXPECT_FALSE(Bundle.mVerifications.empty());
+    ASSERT_FALSE(Bundle.mChangeLogs.empty());
+    bool bFoundPhaseClosure = false;
+    for (const auto &Entry : Bundle.mChangeLogs)
+    {
+        if (Entry.mAffected == "phase[0]")
+        {
+            bFoundPhaseClosure = true;
+            AssertNoLegacyPhasePath(Entry.mAffected);
+        }
+    }
+    EXPECT_TRUE(bFoundPhaseClosure);
 }
 
 TEST_F(FBundleTestFixture, PhaseCompleteRejectsNotInProgress)

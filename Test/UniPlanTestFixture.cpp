@@ -157,3 +157,9 @@ void FBundleTestFixture::AssertISODate(const std::string &InValue)
     EXPECT_TRUE(std::regex_match(InValue, std::regex(R"(\d{4}-\d{2}-\d{2})")))
         << "Not ISO date: " << InValue;
 }
+
+void FBundleTestFixture::AssertNoLegacyPhasePath(const std::string &InValue)
+{
+    EXPECT_EQ(InValue.find("phases["), std::string::npos)
+        << "Found legacy path in: " << InValue;
+}
