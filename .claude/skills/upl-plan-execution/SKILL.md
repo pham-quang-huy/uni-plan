@@ -31,9 +31,10 @@ uni-plan validate --topic <topic> --human
 
 ### 2. Determine Next Phase
 
-Find the first phase with status `not_started`:
+Find the first phase with status `not_started` and check readiness:
 ```bash
-uni-plan phase list --topic <topic> --status not_started --human
+uni-plan phase next --topic <topic> --human
+uni-plan phase readiness --topic <topic> --phase <N> --human
 ```
 
 ### 3. Phase Entry Gate
@@ -52,8 +53,10 @@ If any gate is not met, populate the phase design material first.
 ### 4. Claim the Phase
 
 ```bash
-uni-plan phase set --topic <topic> --phase <N> --status in_progress
+uni-plan phase start --topic <topic> --phase <N> [--context "agent continuation prompt"]
 ```
+
+This enforces: phase must be `not_started` and design material must be non-empty. Auto-sets `started_at`, auto-starts topic if `not_started`, and appends changelog.
 
 ### 5. Execute
 
@@ -68,9 +71,15 @@ uni-plan phase get --topic <topic> --phase <N> --execution --human
 - Track progress as you go:
 
 ```bash
-uni-plan phase set --topic <topic> --phase <N> \
+uni-plan phase progress --topic <topic> --phase <N> \
   --done "What was completed" \
   --remaining "What's left"
+```
+
+- Check wave-by-wave progress:
+
+```bash
+uni-plan phase wave-status --topic <topic> --phase <N> --human
 ```
 
 ### 6. Phase Completion
@@ -82,15 +91,16 @@ When all jobs in the phase are done:
    - No if/else chains >3 branches on same key
    - No raw primitives representing domain concepts
    - If violations found, invoke `upl-code-refactor` before marking complete
-2. **Close the phase**:
+2. **Close the phase** (enforces in_progress gate, auto-sets completed_at, auto-completes topic if all phases done):
    ```bash
-   uni-plan phase set --topic <topic> --phase <N> --status completed \
-     --done "Final summary of delivered work" --remaining ""
+   uni-plan phase complete --topic <topic> --phase <N> \
+     --done "Final summary of delivered work" \
+     --verification "Build passes, all exit criteria met"
    ```
-3. **Record evidence**:
+3. **Record additional evidence** (if needed beyond the --verification above):
    ```bash
-   uni-plan changelog add --topic <topic> --phase <N> --change "Phase N completed: ..."
-   uni-plan verification add --topic <topic> --phase <N> --check "Build passes" --result pass
+   uni-plan phase log --topic <topic> --phase <N> --change "Details..." --type feat
+   uni-plan phase verify --topic <topic> --phase <N> --check "Visual parity" --result pass
    ```
 
 ### 7. Post-Phase Re-Audit (MANDATORY)
@@ -108,7 +118,7 @@ This ensures no governance drift was introduced.
 
 After audit:
 - If more phases remain: evaluate whether to continue or pause
-- If all phases complete: `uni-plan topic set --topic <topic> --status completed`
+- If all phases complete: `uni-plan topic complete --topic <topic>` (enforces all-phases-completed gate)
 - If audit found issues: fix before proceeding
 
 ## Status Transitions

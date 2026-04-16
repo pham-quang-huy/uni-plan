@@ -204,35 +204,67 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 
 ## cli_commands
 
-### V4 query commands
+### Query commands
 
 ```bash
-uni-plan topic list [--status <filter>] [--json|--human]
-uni-plan topic get --topic <topic> [--json|--human]
-uni-plan phase list --topic <topic> [--status <filter>] [--json|--human]
-uni-plan phase get --topic <topic> --phase <N> [--brief|--execution|--reference] [--json|--human]
-uni-plan changelog --topic <topic> [--phase <N>] [--json|--human]
-uni-plan verification --topic <topic> [--phase <N>] [--json|--human]
-uni-plan timeline --topic <topic> [--phase <N>] [--since <yyyy-mm-dd>] [--json|--human]
-uni-plan blockers [--topic <topic>] [--json|--human]
-uni-plan validate [--topic <topic>] [--strict] [--json|--human]
+uni-plan topic list [--status <filter>] [--human]
+uni-plan topic get --topic <T> [--human]
+uni-plan topic status [--human]                              # overview: counts + active phases
+uni-plan phase list --topic <T> [--status <filter>] [--human]
+uni-plan phase get --topic <T> --phase <N> [--brief|--execution|--reference] [--human]
+uni-plan phase next --topic <T> [--human]                    # find next not_started phase + readiness
+uni-plan phase readiness --topic <T> --phase <N> [--human]   # gate-by-gate status
+uni-plan phase wave-status --topic <T> --phase <N> [--human] # per-wave job completion
+uni-plan changelog --topic <T> [--phase <N>] [--human]
+uni-plan verification --topic <T> [--phase <N>] [--human]
+uni-plan timeline --topic <T> [--phase <N>] [--since <date>] [--human]
+uni-plan blockers [--topic <T>] [--human]
+uni-plan validate [--topic <T>] [--strict] [--human]
 ```
 
-### V4 mutation commands
+### Semantic lifecycle commands
+
+Enforce gates with hard errors. Prefer these over raw `set` commands.
 
 ```bash
-uni-plan topic set --topic <topic> [--status <status>] [--next-actions <text>]
-uni-plan phase set --topic <topic> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>]
-uni-plan job set --topic <topic> --phase <N> --job <N> --status <status>
-uni-plan task set --topic <topic> --phase <N> --job <N> --task <N> [--status <s>] [--evidence <t>] [--notes <t>]
-uni-plan changelog add --topic <topic> [--phase <N>] --change <text> [--type <feat|fix|refactor|chore>]
-uni-plan verification add --topic <topic> [--phase <N>] --check <text> [--result <text>] [--detail <text>]
+# Topic lifecycle
+uni-plan topic start --topic <T>                              # gate: not_started
+uni-plan topic complete --topic <T> [--verification <text>]   # gate: all phases completed
+uni-plan topic block --topic <T> --reason <text>              # gate: in_progress
+
+# Phase lifecycle
+uni-plan phase start --topic <T> --phase <N> [--context <t>]  # gate: not_started + design material
+uni-plan phase complete --topic <T> --phase <N> --done <text> [--verification <text>]  # gate: in_progress
+uni-plan phase block --topic <T> --phase <N> --reason <text>  # gate: in_progress
+uni-plan phase unblock --topic <T> --phase <N>                # gate: blocked
+uni-plan phase progress --topic <T> --phase <N> --done <text> --remaining <text>       # gate: in_progress
+uni-plan phase complete-jobs --topic <T> --phase <N>          # bulk-complete all jobs
+
+# Evidence shortcuts (phase-scoped with bounds check)
+uni-plan phase log --topic <T> --phase <N> --change <text> [--type <type>] [--affected <text>]
+uni-plan phase verify --topic <T> --phase <N> --check <text> [--result <text>] [--detail <text>]
+```
+
+### Raw mutation commands
+
+Low-level field setters. Use semantic commands above when possible.
+
+```bash
+uni-plan topic set --topic <T> [--status <s>] [--next-actions <text>]
+uni-plan phase set --topic <T> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>]
+uni-plan job set --topic <T> --phase <N> --job <N> --status <s>
+uni-plan task set --topic <T> --phase <N> --job <N> --task <N> [--status <s>] [--evidence <t>] [--notes <t>]
+uni-plan changelog add --topic <T> [--phase <N>] --change <text> [--type <feat|fix|refactor|chore>] [--affected <t>]
+uni-plan verification add --topic <T> [--phase <N>] --check <text> [--result <text>] [--detail <text>]
+uni-plan lane set --topic <T> --phase <N> --lane <N> --status <s>
+uni-plan testing add --topic <T> --phase <N> --step <text> --action <text> --expected <text> [--actor <human|ai>] [--session <s>] [--evidence <t>]
+uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
 ```
 
 ### Utility commands
 
 ```bash
-uni-plan cache info|clear|config [--dir <path>] [--json|--human]
-uni-plan watch [--repo <path>]
-uni-plan lint [--json|--human]  # legacy .md filename check only
+uni-plan cache info|clear|config [--dir <path>] [--human]
+uni-plan watch [--repo-root <path>]
+uni-plan lint [--human]  # legacy .md filename check only
 ```

@@ -18,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.42.0";
+static constexpr const char *kCliVersion = "0.43.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -370,6 +370,108 @@ struct FVerificationAddOptions : BaseOptions
     std::string mCheck;
     std::string mResult;
     std::string mDetail;
+};
+
+// ---------------------------------------------------------------------------
+// Semantic command option structs
+// ---------------------------------------------------------------------------
+
+// Tier 1 — Phase lifecycle mutations
+struct FPhaseStartOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mContext;
+};
+
+struct FPhaseCompleteOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mDone;
+    std::string mVerification;
+};
+
+struct FPhaseBlockOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mReason;
+};
+
+struct FPhaseUnblockOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+};
+
+struct FPhaseProgressOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mDone;
+    std::string mRemaining;
+};
+
+struct FPhaseCompleteJobsOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+};
+
+// Tier 2 — Topic lifecycle mutations
+struct FTopicStartOptions : BaseOptions
+{
+    std::string mTopic;
+};
+
+struct FTopicCompleteOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mVerification;
+};
+
+struct FTopicBlockOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mReason;
+};
+
+// Tier 4 — Query helpers (shared for readiness + wave-status)
+struct FPhaseQueryOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+};
+
+// Tier 5 — Missing entity coverage
+struct FLaneSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mLaneIndex = -1;
+    std::string mStatus;
+};
+
+struct FTestingAddOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mSession;
+    std::string mActor;
+    std::string mStep;
+    std::string mAction;
+    std::string mExpected;
+    std::string mEvidence;
+};
+
+struct FManifestAddOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mFile;
+    std::string mAction;
+    std::string mDescription;
 };
 
 // ---------------------------------------------------------------------------

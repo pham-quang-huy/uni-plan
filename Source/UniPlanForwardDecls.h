@@ -58,7 +58,7 @@ std::string ToHexString(const uint64_t InValue);
 std::string EscapeCacheField(const std::string &InValue);
 std::string UnescapeCacheField(const std::string &InValue);
 std::vector<std::string> SplitCacheFields(const std::string &InLine);
-fs::path ResolveCodexCacheRoot(const std::string &InConfigCacheDir);
+fs::path ResolveCacheRoot(const std::string &InConfigCacheDir);
 fs::path BuildInventoryCachePath(const fs::path &InRepoRoot,
                                  const std::string &InConfigCacheDir);
 bool TryComputeMarkdownCorpusSignature(const fs::path &InRepoRoot,
@@ -135,6 +135,37 @@ FChangelogAddOptions
 ParseChangelogAddOptions(const std::vector<std::string> &InTokens);
 FVerificationAddOptions
 ParseVerificationAddOptions(const std::vector<std::string> &InTokens);
+
+// Semantic command option parsers
+FPhaseStartOptions
+ParsePhaseStartOptions(const std::vector<std::string> &InTokens);
+FPhaseCompleteOptions
+ParsePhaseCompleteOptions(const std::vector<std::string> &InTokens);
+FPhaseBlockOptions
+ParsePhaseBlockOptions(const std::vector<std::string> &InTokens);
+FPhaseUnblockOptions
+ParsePhaseUnblockOptions(const std::vector<std::string> &InTokens);
+FPhaseProgressOptions
+ParsePhaseProgressOptions(const std::vector<std::string> &InTokens);
+FPhaseCompleteJobsOptions
+ParsePhaseCompleteJobsOptions(const std::vector<std::string> &InTokens);
+FTopicStartOptions
+ParseTopicStartOptions(const std::vector<std::string> &InTokens);
+FTopicCompleteOptions
+ParseTopicCompleteOptions(const std::vector<std::string> &InTokens);
+FTopicBlockOptions
+ParseTopicBlockOptions(const std::vector<std::string> &InTokens);
+FChangelogAddOptions
+ParsePhaseLogOptions(const std::vector<std::string> &InTokens);
+FVerificationAddOptions
+ParsePhaseVerifyOptions(const std::vector<std::string> &InTokens);
+FPhaseQueryOptions
+ParsePhaseQueryOptions(const std::vector<std::string> &InTokens);
+FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens);
+FTestingAddOptions
+ParseTestingAddOptions(const std::vector<std::string> &InTokens);
+FManifestAddOptions
+ParseManifestAddOptions(const std::vector<std::string> &InTokens);
 
 // From UniPlanOutputHuman.cpp
 int RunCacheInfoHuman(const CacheInfoResult &InResult);
@@ -395,6 +426,52 @@ int RunChangelogAddCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot);
 int RunVerificationAddCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot);
+
+// Semantic commands — Tier 1: Phase lifecycle
+int RunPhaseStartCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot);
+int RunPhaseBlockCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunPhaseUnblockCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot);
+int RunPhaseProgressCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot);
+int RunPhaseCompleteJobsCommand(const std::vector<std::string> &InArgs,
+                                const std::string &InRepoRoot);
+
+// Semantic commands — Tier 2: Topic lifecycle
+int RunTopicStartCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunTopicCompleteCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot);
+int RunTopicBlockCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+
+// Semantic commands — Tier 3: Evidence shortcuts
+int RunPhaseLogCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
+int RunPhaseVerifyCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
+
+// Semantic commands — Tier 4: Query helpers
+int RunPhaseNextCommand(const std::vector<std::string> &InArgs,
+                        const std::string &InRepoRoot);
+int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot);
+int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
+int RunPhaseWaveStatusCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot);
+
+// Semantic commands — Tier 5: Entity coverage
+int RunLaneSetCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+int RunTestingAddCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunManifestAddCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
 
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>

@@ -309,8 +309,19 @@ int RunTopicCommand(const std::vector<std::string> &InArgs,
         return RunTopicSetCommand(SubArgs, InRepoRoot);
     }
 
+    // Semantic topic commands
+    if (Sub == "start")
+        return RunTopicStartCommand(SubArgs, InRepoRoot);
+    if (Sub == "complete")
+        return RunTopicCompleteCommand(SubArgs, InRepoRoot);
+    if (Sub == "block")
+        return RunTopicBlockCommand(SubArgs, InRepoRoot);
+    if (Sub == "status")
+        return RunTopicStatusCommand(SubArgs, InRepoRoot);
+
     throw UsageError("Unknown topic subcommand: " + Sub +
-                     ". Expected: list, get, set");
+                     ". Expected: list, get, set, start, complete, block, "
+                     "status");
 }
 
 // ===================================================================
@@ -818,8 +829,34 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseSetCommand(SubArgs, InRepoRoot);
     }
 
+    // Semantic phase commands
+    if (Sub == "start")
+        return RunPhaseStartCommand(SubArgs, InRepoRoot);
+    if (Sub == "complete")
+        return RunPhaseCompleteCommand(SubArgs, InRepoRoot);
+    if (Sub == "block")
+        return RunPhaseBlockCommand(SubArgs, InRepoRoot);
+    if (Sub == "unblock")
+        return RunPhaseUnblockCommand(SubArgs, InRepoRoot);
+    if (Sub == "progress")
+        return RunPhaseProgressCommand(SubArgs, InRepoRoot);
+    if (Sub == "complete-jobs")
+        return RunPhaseCompleteJobsCommand(SubArgs, InRepoRoot);
+    if (Sub == "log")
+        return RunPhaseLogCommand(SubArgs, InRepoRoot);
+    if (Sub == "verify")
+        return RunPhaseVerifyCommand(SubArgs, InRepoRoot);
+    if (Sub == "next")
+        return RunPhaseNextCommand(SubArgs, InRepoRoot);
+    if (Sub == "readiness")
+        return RunPhaseReadinessCommand(SubArgs, InRepoRoot);
+    if (Sub == "wave-status")
+        return RunPhaseWaveStatusCommand(SubArgs, InRepoRoot);
+
     throw UsageError("Unknown phase subcommand: " + Sub +
-                     ". Expected: list, get, set");
+                     ". Expected: list, get, set, start, complete, block, "
+                     "unblock, progress, complete-jobs, log, verify, next, "
+                     "readiness, wave-status");
 }
 
 // ===================================================================
@@ -2172,6 +2209,1337 @@ int RunVerificationAddCommand(const std::vector<std::string> &InArgs,
     EmitJsonField("topic", Options.mTopic);
     EmitJsonField("target", "verifications");
     EmitJsonFieldSizeT("entry_index", Bundle.mVerifications.size() - 1, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// ===================================================================
+// Tier 4: Query helpers (read-only)
+// ===================================================================
+
+// ---------------------------------------------------------------------------
+// phase next — find first not_started phase with readiness report
+// ---------------------------------------------------------------------------
+
+int RunPhaseNextCommand(const std::vector<std::string> &InArgs,
+                        const std::string &InRepoRoot)
+{
+    const FTopicGetOptions Options = ParseTopicGetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    int NextIndex = -1;
+    for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+    {
+        if (Bundle.mPhases[I].mLifecycle.mStatus ==
+            EExecutionStatus::NotStarted)
+        {
+            NextIndex = static_cast<int>(I);
+            break;
+        }
+    }
+
+    if (NextIndex < 0)
+    {
+        if (Options.mbHuman)
+        {
+            std::cout << kColorDim << "All phases started or completed\n"
+                      << kColorReset;
+            return 0;
+        }
+        std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+        EmitJsonFieldBool("ok", true);
+        EmitJsonField("topic", Options.mTopic);
+        EmitJsonFieldInt("phase_index", -1);
+        EmitJsonField("scope", "");
+        EmitJsonFieldBool("ready", false);
+        std::cout << "\"missing_fields\":[]}\n";
+        return 0;
+    }
+
+    const FPhaseRecord &Phase = Bundle.mPhases[static_cast<size_t>(NextIndex)];
+
+    // Check readiness gates
+    std::vector<std::string> MissingFields;
+    if (Phase.mDesign.mInvestigation.empty())
+        MissingFields.push_back("investigation");
+    if (Phase.mDesign.mCodeEntityContract.empty())
+        MissingFields.push_back("code_entity_contract");
+    if (Phase.mDesign.mBestPractices.empty())
+        MissingFields.push_back("best_practices");
+    if (Phase.mDesign.mMultiPlatforming.empty())
+        MissingFields.push_back("multi_platforming");
+    if (Phase.mTesting.empty())
+        MissingFields.push_back("testing");
+
+    const bool Ready = MissingFields.empty();
+
+    if (Options.mbHuman)
+    {
+        std::cout << kColorBold << "Next phase: " << kColorReset << NextIndex
+                  << " — " << Phase.mScope << "\n";
+        std::cout << "Ready: "
+                  << (Ready ? (std::string(kColorGreen) + "yes")
+                            : (std::string(kColorRed) + "no"))
+                  << kColorReset << "\n";
+        if (!MissingFields.empty())
+        {
+            std::cout << "Missing: ";
+            for (size_t I = 0; I < MissingFields.size(); ++I)
+            {
+                if (I > 0)
+                    std::cout << ", ";
+                std::cout << MissingFields[I];
+            }
+            std::cout << "\n";
+        }
+        return 0;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldInt("phase_index", NextIndex);
+    EmitJsonField("scope", Phase.mScope);
+    EmitJsonFieldBool("ready", Ready);
+    std::cout << "\"missing_fields\":[";
+    for (size_t I = 0; I < MissingFields.size(); ++I)
+    {
+        PrintJsonSep(I);
+        std::cout << JsonQuote(MissingFields[I]);
+    }
+    std::cout << "]}\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase readiness — gate-by-gate status for a specific phase
+// ---------------------------------------------------------------------------
+
+int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot)
+{
+    const FPhaseQueryOptions Options = ParsePhaseQueryOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    const FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    struct FGateCheck
+    {
+        const char *mName;
+        bool mbPass;
+    };
+
+    const FGateCheck Gates[] = {
+        {"investigation", !Phase.mDesign.mInvestigation.empty()},
+        {"code_entity_contract", !Phase.mDesign.mCodeEntityContract.empty()},
+        {"code_snippets", !Phase.mDesign.mCodeSnippets.empty()},
+        {"best_practices", !Phase.mDesign.mBestPractices.empty()},
+        {"multi_platforming", !Phase.mDesign.mMultiPlatforming.empty()},
+        {"testing", !Phase.mTesting.empty()},
+    };
+
+    bool AllPass = true;
+    for (const auto &Gate : Gates)
+    {
+        if (!Gate.mbPass)
+            AllPass = false;
+    }
+
+    if (Options.mbHuman)
+    {
+        std::cout << kColorBold << "Phase " << Options.mPhaseIndex
+                  << " readiness" << kColorReset << "\n";
+        std::cout << "Scope: " << Phase.mScope << "\n";
+        std::cout << "Ready: "
+                  << (AllPass ? (std::string(kColorGreen) + "yes")
+                              : (std::string(kColorRed) + "no"))
+                  << kColorReset << "\n\n";
+
+        HumanTable Table;
+        Table.mHeaders = {"Gate", "Status"};
+        for (const auto &Gate : Gates)
+        {
+            Table.AddRow(
+                {Gate.mName, ColorizeStatus(Gate.mbPass ? "pass" : "fail")});
+        }
+        Table.Print();
+        return 0;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldInt("phase_index", Options.mPhaseIndex);
+    EmitJsonFieldBool("ready", AllPass);
+    std::cout << "\"gates\":[";
+    constexpr size_t GateCount = sizeof(Gates) / sizeof(Gates[0]);
+    for (size_t I = 0; I < GateCount; ++I)
+    {
+        PrintJsonSep(I);
+        std::cout << "{";
+        EmitJsonField("name", Gates[I].mName);
+        EmitJsonField("status", Gates[I].mbPass ? "pass" : "fail", false);
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// topic status — overview of all topics with active phases
+// ---------------------------------------------------------------------------
+
+int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot)
+{
+    BaseOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InArgs, Options, false);
+    for (size_t I = 0; I < Remaining.size(); ++I)
+    {
+        throw UsageError("Unknown option for topic status: " + Remaining[I]);
+    }
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    std::vector<std::string> Warnings;
+    const std::vector<FTopicBundle> Bundles =
+        LoadAllBundles(RepoRoot, Warnings);
+
+    int NotStarted = 0, InProgress = 0, Completed = 0, Blocked = 0,
+        Canceled = 0;
+    struct FActiveEntry
+    {
+        std::string mTopicKey;
+        int mPhaseIndex;
+        int mPhasesCompleted;
+        int mPhasesTotal;
+    };
+    std::vector<FActiveEntry> Active;
+
+    for (const auto &Bundle : Bundles)
+    {
+        switch (Bundle.mStatus)
+        {
+        case ETopicStatus::NotStarted:
+            ++NotStarted;
+            break;
+        case ETopicStatus::InProgress:
+            ++InProgress;
+            break;
+        case ETopicStatus::Completed:
+            ++Completed;
+            break;
+        case ETopicStatus::Blocked:
+            ++Blocked;
+            break;
+        case ETopicStatus::Canceled:
+            ++Canceled;
+            break;
+        }
+
+        if (Bundle.mStatus == ETopicStatus::InProgress)
+        {
+            int ActivePhase = -1;
+            int PhasesCompleted = 0;
+            for (size_t PI = 0; PI < Bundle.mPhases.size(); ++PI)
+            {
+                if (Bundle.mPhases[PI].mLifecycle.mStatus ==
+                    EExecutionStatus::Completed)
+                    ++PhasesCompleted;
+                if (ActivePhase < 0 && Bundle.mPhases[PI].mLifecycle.mStatus ==
+                                           EExecutionStatus::InProgress)
+                    ActivePhase = static_cast<int>(PI);
+            }
+            Active.push_back({Bundle.mTopicKey, ActivePhase, PhasesCompleted,
+                              static_cast<int>(Bundle.mPhases.size())});
+        }
+    }
+
+    const int Total = static_cast<int>(Bundles.size());
+
+    if (Options.mbHuman)
+    {
+        std::cout << kColorBold << "Topic Status Overview" << kColorReset
+                  << "\n";
+        std::cout << "Total: " << Total << "\n\n";
+
+        HumanTable CountTable;
+        CountTable.mHeaders = {"Status", "Count"};
+        CountTable.AddRow({"not_started", std::to_string(NotStarted)});
+        CountTable.AddRow({"in_progress", std::to_string(InProgress)});
+        CountTable.AddRow({"completed", std::to_string(Completed)});
+        CountTable.AddRow({"blocked", std::to_string(Blocked)});
+        CountTable.AddRow({"canceled", std::to_string(Canceled)});
+        CountTable.Print();
+
+        if (!Active.empty())
+        {
+            std::cout << "\n"
+                      << kColorBold << "Active Topics" << kColorReset << "\n";
+            HumanTable ActiveTable;
+            ActiveTable.mHeaders = {"Topic", "Phase", "Progress"};
+            for (const auto &Entry : Active)
+            {
+                const std::string PhaseStr =
+                    Entry.mPhaseIndex >= 0 ? std::to_string(Entry.mPhaseIndex)
+                                           : "—";
+                const std::string Progress =
+                    std::to_string(Entry.mPhasesCompleted) + "/" +
+                    std::to_string(Entry.mPhasesTotal);
+                ActiveTable.AddRow({Entry.mTopicKey, PhaseStr, Progress});
+            }
+            ActiveTable.Print();
+        }
+        return 0;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonFieldInt("total", Total);
+    std::cout << "\"counts\":{";
+    EmitJsonFieldInt("not_started", NotStarted);
+    EmitJsonFieldInt("in_progress", InProgress);
+    EmitJsonFieldInt("completed", Completed);
+    EmitJsonFieldInt("blocked", Blocked);
+    EmitJsonFieldInt("canceled", Canceled, false);
+    std::cout << "},\"active\":[";
+    for (size_t I = 0; I < Active.size(); ++I)
+    {
+        PrintJsonSep(I);
+        std::cout << "{";
+        EmitJsonField("topic", Active[I].mTopicKey);
+        EmitJsonFieldInt("phase_index", Active[I].mPhaseIndex);
+        std::cout << "\"progress\":{";
+        EmitJsonFieldInt("completed", Active[I].mPhasesCompleted);
+        EmitJsonFieldInt("total", Active[I].mPhasesTotal, false);
+        std::cout << "}}";
+    }
+    std::cout << "]}\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase wave-status — per-wave job completion
+// ---------------------------------------------------------------------------
+
+int RunPhaseWaveStatusCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot)
+{
+    const FPhaseQueryOptions Options = ParsePhaseQueryOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    const FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    // Group jobs by wave
+    struct FWaveInfo
+    {
+        int mTotal = 0;
+        int mCompleted = 0;
+    };
+    std::map<int, FWaveInfo> WaveMap;
+    for (const auto &Job : Phase.mJobs)
+    {
+        FWaveInfo &Info = WaveMap[Job.mWave];
+        ++Info.mTotal;
+        if (Job.mStatus == EExecutionStatus::Completed)
+            ++Info.mCompleted;
+    }
+
+    // Current wave = first wave with incomplete jobs
+    int CurrentWave = -1;
+    for (const auto &Pair : WaveMap)
+    {
+        if (Pair.second.mCompleted < Pair.second.mTotal)
+        {
+            CurrentWave = Pair.first;
+            break;
+        }
+    }
+
+    if (Options.mbHuman)
+    {
+        std::cout << kColorBold << "Phase " << Options.mPhaseIndex
+                  << " wave status" << kColorReset << "\n";
+        if (CurrentWave >= 0)
+            std::cout << "Current wave: W" << CurrentWave << "\n";
+        else
+            std::cout << "All waves complete\n";
+        std::cout << "\n";
+
+        HumanTable Table;
+        Table.mHeaders = {"Wave", "Done", "Total", "Status"};
+        for (const auto &Pair : WaveMap)
+        {
+            const std::string WaveLabel = "W" + std::to_string(Pair.first);
+            const std::string Done = std::to_string(Pair.second.mCompleted);
+            const std::string Total = std::to_string(Pair.second.mTotal);
+            const bool AllDone = Pair.second.mCompleted == Pair.second.mTotal;
+            const std::string Status =
+                ColorizeStatus(AllDone ? "completed" : "in_progress");
+            Table.AddRow({WaveLabel, Done, Total, Status});
+        }
+        Table.Print();
+        return 0;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldInt("phase_index", Options.mPhaseIndex);
+    EmitJsonFieldInt("current_wave", CurrentWave);
+    std::cout << "\"waves\":[";
+    size_t WI = 0;
+    for (const auto &Pair : WaveMap)
+    {
+        PrintJsonSep(WI++);
+        std::cout << "{";
+        EmitJsonFieldInt("wave", Pair.first);
+        EmitJsonFieldInt("total", Pair.second.mTotal);
+        EmitJsonFieldInt("completed", Pair.second.mCompleted, false);
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+    return 0;
+}
+
+// ===================================================================
+// Tier 1: Phase lifecycle semantic commands
+// ===================================================================
+
+// ---------------------------------------------------------------------------
+// phase start — claim a phase with gate enforcement
+// ---------------------------------------------------------------------------
+
+int RunPhaseStartCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FPhaseStartOptions Options = ParsePhaseStartOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+
+    // Gate: phase must be not_started
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::NotStarted)
+    {
+        std::cerr << "Cannot start phase " << Options.mPhaseIndex
+                  << ": status is " << ToString(Phase.mLifecycle.mStatus)
+                  << ", expected not_started\n";
+        return 1;
+    }
+
+    // Gate: design material non-empty
+    if (Phase.mDesign.mInvestigation.empty() &&
+        Phase.mDesign.mCodeEntityContract.empty())
+    {
+        std::cerr << "Cannot start phase " << Options.mPhaseIndex
+                  << ": design material is empty "
+                  << "(populate investigation or "
+                  << "code_entity_contract first)\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    // Set phase → in_progress
+    const std::string UTC = GetUtcNow();
+    Changes.push_back({"status", {"not_started", "in_progress"}});
+    Phase.mLifecycle.mStatus = EExecutionStatus::InProgress;
+    Phase.mLifecycle.mStartedAt = UTC;
+    Changes.push_back({"started_at", {"", UTC}});
+
+    // Set agent_context if provided
+    if (!Options.mContext.empty())
+    {
+        Changes.push_back({"agent_context",
+                           {Phase.mLifecycle.mAgentContext, Options.mContext}});
+        Phase.mLifecycle.mAgentContext = Options.mContext;
+    }
+
+    // Auto-cascade: if topic is not_started, set to in_progress
+    if (Bundle.mStatus == ETopicStatus::NotStarted)
+    {
+        Bundle.mStatus = ETopicStatus::InProgress;
+        AppendAutoChangelog(Bundle, "plan",
+                            "Topic auto-started (phase " +
+                                std::to_string(Options.mPhaseIndex) +
+                                " claimed)");
+    }
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Phase " + std::to_string(Options.mPhaseIndex) +
+                            " started");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase complete — close a phase with evidence
+// ---------------------------------------------------------------------------
+
+int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot)
+{
+    const FPhaseCompleteOptions Options = ParsePhaseCompleteOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+
+    // Gate: phase must be in_progress
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
+    {
+        std::cerr << "Cannot complete phase " << Options.mPhaseIndex
+                  << ": status is " << ToString(Phase.mLifecycle.mStatus)
+                  << ", expected in_progress\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    const std::string UTC = GetUtcNow();
+    Changes.push_back({"status", {"in_progress", "completed"}});
+    Phase.mLifecycle.mStatus = EExecutionStatus::Completed;
+    Phase.mLifecycle.mCompletedAt = UTC;
+    Changes.push_back({"completed_at", {"", UTC}});
+    Changes.push_back({"done", {Phase.mLifecycle.mDone, Options.mDone}});
+    Phase.mLifecycle.mDone = Options.mDone;
+    Phase.mLifecycle.mRemaining.clear();
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Phase " + std::to_string(Options.mPhaseIndex) +
+                            " completed: " + Options.mDone);
+
+    // Optional verification
+    if (!Options.mVerification.empty())
+    {
+        FVerificationEntry VEntry;
+        VEntry.mPhase = Options.mPhaseIndex;
+        VEntry.mDate = UTC.substr(0, 10);
+        VEntry.mCheck = Options.mVerification;
+        VEntry.mResult = "pass";
+        Bundle.mVerifications.push_back(std::move(VEntry));
+    }
+
+    // Auto-cascade: if ALL phases completed → topic completed
+    bool AllCompleted = true;
+    for (const auto &P : Bundle.mPhases)
+    {
+        if (P.mLifecycle.mStatus != EExecutionStatus::Completed)
+        {
+            AllCompleted = false;
+            break;
+        }
+    }
+    if (AllCompleted)
+    {
+        Bundle.mStatus = ETopicStatus::Completed;
+        AppendAutoChangelog(Bundle, "plan",
+                            "Topic auto-completed (all phases done)");
+    }
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase block — block a phase with reason
+// ---------------------------------------------------------------------------
+
+int RunPhaseBlockCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FPhaseBlockOptions Options = ParsePhaseBlockOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+
+    // Gate: phase must be in_progress
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
+    {
+        std::cerr << "Cannot block phase " << Options.mPhaseIndex
+                  << ": status is " << ToString(Phase.mLifecycle.mStatus)
+                  << ", expected in_progress\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    Changes.push_back({"status", {"in_progress", "blocked"}});
+    Phase.mLifecycle.mStatus = EExecutionStatus::Blocked;
+    Changes.push_back(
+        {"blockers", {Phase.mLifecycle.mBlockers, Options.mReason}});
+    Phase.mLifecycle.mBlockers = Options.mReason;
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Phase " + std::to_string(Options.mPhaseIndex) +
+                            " blocked: " + Options.mReason);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase unblock — resume a blocked phase
+// ---------------------------------------------------------------------------
+
+int RunPhaseUnblockCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot)
+{
+    const FPhaseUnblockOptions Options = ParsePhaseUnblockOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+
+    // Gate: phase must be blocked
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::Blocked)
+    {
+        std::cerr << "Cannot unblock phase " << Options.mPhaseIndex
+                  << ": status is " << ToString(Phase.mLifecycle.mStatus)
+                  << ", expected blocked\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    Changes.push_back({"status", {"blocked", "in_progress"}});
+    Phase.mLifecycle.mStatus = EExecutionStatus::InProgress;
+    Changes.push_back({"blockers", {Phase.mLifecycle.mBlockers, ""}});
+    Phase.mLifecycle.mBlockers.clear();
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Phase " + std::to_string(Options.mPhaseIndex) +
+                            " unblocked");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase progress — update done/remaining without status change
+// ---------------------------------------------------------------------------
+
+int RunPhaseProgressCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot)
+{
+    const FPhaseProgressOptions Options = ParsePhaseProgressOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+
+    // Gate: phase must be in_progress
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
+    {
+        std::cerr << "Cannot update progress for phase " << Options.mPhaseIndex
+                  << ": status is " << ToString(Phase.mLifecycle.mStatus)
+                  << ", expected in_progress\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    Changes.push_back({"done", {Phase.mLifecycle.mDone, Options.mDone}});
+    Phase.mLifecycle.mDone = Options.mDone;
+    Changes.push_back(
+        {"remaining", {Phase.mLifecycle.mRemaining, Options.mRemaining}});
+    Phase.mLifecycle.mRemaining = Options.mRemaining;
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Phase " + std::to_string(Options.mPhaseIndex) +
+                            " progress updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase complete-jobs — bulk-complete all incomplete jobs
+// ---------------------------------------------------------------------------
+
+int RunPhaseCompleteJobsCommand(const std::vector<std::string> &InArgs,
+                                const std::string &InRepoRoot)
+{
+    const FPhaseCompleteJobsOptions Options =
+        ParsePhaseCompleteJobsOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "]";
+
+    // Gate: phase must be in_progress
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::InProgress)
+    {
+        std::cerr << "Cannot complete-jobs for phase " << Options.mPhaseIndex
+                  << ": status is " << ToString(Phase.mLifecycle.mStatus)
+                  << ", expected in_progress\n";
+        return 1;
+    }
+
+    const std::string UTC = GetUtcNow();
+    int BulkCount = 0;
+    for (auto &Job : Phase.mJobs)
+    {
+        if (Job.mStatus != EExecutionStatus::Completed)
+        {
+            Job.mStatus = EExecutionStatus::Completed;
+            Job.mCompletedAt = UTC;
+            ++BulkCount;
+        }
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back(
+        {"jobs_completed", {"", std::to_string(BulkCount) + " jobs"}});
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Phase " + std::to_string(Options.mPhaseIndex) + ": " +
+                            std::to_string(BulkCount) + " jobs bulk-completed");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ===================================================================
+// Tier 2: Topic lifecycle semantic commands
+// ===================================================================
+
+// ---------------------------------------------------------------------------
+// topic start — start a topic with gate enforcement
+// ---------------------------------------------------------------------------
+
+int RunTopicStartCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FTopicStartOptions Options = ParseTopicStartOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    // Gate: topic must be not_started
+    if (Bundle.mStatus != ETopicStatus::NotStarted)
+    {
+        std::cerr << "Cannot start topic " << Options.mTopic << ": status is "
+                  << ToString(Bundle.mStatus) << ", expected not_started\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    Changes.push_back({"status", {"not_started", "in_progress"}});
+    Bundle.mStatus = ETopicStatus::InProgress;
+
+    AppendAutoChangelog(Bundle, "plan", "Topic started");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, "plan", Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// topic complete — complete a topic with all-phases gate
+// ---------------------------------------------------------------------------
+
+int RunTopicCompleteCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot)
+{
+    const FTopicCompleteOptions Options = ParseTopicCompleteOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    // Gate: all phases must be completed
+    std::vector<int> NonCompleted;
+    for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+    {
+        if (Bundle.mPhases[I].mLifecycle.mStatus != EExecutionStatus::Completed)
+            NonCompleted.push_back(static_cast<int>(I));
+    }
+    if (!NonCompleted.empty())
+    {
+        std::cerr << "Cannot complete topic " << Options.mTopic << ": "
+                  << NonCompleted.size() << " phase(s) not completed: [";
+        for (size_t I = 0; I < NonCompleted.size(); ++I)
+        {
+            if (I > 0)
+                std::cerr << ", ";
+            std::cerr << NonCompleted[I];
+        }
+        std::cerr << "]\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    const std::string Old = ToString(Bundle.mStatus);
+    Changes.push_back({"status", {Old, "completed"}});
+    Bundle.mStatus = ETopicStatus::Completed;
+
+    AppendAutoChangelog(Bundle, "plan", "Topic completed");
+
+    // Optional verification
+    if (!Options.mVerification.empty())
+    {
+        FVerificationEntry VEntry;
+        VEntry.mPhase = -1;
+        VEntry.mDate = GetUtcNow().substr(0, 10);
+        VEntry.mCheck = Options.mVerification;
+        VEntry.mResult = "pass";
+        Bundle.mVerifications.push_back(std::move(VEntry));
+    }
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, "plan", Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// topic block — block a topic with reason
+// ---------------------------------------------------------------------------
+
+int RunTopicBlockCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FTopicBlockOptions Options = ParseTopicBlockOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    // Gate: topic must be in_progress
+    if (Bundle.mStatus != ETopicStatus::InProgress)
+    {
+        std::cerr << "Cannot block topic " << Options.mTopic << ": status is "
+                  << ToString(Bundle.mStatus) << ", expected in_progress\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    Changes.push_back({"status", {"in_progress", "blocked"}});
+    Bundle.mStatus = ETopicStatus::Blocked;
+
+    AppendAutoChangelog(Bundle, "plan", "Topic blocked: " + Options.mReason);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, "plan", Changes, true);
+    return 0;
+}
+
+// ===================================================================
+// Tier 3: Evidence shortcuts
+// ===================================================================
+
+// ---------------------------------------------------------------------------
+// phase log — changelog add scoped to a phase (with bounds check)
+// ---------------------------------------------------------------------------
+
+int RunPhaseLogCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot)
+{
+    const FChangelogAddOptions Options = ParsePhaseLogOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    // Bounds check on phase index
+    const int PhaseIndex = std::atoi(Options.mScope.c_str());
+    if (PhaseIndex < 0 ||
+        static_cast<size_t>(PhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range: " << PhaseIndex << "\n";
+        return 1;
+    }
+
+    FChangeLogEntry Entry;
+    Entry.mPhase = PhaseIndex;
+    Entry.mDate = GetUtcNow().substr(0, 10);
+    Entry.mChange = Options.mChange;
+    Entry.mAffected = Options.mAffected;
+    Entry.mActor = ETestingActor::AI;
+
+    EChangeType Type;
+    if (ChangeTypeFromString(Options.mType, Type))
+        Entry.mType = Type;
+
+    Bundle.mChangeLogs.push_back(std::move(Entry));
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", "changelogs");
+    EmitJsonFieldSizeT("entry_index", Bundle.mChangeLogs.size() - 1, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase verify — verification add scoped to a phase (with bounds check)
+// ---------------------------------------------------------------------------
+
+int RunPhaseVerifyCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot)
+{
+    const FVerificationAddOptions Options = ParsePhaseVerifyOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    // Bounds check on phase index
+    const int PhaseIndex = std::atoi(Options.mScope.c_str());
+    if (PhaseIndex < 0 ||
+        static_cast<size_t>(PhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range: " << PhaseIndex << "\n";
+        return 1;
+    }
+
+    FVerificationEntry Entry;
+    Entry.mPhase = PhaseIndex;
+    Entry.mDate = GetUtcNow().substr(0, 10);
+    Entry.mCheck = Options.mCheck;
+    Entry.mResult = Options.mResult;
+    Entry.mDetail = Options.mDetail;
+
+    Bundle.mVerifications.push_back(std::move(Entry));
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", "verifications");
+    EmitJsonFieldSizeT("entry_index", Bundle.mVerifications.size() - 1, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// ===================================================================
+// Tier 5: Missing entity coverage
+// ===================================================================
+
+// ---------------------------------------------------------------------------
+// lane set — set lane status
+// ---------------------------------------------------------------------------
+
+int RunLaneSetCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot)
+{
+    const FLaneSetOptions Options = ParseLaneSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    if (static_cast<size_t>(Options.mLaneIndex) >= Phase.mLanes.size())
+    {
+        std::cerr << "Lane index out of range\n";
+        return 1;
+    }
+
+    EExecutionStatus NewStatus;
+    if (!ExecutionStatusFromString(Options.mStatus, NewStatus))
+    {
+        std::cerr << "Invalid lane status: " << Options.mStatus << "\n";
+        return 1;
+    }
+
+    FLaneRecord &Lane = Phase.mLanes[static_cast<size_t>(Options.mLaneIndex)];
+    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+                               "].lanes[" + std::to_string(Options.mLaneIndex) +
+                               "]";
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back({"status", {ToString(Lane.mStatus), Options.mStatus}});
+    Lane.mStatus = NewStatus;
+
+    AppendAutoChangelog(Bundle, Target, Target + " → " + Options.mStatus);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// testing add — append a testing record to a phase
+// ---------------------------------------------------------------------------
+
+int RunTestingAddCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FTestingAddOptions Options = ParseTestingAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    FTestingRecord Record;
+    Record.mSession = Options.mSession;
+    if (!Options.mActor.empty())
+    {
+        ETestingActor Actor;
+        if (!TestingActorFromString(Options.mActor, Actor))
+        {
+            std::cerr << "Invalid actor: " << Options.mActor
+                      << " (expected: human, ai, automated)\n";
+            return 1;
+        }
+        Record.mActor = Actor;
+    }
+    Record.mStep = Options.mStep;
+    Record.mAction = Options.mAction;
+    Record.mExpected = Options.mExpected;
+    Record.mEvidence = Options.mEvidence;
+
+    Phase.mTesting.push_back(std::move(Record));
+
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "].testing";
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Testing record added to phase " +
+                            std::to_string(Options.mPhaseIndex));
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", Target);
+    EmitJsonFieldSizeT("entry_index", Phase.mTesting.size() - 1, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// manifest add — append a file manifest item to a phase
+// ---------------------------------------------------------------------------
+
+int RunManifestAddCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot)
+{
+    const FManifestAddOptions Options = ParseManifestAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    EFileAction Action;
+    if (!FileActionFromString(Options.mAction, Action))
+    {
+        std::cerr << "Invalid action: " << Options.mAction
+                  << " (expected: create, modify, delete)\n";
+        return 1;
+    }
+
+    FFileManifestItem Item;
+    Item.mFilePath = Options.mFile;
+    Item.mAction = Action;
+    Item.mDescription = Options.mDescription;
+
+    Phase.mFileManifest.push_back(std::move(Item));
+
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "].file_manifest";
+
+    AppendAutoChangelog(Bundle, Target,
+                        "File manifest entry added: " + Options.mFile);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", Target);
+    EmitJsonFieldSizeT("entry_index", Phase.mFileManifest.size() - 1, false);
     std::cout << "}\n";
     return 0;
 }
