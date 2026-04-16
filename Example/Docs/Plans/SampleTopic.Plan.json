@@ -1,0 +1,313 @@
+{
+  "$schema": "plan-v4",
+  "topic": "SampleTopic",
+  "status": "in_progress",
+  "title": "Sample Topic for Testing and Reference",
+  "summary": "A complete sample .Plan.json bundle demonstrating every field the V4 schema supports. Use as a reference for creating new plans, as a test fixture for CLI command verification, or as documentation of the bundle format.",
+  "goals": "Demonstrate all V4 bundle fields with realistic values. Serve as a test fixture for uni-plan CLI commands.",
+  "non_goals": "This is not a real plan. Do not execute phases or record real evidence against it.",
+  "risks": "None — sample data only.",
+  "acceptance_criteria": "All uni-plan CLI commands can read, query, mutate, and validate this bundle without errors.",
+  "problem_statement": "New users and AI agents need a reference bundle showing the complete V4 schema with realistic data.",
+  "validation_commands": "uni-plan validate --topic SampleTopic --human",
+  "baseline_audit": "",
+  "execution_strategy": "Phase 0 is completed (reference data). Phase 1 is in_progress with partial job completion. Phase 2 is not_started (ready for phase start gate testing).",
+  "locked_decisions": "",
+  "source_references": "",
+  "dependencies": "",
+  "next_actions": "Continue phase 1 execution, then start phase 2.",
+  "phases": [
+    {
+      "scope": "Foundation — establish project structure and core types",
+      "output": "Core type definitions, build system, initial test harness",
+      "status": "completed",
+      "done": "All core types defined, build passes, initial tests green",
+      "remaining": "",
+      "blockers": "",
+      "started_at": "2026-04-01T10:00:00Z",
+      "completed_at": "2026-04-05T15:30:00Z",
+      "agent_context": "",
+      "lanes": [
+        {
+          "status": "completed",
+          "scope": "Core types and enums",
+          "exit_criteria": "All domain types compile and serialize"
+        },
+        {
+          "status": "completed",
+          "scope": "Build system setup",
+          "exit_criteria": "cmake build passes on all targets"
+        }
+      ],
+      "jobs": [
+        {
+          "wave": 0,
+          "lane": 0,
+          "status": "completed",
+          "scope": "Define FTopicBundle and FPhaseRecord structs",
+          "output": "UniPlanTopicTypes.h with all structs",
+          "exit_criteria": "Compiles clean, JSON round-trip works",
+          "tasks": [
+            {
+              "status": "completed",
+              "description": "Create FTopicBundle struct with all fields",
+              "evidence": "UniPlanTopicTypes.h:138-149",
+              "notes": "",
+              "completed_at": "2026-04-02T09:00:00Z"
+            },
+            {
+              "status": "completed",
+              "description": "Create FPhaseRecord with lifecycle and design sub-structs",
+              "evidence": "UniPlanTopicTypes.h:98-108",
+              "notes": "Split into FPhaseLifecycle + FPhaseDesignMaterial per SOLID",
+              "completed_at": "2026-04-02T14:00:00Z"
+            }
+          ],
+          "started_at": "2026-04-01T10:00:00Z",
+          "completed_at": "2026-04-02T14:00:00Z"
+        },
+        {
+          "wave": 0,
+          "lane": 1,
+          "status": "completed",
+          "scope": "Configure CMake build with Ninja",
+          "output": "CMakeLists.txt, build.sh",
+          "exit_criteria": "build.sh produces working binary",
+          "tasks": [],
+          "started_at": "2026-04-01T10:00:00Z",
+          "completed_at": "2026-04-01T16:00:00Z"
+        },
+        {
+          "wave": 1,
+          "lane": 0,
+          "status": "completed",
+          "scope": "Implement JSON serializer/deserializer",
+          "output": "UniPlanJsonIO.cpp with round-trip support",
+          "exit_criteria": "Serialize → deserialize → re-serialize produces identical JSON",
+          "tasks": [],
+          "started_at": "2026-04-03T08:00:00Z",
+          "completed_at": "2026-04-05T15:30:00Z"
+        }
+      ],
+      "testing": [
+        {
+          "session": "foundation-verify",
+          "actor": "ai",
+          "step": "Build verification",
+          "action": "Run ./build.sh and verify exit code 0",
+          "expected": "Clean build with 0 errors, 0 warnings",
+          "evidence": "Build log: 15/15 targets built"
+        },
+        {
+          "session": "foundation-verify",
+          "actor": "human",
+          "step": "Manual review",
+          "action": "Review type definitions for SOLID compliance",
+          "expected": "No god structs, proper domain typing",
+          "evidence": "Reviewed — approved"
+        }
+      ],
+      "file_manifest": [
+        {
+          "file": "Source/UniPlanTopicTypes.h",
+          "action": "create",
+          "description": "Core domain types for V4 bundle model"
+        },
+        {
+          "file": "Source/UniPlanJsonIO.cpp",
+          "action": "create",
+          "description": "JSON serializer and deserializer for FTopicBundle"
+        },
+        {
+          "file": "CMakeLists.txt",
+          "action": "modify",
+          "description": "Add new source files to build target"
+        }
+      ],
+      "investigation": "Evaluated nlohmann/json vs rapidjson. Chose nlohmann for ergonomic C++17 API and header-only inclusion. Performance is sufficient for plan bundles (< 1MB each).",
+      "code_snippets": "",
+      "dependencies": "nlohmann/json (ThirdParty/json)",
+      "readiness_gate": "",
+      "handoff": "",
+      "code_entity_contract": "FTopicBundle: topic key + status + metadata + phases + changelogs + verifications. FPhaseRecord: scope + output + lifecycle + design + lanes + jobs + testing + manifest.",
+      "best_practices": "SOLID: single-responsibility sub-structs (FPhaseLifecycle, FPhaseDesignMaterial). Domain types: ETopicStatus, EExecutionStatus enums instead of raw strings.",
+      "validation_commands": "uni-plan validate --topic SampleTopic",
+      "multi_platforming": ""
+    },
+    {
+      "scope": "CLI commands — implement query and mutation commands",
+      "output": "Working topic/phase/changelog/verification/validate commands",
+      "status": "in_progress",
+      "done": "Query commands implemented (topic list/get, phase list/get)",
+      "remaining": "Mutation commands (phase start/complete/block), evidence shortcuts",
+      "blockers": "",
+      "started_at": "2026-04-06T08:00:00Z",
+      "completed_at": "",
+      "agent_context": "Working on wave 1 — semantic lifecycle commands. W0 query commands are done.",
+      "lanes": [
+        {
+          "status": "completed",
+          "scope": "Query commands",
+          "exit_criteria": "All read-only commands produce valid JSON and human output"
+        },
+        {
+          "status": "in_progress",
+          "scope": "Mutation commands",
+          "exit_criteria": "All write commands enforce gates and produce valid mutation JSON"
+        }
+      ],
+      "jobs": [
+        {
+          "wave": 0,
+          "lane": 0,
+          "status": "completed",
+          "scope": "Implement topic list and topic get",
+          "output": "RunTopicListJson, RunTopicListHuman, RunTopicGetJson, RunTopicGetHuman",
+          "exit_criteria": "JSON schema matches kTopicListSchema/kTopicGetSchema",
+          "tasks": [],
+          "started_at": "2026-04-06T08:00:00Z",
+          "completed_at": "2026-04-07T12:00:00Z"
+        },
+        {
+          "wave": 0,
+          "lane": 0,
+          "status": "completed",
+          "scope": "Implement phase list and phase get",
+          "output": "RunBundlePhaseListJson/Human, RunBundlePhaseGetJson/Human",
+          "exit_criteria": "Supports --brief, --execution, --reference flags",
+          "tasks": [],
+          "started_at": "2026-04-07T13:00:00Z",
+          "completed_at": "2026-04-08T17:00:00Z"
+        },
+        {
+          "wave": 1,
+          "lane": 1,
+          "status": "not_started",
+          "scope": "Implement phase start/complete/block/unblock",
+          "output": "Semantic lifecycle commands with gate enforcement",
+          "exit_criteria": "Gates reject invalid transitions with clear error messages",
+          "tasks": [
+            {
+              "status": "not_started",
+              "description": "Implement RunPhaseStartCommand with not_started + design gate",
+              "evidence": "",
+              "notes": "",
+              "completed_at": ""
+            },
+            {
+              "status": "not_started",
+              "description": "Implement RunPhaseCompleteCommand with in_progress gate",
+              "evidence": "",
+              "notes": "",
+              "completed_at": ""
+            }
+          ],
+          "started_at": "",
+          "completed_at": ""
+        }
+      ],
+      "testing": [],
+      "file_manifest": [
+        {
+          "file": "Source/UniPlanCommandBundle.cpp",
+          "action": "modify",
+          "description": "Add all Run*Command functions"
+        }
+      ],
+      "investigation": "Reviewed agent workflows in FIE repo to identify which commands agents compose most frequently. Found 3-5 raw set commands per workflow step — motivated semantic commands.",
+      "code_snippets": "",
+      "dependencies": "",
+      "readiness_gate": "",
+      "handoff": "",
+      "code_entity_contract": "18 Run*Command functions: 6 phase lifecycle + 3 topic lifecycle + 2 evidence + 4 query + 3 entity coverage.",
+      "best_practices": "Gate enforcement: hard errors, no --force bypass. Auto-changelog on all mutations. Auto-cascade topic status.",
+      "validation_commands": "",
+      "multi_platforming": ""
+    },
+    {
+      "scope": "Unit tests — comprehensive test coverage for all CLI commands",
+      "output": "Test executable with fixtures and per-command assertions",
+      "status": "not_started",
+      "done": "",
+      "remaining": "",
+      "blockers": "",
+      "started_at": "",
+      "completed_at": "",
+      "agent_context": "",
+      "lanes": [
+        {
+          "status": "not_started",
+          "scope": "Test infrastructure",
+          "exit_criteria": "Test framework integrated, CMake test target builds"
+        },
+        {
+          "status": "not_started",
+          "scope": "Command tests",
+          "exit_criteria": "Every Run*Command function has at least one positive and one negative test"
+        }
+      ],
+      "jobs": [],
+      "testing": [],
+      "file_manifest": [],
+      "investigation": "",
+      "code_snippets": "",
+      "dependencies": "",
+      "readiness_gate": "",
+      "handoff": "",
+      "code_entity_contract": "",
+      "best_practices": "",
+      "validation_commands": "",
+      "multi_platforming": ""
+    }
+  ],
+  "changelogs": [
+    {
+      "phase": -1,
+      "date": "2026-04-01",
+      "change": "Plan created with 3 phases",
+      "affected": "",
+      "type": "feat",
+      "actor": "human"
+    },
+    {
+      "phase": 0,
+      "date": "2026-04-05",
+      "change": "Phase 0 completed: foundation types and build system",
+      "affected": "phases[0]",
+      "type": "feat",
+      "actor": "ai"
+    },
+    {
+      "phase": 1,
+      "date": "2026-04-06",
+      "change": "Phase 1 started",
+      "affected": "phases[1]",
+      "type": "chore",
+      "actor": "ai"
+    },
+    {
+      "phase": 1,
+      "date": "2026-04-08",
+      "change": "Phase 1 progress: query commands done, starting mutations",
+      "affected": "phases[1]",
+      "type": "feat",
+      "actor": "ai"
+    }
+  ],
+  "verifications": [
+    {
+      "phase": 0,
+      "date": "2026-04-05",
+      "check": "Build passes clean",
+      "result": "pass",
+      "detail": "15/15 targets, 0 errors, 0 warnings"
+    },
+    {
+      "phase": 0,
+      "date": "2026-04-05",
+      "check": "JSON round-trip integrity",
+      "result": "pass",
+      "detail": "Serialize → deserialize → re-serialize produces byte-identical output"
+    }
+  ]
+}
