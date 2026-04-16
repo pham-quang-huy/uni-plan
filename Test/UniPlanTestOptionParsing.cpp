@@ -212,6 +212,51 @@ TEST(OptionParsing, TaskSetRequiresAll)
                  UniPlan::UsageError);
 }
 
+TEST(OptionParsing, TestingSetRequiresIndex)
+{
+    EXPECT_THROW(
+        UniPlan::ParseTestingSetOptions({"--topic", "X", "--phase", "0"}),
+        UniPlan::UsageError);
+}
+
+TEST(OptionParsing, TestingSetHappyPath)
+{
+    const auto O = UniPlan::ParseTestingSetOptions(
+        {"--topic", "X", "--phase", "1", "--index", "2", "--step", "s"});
+    EXPECT_EQ(O.mTopic, "X");
+    EXPECT_EQ(O.mPhaseIndex, 1);
+    EXPECT_EQ(O.mIndex, 2);
+    EXPECT_EQ(O.mStep, "s");
+}
+
+TEST(OptionParsing, VerificationSetRequiresIndex)
+{
+    EXPECT_THROW(UniPlan::ParseVerificationSetOptions({"--topic", "X"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, ManifestSetRequiresIndex)
+{
+    EXPECT_THROW(
+        UniPlan::ParseManifestSetOptions({"--topic", "X", "--phase", "0"}),
+        UniPlan::UsageError);
+}
+
+TEST(OptionParsing, LaneAddRequiresPhase)
+{
+    EXPECT_THROW(UniPlan::ParseLaneAddOptions({"--topic", "X"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, LaneAddHappyPath)
+{
+    const auto O = UniPlan::ParseLaneAddOptions(
+        {"--topic", "X", "--phase", "0", "--scope", "S"});
+    EXPECT_EQ(O.mTopic, "X");
+    EXPECT_EQ(O.mPhaseIndex, 0);
+    EXPECT_EQ(O.mScope, "S");
+}
+
 TEST(OptionParsing, UnknownOptionThrows)
 {
     EXPECT_THROW(

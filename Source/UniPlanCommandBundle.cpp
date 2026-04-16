@@ -1078,6 +1078,12 @@ int RunBundleChangelogCommand(const std::vector<std::string> &InArgs,
                                                InArgs.end());
         return RunChangelogAddCommand(SubArgs, InRepoRoot);
     }
+    if (!InArgs.empty() && InArgs[0] == "set")
+    {
+        const std::vector<std::string> SubArgs(InArgs.begin() + 1,
+                                               InArgs.end());
+        return RunChangelogSetCommand(SubArgs, InRepoRoot);
+    }
 
     const FBundleChangelogOptions Options = ParseBundleChangelogOptions(InArgs);
     const fs::path RepoRoot = NormalizeRepoRootPath(
@@ -1202,6 +1208,12 @@ int RunBundleVerificationCommand(const std::vector<std::string> &InArgs,
         const std::vector<std::string> SubArgs(InArgs.begin() + 1,
                                                InArgs.end());
         return RunVerificationAddCommand(SubArgs, InRepoRoot);
+    }
+    if (!InArgs.empty() && InArgs[0] == "set")
+    {
+        const std::vector<std::string> SubArgs(InArgs.begin() + 1,
+                                               InArgs.end());
+        return RunVerificationSetCommand(SubArgs, InRepoRoot);
     }
 
     const FBundleVerificationOptions Options =
@@ -1803,14 +1815,23 @@ static void AppendAutoChangelog(FTopicBundle &InOutBundle,
                                 const std::string &InDescription)
 {
     FChangeLogEntry Entry;
-    // Extract scope from target: "phases[2].status" → "2"
-    const size_t Open = InTarget.find('[');
-    const size_t Close = InTarget.find(']');
-    if (Open != std::string::npos && Close != std::string::npos)
-        Entry.mPhase =
-            std::atoi(InTarget.substr(Open + 1, Close - Open - 1).c_str());
+    // Extract phase index only if target is phase-scoped (starts with
+    // "phases[") Top-level targets like "verifications[N]" or "plan" are
+    // topic-level (-1)
+    if (InTarget.compare(0, 7, "phases[") == 0)
+    {
+        const size_t Open = InTarget.find('[');
+        const size_t Close = InTarget.find(']');
+        if (Open != std::string::npos && Close != std::string::npos)
+            Entry.mPhase =
+                std::atoi(InTarget.substr(Open + 1, Close - Open - 1).c_str());
+        else
+            Entry.mPhase = -1;
+    }
     else
+    {
         Entry.mPhase = -1;
+    }
     // Date = today UTC
     const std::string UTC = GetUtcNow();
     Entry.mDate = UTC.substr(0, 10); // YYYY-MM-DD
@@ -2148,6 +2169,31 @@ int RunJobSetCommand(const std::vector<std::string> &InArgs,
         Changes.push_back(
             {"exit_criteria", {Job.mExitCriteria, Options.mExitCriteria}});
         Job.mExitCriteria = Options.mExitCriteria;
+    }
+    if (Options.mLaneIndex >= 0)
+    {
+        if (static_cast<size_t>(Options.mLaneIndex) >=
+            Bundle.mPhases[Options.mPhaseIndex].mLanes.size())
+        {
+            std::cerr << "Lane index out of range: " << Options.mLaneIndex
+                      << "\n";
+            return 1;
+        }
+        Changes.push_back(
+            {"lane",
+             {std::to_string(Job.mLane), std::to_string(Options.mLaneIndex)}});
+        Job.mLane = Options.mLaneIndex;
+        if (Desc.empty())
+            Desc = Target + " reassigned lane";
+    }
+    if (Options.mWave >= 0)
+    {
+        Changes.push_back(
+            {"wave",
+             {std::to_string(Job.mWave), std::to_string(Options.mWave)}});
+        Job.mWave = Options.mWave;
+        if (Desc.empty())
+            Desc = Target + " reassigned wave";
     }
 
     if (Changes.empty())
@@ -3704,6 +3750,408 @@ int RunManifestAddCommand(const std::vector<std::string> &InArgs,
     EmitJsonField("topic", Options.mTopic);
     EmitJsonField("target", Target);
     EmitJsonFieldSizeT("entry_index", Phase.mFileManifest.size() - 1, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// testing set — modify an existing testing record by index
+// ---------------------------------------------------------------------------
+
+int RunTestingSetCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FTestingSetOptions Options = ParseTestingSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    if (static_cast<size_t>(Options.mIndex) >= Phase.mTesting.size())
+    {
+        std::cerr << "Testing index out of range: " << Options.mIndex
+                  << " (size " << Phase.mTesting.size() << ")\n";
+        return 1;
+    }
+
+    FTestingRecord &Record =
+        Phase.mTesting[static_cast<size_t>(Options.mIndex)];
+    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+                               "].testing[" + std::to_string(Options.mIndex) +
+                               "]";
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    if (!Options.mSession.empty())
+    {
+        Changes.push_back({"session", {Record.mSession, Options.mSession}});
+        Record.mSession = Options.mSession;
+    }
+    if (!Options.mActor.empty())
+    {
+        ETestingActor NewActor;
+        if (!TestingActorFromString(Options.mActor, NewActor))
+        {
+            std::cerr << "Invalid actor: " << Options.mActor
+                      << " (expected: human, ai)\n";
+            return 1;
+        }
+        Changes.push_back({"actor", {ToString(Record.mActor), Options.mActor}});
+        Record.mActor = NewActor;
+    }
+    if (!Options.mStep.empty())
+    {
+        Changes.push_back({"step", {Record.mStep, Options.mStep}});
+        Record.mStep = Options.mStep;
+    }
+    if (!Options.mAction.empty())
+    {
+        Changes.push_back({"action", {Record.mAction, Options.mAction}});
+        Record.mAction = Options.mAction;
+    }
+    if (!Options.mExpected.empty())
+    {
+        Changes.push_back({"expected", {Record.mExpected, Options.mExpected}});
+        Record.mExpected = Options.mExpected;
+    }
+    if (!Options.mEvidence.empty())
+    {
+        Changes.push_back({"evidence", {Record.mEvidence, Options.mEvidence}});
+        Record.mEvidence = Options.mEvidence;
+    }
+
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, Target, Target + " updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// verification set — modify an existing verification by index
+// ---------------------------------------------------------------------------
+
+int RunVerificationSetCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot)
+{
+    const FVerificationSetOptions Options = ParseVerificationSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mIndex) >= Bundle.mVerifications.size())
+    {
+        std::cerr << "Verification index out of range: " << Options.mIndex
+                  << " (size " << Bundle.mVerifications.size() << ")\n";
+        return 1;
+    }
+
+    FVerificationEntry &Entry =
+        Bundle.mVerifications[static_cast<size_t>(Options.mIndex)];
+    const std::string Target =
+        "verifications[" + std::to_string(Options.mIndex) + "]";
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    if (!Options.mCheck.empty())
+    {
+        Changes.push_back({"check", {Entry.mCheck, Options.mCheck}});
+        Entry.mCheck = Options.mCheck;
+    }
+    if (!Options.mResult.empty())
+    {
+        Changes.push_back({"result", {Entry.mResult, Options.mResult}});
+        Entry.mResult = Options.mResult;
+    }
+    if (!Options.mDetail.empty())
+    {
+        Changes.push_back({"detail", {Entry.mDetail, Options.mDetail}});
+        Entry.mDetail = Options.mDetail;
+    }
+
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, Target, Target + " updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// manifest set — modify an existing file manifest entry by index
+// ---------------------------------------------------------------------------
+
+int RunManifestSetCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot)
+{
+    const FManifestSetOptions Options = ParseManifestSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    if (static_cast<size_t>(Options.mIndex) >= Phase.mFileManifest.size())
+    {
+        std::cerr << "Manifest index out of range: " << Options.mIndex
+                  << " (size " << Phase.mFileManifest.size() << ")\n";
+        return 1;
+    }
+
+    FFileManifestItem &Item =
+        Phase.mFileManifest[static_cast<size_t>(Options.mIndex)];
+    const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
+                               "].file_manifest[" +
+                               std::to_string(Options.mIndex) + "]";
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    if (!Options.mFile.empty())
+    {
+        Changes.push_back({"file_path", {Item.mFilePath, Options.mFile}});
+        Item.mFilePath = Options.mFile;
+    }
+    if (!Options.mAction.empty())
+    {
+        EFileAction NewAction;
+        if (!FileActionFromString(Options.mAction, NewAction))
+        {
+            std::cerr << "Invalid action: " << Options.mAction
+                      << " (expected: create, modify, delete)\n";
+            return 1;
+        }
+        Changes.push_back(
+            {"action", {ToString(Item.mAction), Options.mAction}});
+        Item.mAction = NewAction;
+    }
+    if (!Options.mDescription.empty())
+    {
+        Changes.push_back(
+            {"description", {Item.mDescription, Options.mDescription}});
+        Item.mDescription = Options.mDescription;
+    }
+
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, Target, Target + " updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// changelog set — modify an existing changelog entry by index
+// ---------------------------------------------------------------------------
+
+int RunChangelogSetCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot)
+{
+    const FChangelogSetOptions Options = ParseChangelogSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mIndex) >= Bundle.mChangeLogs.size())
+    {
+        std::cerr << "Changelog index out of range: " << Options.mIndex
+                  << " (size " << Bundle.mChangeLogs.size() << ")\n";
+        return 1;
+    }
+
+    FChangeLogEntry &Entry =
+        Bundle.mChangeLogs[static_cast<size_t>(Options.mIndex)];
+    const std::string Target =
+        "changelogs[" + std::to_string(Options.mIndex) + "]";
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    if (Options.mPhase != -2)
+    {
+        if (Options.mPhase >= 0 &&
+            static_cast<size_t>(Options.mPhase) >= Bundle.mPhases.size())
+        {
+            std::cerr << "Phase out of range: " << Options.mPhase << "\n";
+            return 1;
+        }
+        Changes.push_back(
+            {"phase",
+             {std::to_string(Entry.mPhase), std::to_string(Options.mPhase)}});
+        Entry.mPhase = Options.mPhase;
+    }
+    if (!Options.mDate.empty())
+    {
+        Changes.push_back({"date", {Entry.mDate, Options.mDate}});
+        Entry.mDate = Options.mDate;
+    }
+    if (!Options.mChange.empty())
+    {
+        Changes.push_back({"change", {Entry.mChange, Options.mChange}});
+        Entry.mChange = Options.mChange;
+    }
+    if (!Options.mType.empty())
+    {
+        EChangeType NewType;
+        if (!ChangeTypeFromString(Options.mType, NewType))
+        {
+            std::cerr << "Invalid type: " << Options.mType << "\n";
+            return 1;
+        }
+        Changes.push_back({"type", {ToString(Entry.mType), Options.mType}});
+        Entry.mType = NewType;
+    }
+    if (!Options.mAffected.empty())
+    {
+        Changes.push_back({"affected", {Entry.mAffected, Options.mAffected}});
+        Entry.mAffected = Options.mAffected;
+    }
+
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, Target, Target + " updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// lane add — append a new lane to a phase
+// ---------------------------------------------------------------------------
+
+int RunLaneAddCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot)
+{
+    const FLaneAddOptions Options = ParseLaneAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    FLaneRecord Lane;
+    if (!Options.mStatus.empty())
+    {
+        if (!ExecutionStatusFromString(Options.mStatus, Lane.mStatus))
+        {
+            std::cerr << "Invalid status: " << Options.mStatus << "\n";
+            return 1;
+        }
+    }
+    Lane.mScope = Options.mScope;
+    Lane.mExitCriteria = Options.mExitCriteria;
+
+    Phase.mLanes.push_back(std::move(Lane));
+
+    const std::string Target =
+        "phases[" + std::to_string(Options.mPhaseIndex) + "].lanes";
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Lane added at index " +
+                            std::to_string(Phase.mLanes.size() - 1));
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JsonQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", Target);
+    EmitJsonFieldSizeT("lane_index", Phase.mLanes.size() - 1, false);
     std::cout << "}\n";
     return 0;
 }

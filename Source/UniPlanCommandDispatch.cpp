@@ -121,18 +121,33 @@ void PrintUsage()
     std::cout << "  uni-plan changelog add --topic <T> "
                  "--change <text> [--phase <N>] "
                  "[--type <type>]\n";
+    std::cout << "  uni-plan changelog set --topic <T> "
+                 "--index <N> [--phase <N|topic>] "
+                 "[--date <d>] [--change <t>] [--type <t>]\n";
     std::cout << "  uni-plan verification add --topic <T> "
                  "--check <text> [--phase <N>] "
                  "[--result <text>]\n";
+    std::cout << "  uni-plan verification set --topic <T> "
+                 "--index <N> [--check <t>] [--result <t>] "
+                 "[--detail <t>]\n";
     std::cout << "  uni-plan lane set --topic <T> "
                  "--phase <N> --lane <N> [--status <s>] "
                  "[--scope <t>] ...\n";
+    std::cout << "  uni-plan lane add --topic <T> "
+                 "--phase <N> [--status <s>] "
+                 "[--scope <t>] [--exit-criteria <t>]\n";
     std::cout << "  uni-plan testing add --topic <T> "
                  "--phase <N> --step <text> "
                  "--action <text> --expected <text>\n";
+    std::cout << "  uni-plan testing set --topic <T> "
+                 "--phase <N> --index <N> [--session <t>] "
+                 "[--actor <t>] [--step <t>] ...\n";
     std::cout << "  uni-plan manifest add --topic <T> "
                  "--phase <N> --file <path> "
                  "--action <a> --description <text>\n";
+    std::cout << "  uni-plan manifest set --topic <T> "
+                 "--phase <N> --index <N> [--file <t>] "
+                 "[--action <t>] [--description <t>]\n";
     std::cout << "\n";
     std::cout << "Utility:\n";
     std::cout << "  uni-plan cache [info|clear|config]\n";
@@ -559,7 +574,13 @@ int RunMain(const int InArgc, char *InArgv[])
                                                        Args.end());
                 return RunLaneSetCommand(SubArgs, CWD);
             }
-            throw UsageError("lane requires subcommand: set");
+            if (!Args.empty() && Args[0] == "add")
+            {
+                const std::vector<std::string> SubArgs(Args.begin() + 1,
+                                                       Args.end());
+                return RunLaneAddCommand(SubArgs, CWD);
+            }
+            throw UsageError("lane requires subcommand: set, add");
         }
 
         if (Command == "testing")
@@ -572,7 +593,13 @@ int RunMain(const int InArgc, char *InArgv[])
                                                        Args.end());
                 return RunTestingAddCommand(SubArgs, CWD);
             }
-            throw UsageError("testing requires subcommand: add");
+            if (!Args.empty() && Args[0] == "set")
+            {
+                const std::vector<std::string> SubArgs(Args.begin() + 1,
+                                                       Args.end());
+                return RunTestingSetCommand(SubArgs, CWD);
+            }
+            throw UsageError("testing requires subcommand: add, set");
         }
 
         if (Command == "manifest")
@@ -585,7 +612,13 @@ int RunMain(const int InArgc, char *InArgv[])
                                                        Args.end());
                 return RunManifestAddCommand(SubArgs, CWD);
             }
-            throw UsageError("manifest requires subcommand: add");
+            if (!Args.empty() && Args[0] == "set")
+            {
+                const std::vector<std::string> SubArgs(Args.begin() + 1,
+                                                       Args.end());
+                return RunManifestSetCommand(SubArgs, CWD);
+            }
+            throw UsageError("manifest requires subcommand: add, set");
         }
 
         // --- Old .md-based commands removed ---

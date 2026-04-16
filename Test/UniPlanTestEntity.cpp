@@ -118,3 +118,217 @@ TEST_F(FBundleTestFixture, ManifestAddOutOfRangeFails)
     StopCapture();
     EXPECT_EQ(Code, 1);
 }
+
+// ===================================================================
+// testing set
+// ===================================================================
+
+TEST_F(FBundleTestFixture, TestingSetUpdatesRecord)
+{
+    CopyFixture("SampleTopic");
+    // Add a testing record first so we have index 0
+    StartCapture();
+    UniPlan::RunTestingAddCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--session", "s1", "--actor",
+         "human", "--step", "old step", "--action", "old action", "--expected",
+         "old expected", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t TestingIndex = Before.mPhases[1].mTesting.size() - 1;
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunTestingSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--index",
+         std::to_string(TestingIndex), "--step", "new step", "--action",
+         "new action", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mTesting[TestingIndex].mStep, "new step");
+    EXPECT_EQ(After.mPhases[1].mTesting[TestingIndex].mAction, "new action");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, TestingSetOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTestingSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--index", "999", "--step",
+         "x", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+// ===================================================================
+// verification set
+// ===================================================================
+
+TEST_F(FBundleTestFixture, VerificationSetUpdatesEntry)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    ASSERT_GT(Before.mVerifications.size(), 0u);
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunVerificationSetCommand(
+        {"--topic", "SampleTopic", "--index", "0", "--check", "Updated check",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mVerifications[0].mCheck, "Updated check");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, VerificationSetOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunVerificationSetCommand(
+        {"--topic", "SampleTopic", "--index", "999", "--check", "x",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+// ===================================================================
+// manifest set
+// ===================================================================
+
+TEST_F(FBundleTestFixture, ManifestSetUpdatesDescription)
+{
+    CopyFixture("SampleTopic");
+    // Add a manifest entry first
+    StartCapture();
+    UniPlan::RunManifestAddCommand({"--topic", "SampleTopic", "--phase", "1",
+                                    "--file", "Foo.cpp", "--action", "create",
+                                    "--description", "old desc", "--repo-root",
+                                    mRepoRoot.string()},
+                                   mRepoRoot.string());
+    StopCapture();
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t MIdx = Before.mPhases[1].mFileManifest.size() - 1;
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--index",
+         std::to_string(MIdx), "--description", "new desc", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mFileManifest[MIdx].mDescription, "new desc");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, ManifestSetOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunManifestSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--index", "999",
+         "--description", "x", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+// ===================================================================
+// lane add
+// ===================================================================
+
+TEST_F(FBundleTestFixture, LaneAddAppendsLane)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t CountBefore = Before.mPhases[1].mLanes.size();
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunLaneAddCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--scope", "New lane scope",
+         "--exit-criteria", "Done when X", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mLanes.size(), CountBefore + 1);
+    EXPECT_EQ(After.mPhases[1].mLanes.back().mScope, "New lane scope");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, LaneAddOutOfRangePhaseFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunLaneAddCommand(
+        {"--topic", "SampleTopic", "--phase", "99", "--scope", "X",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+// ===================================================================
+// job set --lane reassignment
+// ===================================================================
+
+TEST_F(FBundleTestFixture, JobSetReassignsLane)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunJobSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "0", "--lane", "1",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mJobs[0].mLane, 1);
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, JobSetLaneOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunJobSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "0", "--lane", "99",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}

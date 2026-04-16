@@ -18,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.45.0";
+static constexpr const char *kCliVersion = "0.46.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -370,6 +370,8 @@ struct FJobSetOptions : BaseOptions
     std::string mScope;
     std::string mOutput;
     std::string mExitCriteria;
+    int mLaneIndex = -1; // -1 means unchanged; >=0 reassigns job's lane ref
+    int mWave = -1;      // -1 means unchanged
 };
 
 struct FTaskSetOptions : BaseOptions
@@ -503,6 +505,60 @@ struct FManifestAddOptions : BaseOptions
     std::string mFile;
     std::string mAction;
     std::string mDescription;
+};
+
+// Modify-existing array entries (unlike add, these target an index)
+
+struct FTestingSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mIndex = -1;
+    std::string mSession;
+    std::string mActor;
+    std::string mStep;
+    std::string mAction;
+    std::string mExpected;
+    std::string mEvidence;
+};
+
+struct FVerificationSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    std::string mCheck;
+    std::string mResult;
+    std::string mDetail;
+};
+
+struct FManifestSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mIndex = -1;
+    std::string mFile;
+    std::string mAction;
+    std::string mDescription;
+};
+
+struct FLaneAddOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mStatus;
+    std::string mScope;
+    std::string mExitCriteria;
+};
+
+struct FChangelogSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    int mPhase = -2; // -2 = unchanged; -1 = topic-level; >=0 = phase index
+    std::string mDate;
+    std::string mChange;
+    std::string mType;
+    std::string mAffected;
 };
 
 // ---------------------------------------------------------------------------

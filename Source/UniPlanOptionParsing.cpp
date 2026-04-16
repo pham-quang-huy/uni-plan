@@ -932,6 +932,17 @@ FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens)
                 ConsumeValuedOption(Remaining, Index, "--exit-criteria");
             continue;
         }
+        if (Token == "--lane")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--lane",
+                                  Options.mLaneIndex);
+            continue;
+        }
+        if (Token == "--wave")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--wave", Options.mWave);
+            continue;
+        }
         throw UsageError("Unknown option for job set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1653,6 +1664,269 @@ ParseManifestAddOptions(const std::vector<std::string> &InTokens)
         throw UsageError("manifest add requires --action");
     if (Options.mDescription.empty())
         throw UsageError("manifest add requires --description");
+    return Options;
+}
+
+// ---------------------------------------------------------------------------
+// Modify-existing array entries (set semantics, target by --index)
+// ---------------------------------------------------------------------------
+
+FTestingSetOptions
+ParseTestingSetOptions(const std::vector<std::string> &InTokens)
+{
+    FTestingSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (Token == "--session")
+        {
+            Options.mSession =
+                ConsumeValuedOption(Remaining, Index, "--session");
+            continue;
+        }
+        if (Token == "--actor")
+        {
+            Options.mActor = ConsumeValuedOption(Remaining, Index, "--actor");
+            continue;
+        }
+        if (Token == "--step")
+        {
+            Options.mStep = ConsumeValuedOption(Remaining, Index, "--step");
+            continue;
+        }
+        if (Token == "--action")
+        {
+            Options.mAction = ConsumeValuedOption(Remaining, Index, "--action");
+            continue;
+        }
+        if (Token == "--expected")
+        {
+            Options.mExpected =
+                ConsumeValuedOption(Remaining, Index, "--expected");
+            continue;
+        }
+        if (Token == "--evidence")
+        {
+            Options.mEvidence =
+                ConsumeValuedOption(Remaining, Index, "--evidence");
+            continue;
+        }
+        throw UsageError("Unknown option for testing set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("testing set requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("testing set requires --phase");
+    if (Options.mIndex < 0)
+        throw UsageError("testing set requires --index");
+    return Options;
+}
+
+FVerificationSetOptions
+ParseVerificationSetOptions(const std::vector<std::string> &InTokens)
+{
+    FVerificationSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (Token == "--check")
+        {
+            Options.mCheck = ConsumeValuedOption(Remaining, Index, "--check");
+            continue;
+        }
+        if (Token == "--result")
+        {
+            Options.mResult = ConsumeValuedOption(Remaining, Index, "--result");
+            continue;
+        }
+        if (Token == "--detail")
+        {
+            Options.mDetail = ConsumeValuedOption(Remaining, Index, "--detail");
+            continue;
+        }
+        throw UsageError("Unknown option for verification set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("verification set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("verification set requires --index");
+    return Options;
+}
+
+FManifestSetOptions
+ParseManifestSetOptions(const std::vector<std::string> &InTokens)
+{
+    FManifestSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (Token == "--file")
+        {
+            Options.mFile = ConsumeValuedOption(Remaining, Index, "--file");
+            continue;
+        }
+        if (Token == "--action")
+        {
+            Options.mAction = ConsumeValuedOption(Remaining, Index, "--action");
+            continue;
+        }
+        if (Token == "--description")
+        {
+            Options.mDescription =
+                ConsumeValuedOption(Remaining, Index, "--description");
+            continue;
+        }
+        throw UsageError("Unknown option for manifest set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("manifest set requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("manifest set requires --phase");
+    if (Options.mIndex < 0)
+        throw UsageError("manifest set requires --index");
+    return Options;
+}
+
+FChangelogSetOptions
+ParseChangelogSetOptions(const std::vector<std::string> &InTokens)
+{
+    FChangelogSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            const std::string V =
+                ConsumeValuedOption(Remaining, Index, "--phase");
+            if (V == "topic" || V == "-1")
+                Options.mPhase = -1;
+            else
+                Options.mPhase = std::atoi(V.c_str());
+            continue;
+        }
+        if (Token == "--date")
+        {
+            Options.mDate = ConsumeValuedOption(Remaining, Index, "--date");
+            continue;
+        }
+        if (Token == "--change")
+        {
+            Options.mChange = ConsumeValuedOption(Remaining, Index, "--change");
+            continue;
+        }
+        if (Token == "--type")
+        {
+            Options.mType = ConsumeValuedOption(Remaining, Index, "--type");
+            continue;
+        }
+        if (Token == "--affected")
+        {
+            Options.mAffected =
+                ConsumeValuedOption(Remaining, Index, "--affected");
+            continue;
+        }
+        throw UsageError("Unknown option for changelog set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("changelog set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("changelog set requires --index");
+    return Options;
+}
+
+FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens)
+{
+    FLaneAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        if (Token == "--scope")
+        {
+            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            continue;
+        }
+        if (Token == "--exit-criteria")
+        {
+            Options.mExitCriteria =
+                ConsumeValuedOption(Remaining, Index, "--exit-criteria");
+            continue;
+        }
+        throw UsageError("Unknown option for lane add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("lane add requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("lane add requires --phase");
     return Options;
 }
 

@@ -255,13 +255,18 @@ Low-level field setters. Use semantic commands above when possible.
 ```bash
 uni-plan topic set --topic <T> [--status <s>] [--next-actions <text>] [--summary <t>] [--goals <t>] [--non-goals <t>] [--risks <t>] [--acceptance-criteria <t>] [--problem-statement <t>] [--validation-commands <t>] [--baseline-audit <t>] [--execution-strategy <t>] [--locked-decisions <t>] [--source-references <t>] [--dependencies <t>]
 uni-plan phase set --topic <T> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>] [--scope <t>] [--output <t>] [--investigation <t>] [--code-entity-contract <t>] [--code-snippets <t>] [--best-practices <t>] [--multi-platforming <t>] [--readiness-gate <t>] [--handoff <t>] [--validation-commands <t>] [--phase-dependencies <t>]
-uni-plan job set --topic <T> --phase <N> --job <N> [--status <s>] [--scope <t>] [--output <t>] [--exit-criteria <t>]
+uni-plan job set --topic <T> --phase <N> --job <N> [--status <s>] [--scope <t>] [--output <t>] [--exit-criteria <t>] [--lane <N>] [--wave <N>]
 uni-plan task set --topic <T> --phase <N> --job <N> --task <N> [--status <s>] [--evidence <t>] [--notes <t>]
 uni-plan changelog add --topic <T> [--phase <N>] --change <text> [--type <feat|fix|refactor|chore>] [--affected <t>]
+uni-plan changelog set --topic <T> --index <N> [--phase <N|topic>] [--date <YYYY-MM-DD>] [--change <t>] [--type <t>] [--affected <t>]
 uni-plan verification add --topic <T> [--phase <N>] --check <text> [--result <text>] [--detail <text>]
+uni-plan verification set --topic <T> --index <N> [--check <t>] [--result <t>] [--detail <t>]
 uni-plan lane set --topic <T> --phase <N> --lane <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
+uni-plan lane add --topic <T> --phase <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
 uni-plan testing add --topic <T> --phase <N> --step <text> --action <text> --expected <text> [--actor <human|ai>] [--session <s>] [--evidence <t>]
+uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
 uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
+uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]
 ```
 
 ### Utility commands

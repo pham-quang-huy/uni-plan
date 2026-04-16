@@ -166,6 +166,15 @@ FTestingAddOptions
 ParseTestingAddOptions(const std::vector<std::string> &InTokens);
 FManifestAddOptions
 ParseManifestAddOptions(const std::vector<std::string> &InTokens);
+FTestingSetOptions
+ParseTestingSetOptions(const std::vector<std::string> &InTokens);
+FVerificationSetOptions
+ParseVerificationSetOptions(const std::vector<std::string> &InTokens);
+FManifestSetOptions
+ParseManifestSetOptions(const std::vector<std::string> &InTokens);
+FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens);
+FChangelogSetOptions
+ParseChangelogSetOptions(const std::vector<std::string> &InTokens);
 
 // From UniPlanOutputHuman.cpp
 int RunCacheInfoHuman(const CacheInfoResult &InResult);
@@ -472,6 +481,16 @@ int RunTestingAddCommand(const std::vector<std::string> &InArgs,
                          const std::string &InRepoRoot);
 int RunManifestAddCommand(const std::vector<std::string> &InArgs,
                           const std::string &InRepoRoot);
+int RunTestingSetCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunVerificationSetCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot);
+int RunManifestSetCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
+int RunLaneAddCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+int RunChangelogSetCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot);
 
 // From UniPlanParsing.cpp
 std::vector<SectionSchemaEntry>
