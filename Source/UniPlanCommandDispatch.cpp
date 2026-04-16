@@ -107,12 +107,14 @@ void PrintUsage()
     std::cout << "\n";
     std::cout << "Raw mutation commands:\n";
     std::cout << "  uni-plan topic set --topic <T> "
-                 "[--status <s>] [--next-actions <text>]\n";
+                 "[--status <s>] [--summary <t>] "
+                 "[--goals <t>] ...\n";
     std::cout << "  uni-plan phase set --topic <T> "
                  "--phase <N> [--status <s>] "
-                 "[--done <text>] [--remaining <text>]\n";
+                 "[--scope <t>] [--investigation <t>] ...\n";
     std::cout << "  uni-plan job set --topic <T> "
-                 "--phase <N> --job <N> --status <s>\n";
+                 "--phase <N> --job <N> [--status <s>] "
+                 "[--scope <t>] ...\n";
     std::cout << "  uni-plan task set --topic <T> "
                  "--phase <N> --job <N> --task <N> "
                  "[--status <s>]\n";
@@ -123,7 +125,8 @@ void PrintUsage()
                  "--check <text> [--phase <N>] "
                  "[--result <text>]\n";
     std::cout << "  uni-plan lane set --topic <T> "
-                 "--phase <N> --lane <N> --status <s>\n";
+                 "--phase <N> --lane <N> [--status <s>] "
+                 "[--scope <t>] ...\n";
     std::cout << "  uni-plan testing add --topic <T> "
                  "--phase <N> --step <text> "
                  "--action <text> --expected <text>\n";
@@ -149,15 +152,27 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  uni-plan topic list [--status <filter>]\n"
      "  uni-plan topic get --topic <T>\n"
      "  uni-plan topic set --topic <T> [--status <s>] "
-     "[--next-actions <text>]\n"
+     "[--summary <t>] [--goals <t>] ...\n"
      "  uni-plan topic start --topic <T>\n"
      "  uni-plan topic complete --topic <T> "
      "[--verification <text>]\n"
      "  uni-plan topic block --topic <T> --reason <text>\n"
      "  uni-plan topic status\n\n",
      "List, inspect, or update plan topics.\n\n", nullptr,
-     "  --status <filter>       Filter topics by status\n"
-     "  --next-actions <text>   Set next actions (set only)\n"
+     "  --status <filter>       Filter or set status\n"
+     "  --next-actions <text>   Set next actions\n"
+     "  --summary <text>        Set plan summary\n"
+     "  --goals <text>          Set plan goals\n"
+     "  --non-goals <text>      Set non-goals\n"
+     "  --risks <text>          Set risks\n"
+     "  --acceptance-criteria   Set acceptance criteria\n"
+     "  --problem-statement     Set problem statement\n"
+     "  --validation-commands   Set validation commands\n"
+     "  --baseline-audit        Set baseline audit\n"
+     "  --execution-strategy    Set execution strategy\n"
+     "  --locked-decisions      Set locked decisions\n"
+     "  --source-references     Set source references\n"
+     "  --dependencies <text>   Set dependencies\n"
      "  --reason <text>         Block reason (block only)\n"
      "  --verification <text>   Verification note (complete "
      "only)\n",
@@ -207,7 +222,18 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  --verification <text>   Verification note\n"
      "  --change <text>         Changelog entry (log only)\n"
      "  --check <text>          Verification check (verify "
-     "only)\n",
+     "only)\n"
+     "  --scope <text>          Set phase scope (set only)\n"
+     "  --output <text>         Set phase output (set only)\n"
+     "  --investigation <text>  Set investigation notes\n"
+     "  --code-entity-contract  Set code entity contract\n"
+     "  --code-snippets <text>  Set code snippets\n"
+     "  --best-practices <text> Set best practices\n"
+     "  --multi-platforming     Set multi-platforming notes\n"
+     "  --readiness-gate <text> Set readiness gate\n"
+     "  --handoff <text>        Set handoff notes\n"
+     "  --validation-commands   Set validation commands\n"
+     "  --phase-dependencies    Set phase dependencies\n",
      kHumanTable,
      "Examples:\n"
      "  uni-plan phase start --topic X --phase 6\n"
@@ -218,14 +244,21 @@ static const FCommandHelpEntry kCommandHelp[] = {
     {"job",
      "Usage:\n"
      "  uni-plan job set --topic <topic> --phase <N> --job "
-     "<J> --status <status>\n\n",
-     "Update job status within a phase.\n\n",
+     "<J> [--status <s>] [--scope <t>] [--output <t>] "
+     "[--exit-criteria <t>]\n\n",
+     "Update job fields within a phase.\n\n",
      "Required:\n"
-     "  --topic, --phase, --job, --status\n\n",
-     nullptr, nullptr,
+     "  --topic, --phase, --job\n\n",
+     "  --status <s>            Set execution status\n"
+     "  --scope <text>          Set job scope\n"
+     "  --output <text>         Set job output\n"
+     "  --exit-criteria <text>  Set exit criteria\n",
+     nullptr,
      "Examples:\n"
      "  uni-plan job set --topic X --phase 2 --job 0 "
-     "--status completed\n"},
+     "--status completed\n"
+     "  uni-plan job set --topic X --phase 0 --job 0 "
+     "--scope \"Implement core logic\"\n"},
     {"task",
      "Usage:\n"
      "  uni-plan task set --topic <topic> --phase <N> --job "

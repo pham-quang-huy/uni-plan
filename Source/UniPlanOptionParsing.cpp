@@ -694,6 +694,76 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
                 ConsumeValuedOption(Remaining, Index, "--next-actions");
             continue;
         }
+        if (Token == "--summary")
+        {
+            Options.mSummary =
+                ConsumeValuedOption(Remaining, Index, "--summary");
+            continue;
+        }
+        if (Token == "--goals")
+        {
+            Options.mGoals = ConsumeValuedOption(Remaining, Index, "--goals");
+            continue;
+        }
+        if (Token == "--non-goals")
+        {
+            Options.mNonGoals =
+                ConsumeValuedOption(Remaining, Index, "--non-goals");
+            continue;
+        }
+        if (Token == "--risks")
+        {
+            Options.mRisks = ConsumeValuedOption(Remaining, Index, "--risks");
+            continue;
+        }
+        if (Token == "--acceptance-criteria")
+        {
+            Options.mAcceptanceCriteria =
+                ConsumeValuedOption(Remaining, Index, "--acceptance-criteria");
+            continue;
+        }
+        if (Token == "--problem-statement")
+        {
+            Options.mProblemStatement =
+                ConsumeValuedOption(Remaining, Index, "--problem-statement");
+            continue;
+        }
+        if (Token == "--validation-commands")
+        {
+            Options.mValidationCommands =
+                ConsumeValuedOption(Remaining, Index, "--validation-commands");
+            continue;
+        }
+        if (Token == "--baseline-audit")
+        {
+            Options.mBaselineAudit =
+                ConsumeValuedOption(Remaining, Index, "--baseline-audit");
+            continue;
+        }
+        if (Token == "--execution-strategy")
+        {
+            Options.mExecutionStrategy =
+                ConsumeValuedOption(Remaining, Index, "--execution-strategy");
+            continue;
+        }
+        if (Token == "--locked-decisions")
+        {
+            Options.mLockedDecisions =
+                ConsumeValuedOption(Remaining, Index, "--locked-decisions");
+            continue;
+        }
+        if (Token == "--source-references")
+        {
+            Options.mSourceReferences =
+                ConsumeValuedOption(Remaining, Index, "--source-references");
+            continue;
+        }
+        if (Token == "--dependencies")
+        {
+            Options.mDependencies =
+                ConsumeValuedOption(Remaining, Index, "--dependencies");
+            continue;
+        }
         throw UsageError("Unknown option for topic set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -746,6 +816,70 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
                 ConsumeValuedOption(Remaining, Index, "--context");
             continue;
         }
+        if (Token == "--scope")
+        {
+            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            continue;
+        }
+        if (Token == "--output")
+        {
+            Options.mOutput = ConsumeValuedOption(Remaining, Index, "--output");
+            continue;
+        }
+        if (Token == "--investigation")
+        {
+            Options.mInvestigation =
+                ConsumeValuedOption(Remaining, Index, "--investigation");
+            continue;
+        }
+        if (Token == "--code-entity-contract")
+        {
+            Options.mCodeEntityContract =
+                ConsumeValuedOption(Remaining, Index, "--code-entity-contract");
+            continue;
+        }
+        if (Token == "--code-snippets")
+        {
+            Options.mCodeSnippets =
+                ConsumeValuedOption(Remaining, Index, "--code-snippets");
+            continue;
+        }
+        if (Token == "--best-practices")
+        {
+            Options.mBestPractices =
+                ConsumeValuedOption(Remaining, Index, "--best-practices");
+            continue;
+        }
+        if (Token == "--multi-platforming")
+        {
+            Options.mMultiPlatforming =
+                ConsumeValuedOption(Remaining, Index, "--multi-platforming");
+            continue;
+        }
+        if (Token == "--readiness-gate")
+        {
+            Options.mReadinessGate =
+                ConsumeValuedOption(Remaining, Index, "--readiness-gate");
+            continue;
+        }
+        if (Token == "--handoff")
+        {
+            Options.mHandoff =
+                ConsumeValuedOption(Remaining, Index, "--handoff");
+            continue;
+        }
+        if (Token == "--validation-commands")
+        {
+            Options.mValidationCommands =
+                ConsumeValuedOption(Remaining, Index, "--validation-commands");
+            continue;
+        }
+        if (Token == "--phase-dependencies")
+        {
+            Options.mPhaseDependencies =
+                ConsumeValuedOption(Remaining, Index, "--phase-dependencies");
+            continue;
+        }
         throw UsageError("Unknown option for phase set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -782,6 +916,22 @@ FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens)
             Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
             continue;
         }
+        if (Token == "--scope")
+        {
+            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            continue;
+        }
+        if (Token == "--output")
+        {
+            Options.mOutput = ConsumeValuedOption(Remaining, Index, "--output");
+            continue;
+        }
+        if (Token == "--exit-criteria")
+        {
+            Options.mExitCriteria =
+                ConsumeValuedOption(Remaining, Index, "--exit-criteria");
+            continue;
+        }
         throw UsageError("Unknown option for job set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -790,8 +940,6 @@ FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens)
         throw UsageError("job set requires --phase");
     if (Options.mJobIndex < 0)
         throw UsageError("job set requires --job");
-    if (Options.mStatus.empty())
-        throw UsageError("job set requires --status");
     return Options;
 }
 
@@ -1371,6 +1519,17 @@ FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens)
             Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
             continue;
         }
+        if (Token == "--scope")
+        {
+            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            continue;
+        }
+        if (Token == "--exit-criteria")
+        {
+            Options.mExitCriteria =
+                ConsumeValuedOption(Remaining, Index, "--exit-criteria");
+            continue;
+        }
         throw UsageError("Unknown option for lane set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1379,8 +1538,6 @@ FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens)
         throw UsageError("lane set requires --phase");
     if (Options.mLaneIndex < 0)
         throw UsageError("lane set requires --lane");
-    if (Options.mStatus.empty())
-        throw UsageError("lane set requires --status");
     return Options;
 }
 

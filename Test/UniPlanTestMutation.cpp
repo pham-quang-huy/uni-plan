@@ -56,6 +56,57 @@ TEST_F(FBundleTestFixture, TopicSetNextActions)
     EXPECT_EQ(Bundle.mNextActions, "Do stuff");
 }
 
+TEST_F(FBundleTestFixture, TopicSetMetadataSummary)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunTopicSetCommand(
+        {"--topic", "SampleTopic", "--summary", "New summary text",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mMetadata.mSummary, "New summary text");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, TopicSetMetadataMultipleFields)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTopicSetCommand(
+        {"--topic", "SampleTopic", "--goals", "G1\nG2", "--risks", "R1",
+         "--dependencies", "Dep1", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mMetadata.mGoals, "G1\nG2");
+    EXPECT_EQ(After.mMetadata.mRisks, "R1");
+    EXPECT_EQ(After.mMetadata.mDependencies, "Dep1");
+}
+
+TEST_F(FBundleTestFixture, TopicSetNoFieldsFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTopicSetCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
 // ===================================================================
 // phase set
 // ===================================================================
@@ -95,6 +146,52 @@ TEST_F(FBundleTestFixture, PhaseSetOutOfRangeFails)
     EXPECT_EQ(Code, 1);
 }
 
+TEST_F(FBundleTestFixture, PhaseSetDesignMaterial)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--scope",
+         "Implement core rendering", "--investigation",
+         "Checked Metal API docs", "--best-practices",
+         "Use RAII for GPU resources", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mScope, "Implement core rendering");
+    EXPECT_EQ(After.mPhases[1].mDesign.mInvestigation,
+              "Checked Metal API docs");
+    EXPECT_EQ(After.mPhases[1].mDesign.mBestPractices,
+              "Use RAII for GPU resources");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, PhaseSetOutputAndHandoff)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--output",
+         "Compiled shader pipeline", "--handoff", "Ready for testing phase",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mOutput, "Compiled shader pipeline");
+    EXPECT_EQ(After.mPhases[1].mDesign.mHandoff, "Ready for testing phase");
+}
+
 // ===================================================================
 // job set
 // ===================================================================
@@ -129,6 +226,44 @@ TEST_F(FBundleTestFixture, JobSetOutOfRangeFails)
     const int Code = UniPlan::RunJobSetCommand(
         {"--topic", "SampleTopic", "--phase", "1", "--job", "99", "--status",
          "completed", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, JobSetScopeAndOutput)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunJobSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "0", "--scope",
+         "Build shader compiler", "--output", "Compiled SPIR-V",
+         "--exit-criteria", "All shaders compile", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mJobs[0].mScope, "Build shader compiler");
+    EXPECT_EQ(After.mPhases[1].mJobs[0].mOutput, "Compiled SPIR-V");
+    EXPECT_EQ(After.mPhases[1].mJobs[0].mExitCriteria, "All shaders compile");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, JobSetNoFieldsFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunJobSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "0", "--repo-root",
+         mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
@@ -279,6 +414,42 @@ TEST_F(FBundleTestFixture, LaneSetOutOfRangeFails)
     const int Code = UniPlan::RunLaneSetCommand(
         {"--topic", "SampleTopic", "--phase", "0", "--lane", "99", "--status",
          "completed", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, LaneSetScopeAndExitCriteria)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunLaneSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--lane", "0", "--scope",
+         "GPU pipeline lane", "--exit-criteria", "All passes render",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mLanes[0].mScope, "GPU pipeline lane");
+    EXPECT_EQ(After.mPhases[1].mLanes[0].mExitCriteria, "All passes render");
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, LaneSetNoFieldsFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunLaneSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--lane", "0", "--repo-root",
+         mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);

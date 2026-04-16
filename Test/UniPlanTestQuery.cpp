@@ -84,6 +84,17 @@ TEST_F(FBundleTestFixture, TopicStatusJsonHasCounts)
     EXPECT_EQ(Json["counts"]["in_progress"], 1);
 }
 
+TEST_F(FBundleTestFixture, TopicStatusEmptyRepoReturnsZero)
+{
+    StartCapture();
+    const int Code = UniPlan::RunTopicCommand(
+        {"status", "--repo-root", mRepoRoot.string()}, mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["total"], 0);
+}
+
 // ===================================================================
 // phase list
 // ===================================================================
@@ -100,6 +111,16 @@ TEST_F(FBundleTestFixture, PhaseListJsonReturnsPhases)
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["count"], 3);
     EXPECT_TRUE(Json.contains("phases"));
+}
+
+TEST_F(FBundleTestFixture, PhaseListMissingTopicFails)
+{
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"list", "--topic", "NoSuchTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
 }
 
 // ===================================================================
@@ -243,6 +264,16 @@ TEST_F(FBundleTestFixture, ChangelogJsonReturnsEntries)
     EXPECT_GT(Json["count"].get<int>(), 0);
 }
 
+TEST_F(FBundleTestFixture, ChangelogMissingTopicFails)
+{
+    StartCapture();
+    const int Code = UniPlan::RunBundleChangelogCommand(
+        {"--topic", "NoSuchTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
 // ===================================================================
 // verification
 // ===================================================================
@@ -258,6 +289,16 @@ TEST_F(FBundleTestFixture, VerificationJsonReturnsEntries)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_GT(Json["count"].get<int>(), 0);
+}
+
+TEST_F(FBundleTestFixture, VerificationMissingTopicFails)
+{
+    StartCapture();
+    const int Code = UniPlan::RunBundleVerificationCommand(
+        {"--topic", "NoSuchTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
 }
 
 // ===================================================================
@@ -277,6 +318,16 @@ TEST_F(FBundleTestFixture, TimelineJsonReturnsMergedEntries)
     EXPECT_GT(Json["count"].get<int>(), 0);
 }
 
+TEST_F(FBundleTestFixture, TimelineMissingTopicFails)
+{
+    StartCapture();
+    const int Code = UniPlan::RunBundleTimelineCommand(
+        {"--topic", "NoSuchTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
 // ===================================================================
 // blockers
 // ===================================================================
@@ -290,6 +341,16 @@ TEST_F(FBundleTestFixture, BlockersJsonReturnsResults)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
+}
+
+TEST_F(FBundleTestFixture, BlockersMissingTopicFails)
+{
+    StartCapture();
+    const int Code = UniPlan::RunBundleBlockersCommand(
+        {"--topic", "NoSuchTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
 }
 
 // ===================================================================

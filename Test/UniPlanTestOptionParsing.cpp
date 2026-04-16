@@ -157,10 +157,9 @@ TEST(OptionParsing, VerificationAddRequiresCheck)
 // Entity option parsers
 // ===================================================================
 
-TEST(OptionParsing, LaneSetRequiresAll)
+TEST(OptionParsing, LaneSetRequiresLane)
 {
-    EXPECT_THROW(UniPlan::ParseLaneSetOptions(
-                     {"--topic", "X", "--phase", "0", "--lane", "0"}),
+    EXPECT_THROW(UniPlan::ParseLaneSetOptions({"--topic", "X", "--phase", "0"}),
                  UniPlan::UsageError);
 }
 

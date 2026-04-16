@@ -18,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.43.1";
+static constexpr const char *kCliVersion = "0.44.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -322,6 +322,19 @@ struct FTopicSetOptions : BaseOptions
     std::string mTopic;
     std::string mStatus;
     std::string mNextActions;
+    // Metadata fields
+    std::string mSummary;
+    std::string mGoals;
+    std::string mNonGoals;
+    std::string mRisks;
+    std::string mAcceptanceCriteria;
+    std::string mProblemStatement;
+    std::string mValidationCommands;
+    std::string mBaselineAudit;
+    std::string mExecutionStrategy;
+    std::string mLockedDecisions;
+    std::string mSourceReferences;
+    std::string mDependencies;
 };
 
 struct FPhaseSetOptions : BaseOptions
@@ -333,6 +346,19 @@ struct FPhaseSetOptions : BaseOptions
     std::string mRemaining;
     std::string mBlockers;
     std::string mContext; // agent_context
+    // Phase-level fields
+    std::string mScope;
+    std::string mOutput;
+    // Design material fields
+    std::string mInvestigation;
+    std::string mCodeEntityContract;
+    std::string mCodeSnippets;
+    std::string mBestPractices;
+    std::string mMultiPlatforming;
+    std::string mReadinessGate;
+    std::string mHandoff;
+    std::string mValidationCommands;
+    std::string mPhaseDependencies;
 };
 
 struct FJobSetOptions : BaseOptions
@@ -341,6 +367,9 @@ struct FJobSetOptions : BaseOptions
     int mPhaseIndex = -1;
     int mJobIndex = -1;
     std::string mStatus;
+    std::string mScope;
+    std::string mOutput;
+    std::string mExitCriteria;
 };
 
 struct FTaskSetOptions : BaseOptions
@@ -451,6 +480,8 @@ struct FLaneSetOptions : BaseOptions
     int mPhaseIndex = -1;
     int mLaneIndex = -1;
     std::string mStatus;
+    std::string mScope;
+    std::string mExitCriteria;
 };
 
 struct FTestingAddOptions : BaseOptions

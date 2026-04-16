@@ -1871,6 +1871,39 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
         Bundle.mNextActions = Options.mNextActions;
     }
 
+    // Metadata fields — apply each non-empty option to Bundle.mMetadata
+    auto ApplyMeta = [&](const std::string &InFlag, std::string &InOutField,
+                         const std::string &InNewValue)
+    {
+        if (!InNewValue.empty())
+        {
+            Changes.push_back({InFlag, {InOutField, InNewValue}});
+            InOutField = InNewValue;
+            if (Desc.empty())
+                Desc = "Updated " + InFlag;
+        }
+    };
+    ApplyMeta("summary", Bundle.mMetadata.mSummary, Options.mSummary);
+    ApplyMeta("goals", Bundle.mMetadata.mGoals, Options.mGoals);
+    ApplyMeta("non_goals", Bundle.mMetadata.mNonGoals, Options.mNonGoals);
+    ApplyMeta("risks", Bundle.mMetadata.mRisks, Options.mRisks);
+    ApplyMeta("acceptance_criteria", Bundle.mMetadata.mAcceptanceCriteria,
+              Options.mAcceptanceCriteria);
+    ApplyMeta("problem_statement", Bundle.mMetadata.mProblemStatement,
+              Options.mProblemStatement);
+    ApplyMeta("validation_commands", Bundle.mMetadata.mValidationCommands,
+              Options.mValidationCommands);
+    ApplyMeta("baseline_audit", Bundle.mMetadata.mBaselineAudit,
+              Options.mBaselineAudit);
+    ApplyMeta("execution_strategy", Bundle.mMetadata.mExecutionStrategy,
+              Options.mExecutionStrategy);
+    ApplyMeta("locked_decisions", Bundle.mMetadata.mLockedDecisions,
+              Options.mLockedDecisions);
+    ApplyMeta("source_references", Bundle.mMetadata.mSourceReferences,
+              Options.mSourceReferences);
+    ApplyMeta("dependencies", Bundle.mMetadata.mDependencies,
+              Options.mDependencies);
+
     if (Changes.empty())
     {
         std::cerr << "No fields to update\n";
@@ -1975,6 +2008,40 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
         Phase.mLifecycle.mAgentContext = Options.mContext;
     }
 
+    // Phase-level fields
+    auto ApplyPhase = [&](const std::string &InFlag, std::string &InOutField,
+                          const std::string &InNewValue)
+    {
+        if (!InNewValue.empty())
+        {
+            Changes.push_back({InFlag, {InOutField, InNewValue}});
+            InOutField = InNewValue;
+            if (Desc.empty())
+                Desc = Target + " updated " + InFlag;
+        }
+    };
+    ApplyPhase("scope", Phase.mScope, Options.mScope);
+    ApplyPhase("output", Phase.mOutput, Options.mOutput);
+
+    // Design material fields
+    ApplyPhase("investigation", Phase.mDesign.mInvestigation,
+               Options.mInvestigation);
+    ApplyPhase("code_entity_contract", Phase.mDesign.mCodeEntityContract,
+               Options.mCodeEntityContract);
+    ApplyPhase("code_snippets", Phase.mDesign.mCodeSnippets,
+               Options.mCodeSnippets);
+    ApplyPhase("best_practices", Phase.mDesign.mBestPractices,
+               Options.mBestPractices);
+    ApplyPhase("multi_platforming", Phase.mDesign.mMultiPlatforming,
+               Options.mMultiPlatforming);
+    ApplyPhase("readiness_gate", Phase.mDesign.mReadinessGate,
+               Options.mReadinessGate);
+    ApplyPhase("handoff", Phase.mDesign.mHandoff, Options.mHandoff);
+    ApplyPhase("validation_commands", Phase.mDesign.mValidationCommands,
+               Options.mValidationCommands);
+    ApplyPhase("dependencies", Phase.mDesign.mDependencies,
+               Options.mPhaseDependencies);
+
     if (Changes.empty())
     {
         std::cerr << "No fields to update\n";
@@ -2025,32 +2092,63 @@ int RunJobSetCommand(const std::vector<std::string> &InArgs,
                                "].jobs[" + std::to_string(Options.mJobIndex) +
                                "]";
 
-    const std::string Old = ToString(Job.mStatus);
-    EExecutionStatus NewStatus;
-    if (!ExecutionStatusFromString(Options.mStatus, NewStatus))
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    std::string Desc;
+
+    if (!Options.mStatus.empty())
     {
-        std::cerr << "Invalid status: " << Options.mStatus << "\n";
+        const std::string Old = ToString(Job.mStatus);
+        EExecutionStatus NewStatus;
+        if (!ExecutionStatusFromString(Options.mStatus, NewStatus))
+        {
+            std::cerr << "Invalid status: " << Options.mStatus << "\n";
+            return 1;
+        }
+        Changes.push_back({"status", {Old, Options.mStatus}});
+        Job.mStatus = NewStatus;
+        Desc = Target + " → " + Options.mStatus;
+
+        const std::string UTC = GetUtcNow();
+        if (NewStatus == EExecutionStatus::InProgress && Job.mStartedAt.empty())
+        {
+            Job.mStartedAt = UTC;
+            Changes.push_back({"started_at", {"", UTC}});
+        }
+        if (NewStatus == EExecutionStatus::Completed &&
+            Job.mCompletedAt.empty())
+        {
+            Job.mCompletedAt = UTC;
+            Changes.push_back({"completed_at", {"", UTC}});
+        }
+    }
+    if (!Options.mScope.empty())
+    {
+        Changes.push_back({"scope", {Job.mScope, Options.mScope}});
+        Job.mScope = Options.mScope;
+        if (Desc.empty())
+            Desc = Target + " updated scope";
+    }
+    if (!Options.mOutput.empty())
+    {
+        Changes.push_back({"output", {Job.mOutput, Options.mOutput}});
+        Job.mOutput = Options.mOutput;
+    }
+    if (!Options.mExitCriteria.empty())
+    {
+        Changes.push_back(
+            {"exit_criteria", {Job.mExitCriteria, Options.mExitCriteria}});
+        Job.mExitCriteria = Options.mExitCriteria;
+    }
+
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
         return 1;
     }
 
-    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
-    std::vector<Change> Changes;
-    Changes.push_back({"status", {Old, Options.mStatus}});
-    Job.mStatus = NewStatus;
-
-    const std::string UTC = GetUtcNow();
-    if (NewStatus == EExecutionStatus::InProgress && Job.mStartedAt.empty())
-    {
-        Job.mStartedAt = UTC;
-        Changes.push_back({"started_at", {"", UTC}});
-    }
-    if (NewStatus == EExecutionStatus::Completed && Job.mCompletedAt.empty())
-    {
-        Job.mCompletedAt = UTC;
-        Changes.push_back({"completed_at", {"", UTC}});
-    }
-
-    AppendAutoChangelog(Bundle, Target, Target + " → " + Options.mStatus);
+    AppendAutoChangelog(Bundle, Target,
+                        Desc.empty() ? Target + " updated" : Desc);
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
@@ -3416,13 +3514,6 @@ int RunLaneSetCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
-    EExecutionStatus NewStatus;
-    if (!ExecutionStatusFromString(Options.mStatus, NewStatus))
-    {
-        std::cerr << "Invalid lane status: " << Options.mStatus << "\n";
-        return 1;
-    }
-
     FLaneRecord &Lane = Phase.mLanes[static_cast<size_t>(Options.mLaneIndex)];
     const std::string Target = "phases[" + std::to_string(Options.mPhaseIndex) +
                                "].lanes[" + std::to_string(Options.mLaneIndex) +
@@ -3430,10 +3521,43 @@ int RunLaneSetCommand(const std::vector<std::string> &InArgs,
 
     using Change = std::pair<std::string, std::pair<std::string, std::string>>;
     std::vector<Change> Changes;
-    Changes.push_back({"status", {ToString(Lane.mStatus), Options.mStatus}});
-    Lane.mStatus = NewStatus;
+    std::string Desc;
 
-    AppendAutoChangelog(Bundle, Target, Target + " → " + Options.mStatus);
+    if (!Options.mStatus.empty())
+    {
+        EExecutionStatus NewStatus;
+        if (!ExecutionStatusFromString(Options.mStatus, NewStatus))
+        {
+            std::cerr << "Invalid lane status: " << Options.mStatus << "\n";
+            return 1;
+        }
+        Changes.push_back(
+            {"status", {ToString(Lane.mStatus), Options.mStatus}});
+        Lane.mStatus = NewStatus;
+        Desc = Target + " → " + Options.mStatus;
+    }
+    if (!Options.mScope.empty())
+    {
+        Changes.push_back({"scope", {Lane.mScope, Options.mScope}});
+        Lane.mScope = Options.mScope;
+        if (Desc.empty())
+            Desc = Target + " updated scope";
+    }
+    if (!Options.mExitCriteria.empty())
+    {
+        Changes.push_back(
+            {"exit_criteria", {Lane.mExitCriteria, Options.mExitCriteria}});
+        Lane.mExitCriteria = Options.mExitCriteria;
+    }
+
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, Target,
+                        Desc.empty() ? Target + " updated" : Desc);
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
