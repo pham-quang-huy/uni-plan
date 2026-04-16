@@ -119,7 +119,8 @@ uni-plan/
 │   ├── settings.json          # Hook configuration
 │   ├── hooks/                 # 3 hook scripts
 │   ├── rules/                 # 2 auto-loaded rule files
-│   └── skills/                # 11 skills (upl-* prefix)
+│   ├── skills/                # 12 skills (upl-* prefix)
+│   └── agents/                # 1 agent (upl-agent-*)
 ├── CLAUDE.md                  # This file — project manifest
 ├── CODING.md                  # Code style and SOLID principles
 ├── NAMING.md                  # Naming conventions
@@ -136,6 +137,7 @@ uni-plan/
 | Rules | 2 | `.claude/rules/` — auto-loaded coding and naming enforcement |
 | Hooks | 3 | `.claude/hooks/` — using-namespace guard, pragma-once guard, auto-format |
 | Skills | 12 | `.claude/skills/upl-*/` — see skill table below |
+| Agents | 1 | `.claude/agents/upl-agent-senior-tester.md` — test coverage auditor |
 
 ## project_skills
 

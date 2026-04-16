@@ -8,6 +8,20 @@ implicit_invocation: true
 
 Build and run the uni-plan test suite, add new tests, or debug failures.
 
+## Mandatory: Coverage Audit After Every Run
+
+After building and running tests, you MUST spawn a coverage audit agent. This is not optional.
+
+```
+Agent({
+  description: "Audit test coverage",
+  subagent_type: "Explore",
+  prompt: "Read .claude/agents/upl-agent-senior-tester.md for your full instructions. Then execute the audit workflow: (1) Read Source/UniPlanForwardDecls.h to build the complete Run*Command inventory. (2) Read all Test/UniPlanTest*.cpp files to build the test inventory. (3) Produce a coverage matrix with columns: Command, Type, Happy, Negative, Bundle, Changelog, Gate Msg — marking Y or N for each. (4) Flag any N as a gap with the test file and test name that should be added."
+})
+```
+
+Do NOT report test results to the user until the agent has completed and you have reviewed its coverage matrix. If the matrix shows gaps, fix them before reporting.
+
 ## Quick Run
 
 ```bash
@@ -27,17 +41,58 @@ cd Build/CMake && ctest --output-on-failure
 
 ## Test Architecture
 
-| Component | File | Tests | Dependencies |
-|-----------|------|-------|-------------|
-| **Fixture** | `Test/UniPlanTestFixture.h/.cpp` | — | Temp dir, stdout/stderr capture, JSON parse |
-| **Option parsing** | `Test/UniPlanTestOptionParsing.cpp` | ~26 | Pure functions, no fixture |
-| **Query commands** | `Test/UniPlanTestQuery.cpp` | ~19 | SampleTopic fixture |
-| **Raw mutations** | `Test/UniPlanTestMutation.cpp` | ~12 | SampleTopic fixture |
-| **Semantic lifecycle** | `Test/UniPlanTestSemantic.cpp` | ~22 | Minimal fixtures via CreateMinimalFixture |
-| **Evidence shortcuts** | `Test/UniPlanTestEvidence.cpp` | ~4 | SampleTopic fixture |
-| **Entity coverage** | `Test/UniPlanTestEntity.cpp` | ~6 | SampleTopic fixture |
+| Component | File | Dependencies |
+|-----------|------|-------------|
+| **Fixture** | `Test/UniPlanTestFixture.h/.cpp` | Temp dir, stdout/stderr capture, JSON parse |
+| **Option parsing** | `Test/UniPlanTestOptionParsing.cpp` | Pure functions, no fixture |
+| **Query commands** | `Test/UniPlanTestQuery.cpp` | SampleTopic fixture |
+| **Raw mutations** | `Test/UniPlanTestMutation.cpp` | SampleTopic fixture |
+| **Semantic lifecycle** | `Test/UniPlanTestSemantic.cpp` | Minimal fixtures via CreateMinimalFixture |
+| **Evidence shortcuts** | `Test/UniPlanTestEvidence.cpp` | SampleTopic fixture |
+| **Entity coverage** | `Test/UniPlanTestEntity.cpp` | SampleTopic fixture |
 
-**Total: ~85 tests**
+## Coverage Requirements (MANDATORY)
+
+**"All tests pass" is NOT the same as "all commands are covered."** After writing tests, verify this checklist for EVERY `Run*Command` in `Source/UniPlanForwardDecls.h`:
+
+### Per-command minimum coverage
+
+| Command type | Required tests |
+|---|---|
+| **Option parser** | Happy path (fields populated) + missing required field (`EXPECT_THROW` UsageError) |
+| **Query command** | Happy path (exit 0, JSON field names verified) + negative (missing topic OR out-of-range phase → exit 1) |
+| **Raw mutation** | Happy path (exit 0, `ReloadBundle` verifies mutation, `mChangeLogs.size()` grew) + negative (out-of-range OR invalid value → exit 1) |
+| **Semantic lifecycle** | Happy path (exit 0, mutation + timestamp + auto-cascade verified) + gate rejection (wrong status → exit 1, `mCapturedStderr` contains reason) + design gate if applicable |
+| **Evidence command** | Happy path (entry appended, phase index correct) + bounds check (out-of-range → exit 1) |
+| **Entity command** | Happy path (record appended, changelog appended) + invalid enum (exit 1) + bounds check (exit 1) |
+
+### Coverage audit checklist
+
+Run this BEFORE declaring tests complete:
+
+```
+For EVERY Run*Command in UniPlanForwardDecls.h:
+[ ] At least 1 TEST_F with exit code 0 (happy path)
+[ ] At least 1 TEST_F with exit code 1 (error path)
+[ ] For mutations: ReloadBundle verifies field changed on disk
+[ ] For mutations: ReloadBundle verifies mChangeLogs.size() grew
+[ ] For gates: mCapturedStderr contains expected error phrase
+[ ] For queries: JSON field names match actual command output
+```
+
+### Post-test report format
+
+After writing or modifying tests, report a **coverage matrix** — not just a pass count:
+
+```
+| Command | Happy | Negative | Bundle | Changelog | Gate Msg |
+|---------|-------|----------|--------|-----------|----------|
+| topic start | Y | Y | Y | Y | N/A |
+| phase start | Y | Y (x2) | Y | Y | Y |
+...
+```
+
+This is the deliverable. "92 tests, 0 failures" alone is insufficient.
 
 ## Build System
 
