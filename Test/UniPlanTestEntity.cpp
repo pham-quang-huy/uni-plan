@@ -16,6 +16,7 @@ TEST_F(FBundleTestFixture, TestingAddAppendsRecord)
     UniPlan::FTopicBundle Before;
     ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
     const size_t CountBefore = Before.mPhases[1].mTesting.size();
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
 
     StartCapture();
     const int Code = UniPlan::RunTestingAddCommand(
@@ -34,6 +35,7 @@ TEST_F(FBundleTestFixture, TestingAddAppendsRecord)
     EXPECT_EQ(After.mPhases[1].mTesting.back().mStep, "Build");
     EXPECT_EQ(After.mPhases[1].mTesting.back().mActor,
               UniPlan::ETestingActor::AI);
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
 }
 
 TEST_F(FBundleTestFixture, TestingAddInvalidActorFails)
@@ -72,6 +74,7 @@ TEST_F(FBundleTestFixture, ManifestAddAppendsItem)
     UniPlan::FTopicBundle Before;
     ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
     const size_t CountBefore = Before.mPhases[1].mFileManifest.size();
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
 
     StartCapture();
     const int Code = UniPlan::RunManifestAddCommand(
@@ -89,6 +92,7 @@ TEST_F(FBundleTestFixture, ManifestAddAppendsItem)
               "Source/New.cpp");
     EXPECT_EQ(After.mPhases[1].mFileManifest.back().mAction,
               UniPlan::EFileAction::Create);
+    EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
 }
 
 TEST_F(FBundleTestFixture, ManifestAddInvalidActionFails)

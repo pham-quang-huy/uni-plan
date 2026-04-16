@@ -53,8 +53,7 @@ TEST_F(FBundleTestFixture, TopicGetJsonHasFields)
     EXPECT_EQ(Json["status"], "in_progress");
     EXPECT_TRUE(Json.contains("phase_summary"));
     EXPECT_EQ(Json["phase_count"], 3);
-    EXPECT_EQ(Json["title"],
-              "Sample Topic for Testing and Reference");
+    EXPECT_EQ(Json["title"], "Sample Topic for Testing and Reference");
 }
 
 TEST_F(FBundleTestFixture, TopicGetMissingTopicFails)
@@ -203,6 +202,30 @@ TEST_F(FBundleTestFixture, PhaseWaveStatusReportsWaves)
     EXPECT_TRUE(Json.contains("current_wave"));
 }
 
+TEST_F(FBundleTestFixture, PhaseWaveStatusOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"wave-status", "--topic", "SampleTopic", "--phase", "99",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, PhaseReadinessOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"readiness", "--topic", "SampleTopic", "--phase", "99", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
 // ===================================================================
 // changelog
 // ===================================================================
@@ -282,4 +305,14 @@ TEST_F(FBundleTestFixture, ValidatePassesOnValidFixture)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
+}
+
+TEST_F(FBundleTestFixture, ValidateMissingTopicFails)
+{
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "NoSuchTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
 }

@@ -63,6 +63,11 @@ TEST_F(FBundleTestFixture, TopicSetNextActions)
 TEST_F(FBundleTestFixture, PhaseSetDoneAndRemaining)
 {
     CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
     StartCapture();
     const int Code = UniPlan::RunPhaseSetCommand(
         {"--topic", "SampleTopic", "--phase", "1", "--done", "W1 done",
@@ -75,6 +80,7 @@ TEST_F(FBundleTestFixture, PhaseSetDoneAndRemaining)
     ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
     EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mDone, "W1 done");
     EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mRemaining, "W2-W3");
+    EXPECT_GT(Bundle.mChangeLogs.size(), ChangelogsBefore);
 }
 
 TEST_F(FBundleTestFixture, PhaseSetOutOfRangeFails)
@@ -96,6 +102,11 @@ TEST_F(FBundleTestFixture, PhaseSetOutOfRangeFails)
 TEST_F(FBundleTestFixture, JobSetStatusCompleted)
 {
     CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
     StartCapture();
     const int Code = UniPlan::RunJobSetCommand(
         {"--topic", "SampleTopic", "--phase", "1", "--job", "0", "--status",
@@ -108,6 +119,19 @@ TEST_F(FBundleTestFixture, JobSetStatusCompleted)
     ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
     EXPECT_EQ(Bundle.mPhases[1].mJobs[0].mStatus,
               UniPlan::EExecutionStatus::Completed);
+    EXPECT_GT(Bundle.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, JobSetOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunJobSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "99", "--status",
+         "completed", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
 }
 
 // ===================================================================
@@ -117,6 +141,11 @@ TEST_F(FBundleTestFixture, JobSetStatusCompleted)
 TEST_F(FBundleTestFixture, TaskSetEvidenceAndNotes)
 {
     CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
     StartCapture();
     const int Code = UniPlan::RunTaskSetCommand(
         {"--topic", "SampleTopic", "--phase", "0", "--job", "0", "--task", "0",
@@ -129,6 +158,19 @@ TEST_F(FBundleTestFixture, TaskSetEvidenceAndNotes)
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
     EXPECT_EQ(Bundle.mPhases[0].mJobs[0].mTasks[0].mEvidence, "proof");
+    EXPECT_GT(Bundle.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, TaskSetOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTaskSetCommand(
+        {"--topic", "SampleTopic", "--phase", "0", "--job", "0", "--task", "99",
+         "--status", "completed", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
 }
 
 // ===================================================================
@@ -157,6 +199,16 @@ TEST_F(FBundleTestFixture, ChangelogAddAppendsEntry)
     EXPECT_EQ(After.mChangeLogs.back().mChange, "Test entry");
 }
 
+TEST_F(FBundleTestFixture, ChangelogAddMissingTopicFails)
+{
+    StartCapture();
+    EXPECT_THROW(UniPlan::RunChangelogAddCommand(
+                     {"--change", "test", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+    StopCapture();
+}
+
 // ===================================================================
 // verification add
 // ===================================================================
@@ -183,6 +235,16 @@ TEST_F(FBundleTestFixture, VerificationAddAppendsEntry)
     EXPECT_EQ(After.mVerifications.back().mCheck, "Build clean");
 }
 
+TEST_F(FBundleTestFixture, VerificationAddMissingTopicFails)
+{
+    StartCapture();
+    EXPECT_THROW(UniPlan::RunVerificationAddCommand(
+                     {"--check", "test", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+    StopCapture();
+}
+
 // ===================================================================
 // lane set
 // ===================================================================
@@ -190,6 +252,11 @@ TEST_F(FBundleTestFixture, VerificationAddAppendsEntry)
 TEST_F(FBundleTestFixture, LaneSetChangesStatus)
 {
     CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
     StartCapture();
     const int Code = UniPlan::RunLaneSetCommand(
         {"--topic", "SampleTopic", "--phase", "1", "--lane", "0", "--status",
@@ -202,6 +269,7 @@ TEST_F(FBundleTestFixture, LaneSetChangesStatus)
     ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
     EXPECT_EQ(Bundle.mPhases[1].mLanes[0].mStatus,
               UniPlan::EExecutionStatus::Completed);
+    EXPECT_GT(Bundle.mChangeLogs.size(), ChangelogsBefore);
 }
 
 TEST_F(FBundleTestFixture, LaneSetOutOfRangeFails)
