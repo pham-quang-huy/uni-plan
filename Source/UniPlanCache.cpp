@@ -320,7 +320,7 @@ std::vector<std::string> SplitCacheFields(const std::string &InLine)
     return Fields;
 }
 
-fs::path ResolveCodexCacheRoot(const std::string &InConfigCacheDir = "")
+fs::path ResolveCacheRoot(const std::string &InConfigCacheDir = "")
 {
     if (!InConfigCacheDir.empty())
     {
@@ -342,10 +342,10 @@ fs::path ResolveCodexCacheRoot(const std::string &InConfigCacheDir = "")
 #endif
     if (HomeEnv == nullptr || *HomeEnv == '\0')
     {
-        return fs::current_path() / fs::path(".tmp/doc/cache");
+        return fs::current_path() / fs::path(".tmp/uni-plan/cache");
     }
 
-    return fs::path(HomeEnv) / fs::path(".codex/uni-plan/cache");
+    return fs::path(HomeEnv) / fs::path(".uni-plan/cache");
 }
 
 fs::path BuildInventoryCachePath(const fs::path &InRepoRoot,
@@ -354,7 +354,7 @@ fs::path BuildInventoryCachePath(const fs::path &InRepoRoot,
     uint64_t HashState = 1469598103934665603ull;
     Fnv1aUpdateString(HashState, ToGenericPath(InRepoRoot));
     const std::string RepoKey = ToHexString(HashState);
-    return ResolveCodexCacheRoot(InConfigCacheDir) / fs::path(RepoKey) /
+    return ResolveCacheRoot(InConfigCacheDir) / fs::path(RepoKey) /
            fs::path("inventory.cache");
 }
 
@@ -880,7 +880,7 @@ CacheInfoResult BuildCacheInfo(const std::string &InRepoRoot,
     const fs::path ExeDir = ResolveExecutableDirectory();
     Result.mIniPath = (ExeDir / "uni-plan.ini").string();
 
-    const fs::path CacheRoot = ResolveCodexCacheRoot(InConfig.mCacheDir);
+    const fs::path CacheRoot = ResolveCacheRoot(InConfig.mCacheDir);
     Result.mCacheDir = CacheRoot.string();
 
     std::error_code Error;
@@ -906,7 +906,7 @@ CacheClearResult ClearCache(const std::string &InRepoRoot,
     CacheClearResult Result;
     Result.mGeneratedUtc = GetUtcNow();
 
-    const fs::path CacheRoot = ResolveCodexCacheRoot(InConfig.mCacheDir);
+    const fs::path CacheRoot = ResolveCacheRoot(InConfig.mCacheDir);
     Result.mCacheDir = CacheRoot.string();
 
     std::error_code Error;
@@ -950,7 +950,7 @@ bool TryWriteDocIni(const fs::path &InPath, const std::string &InCacheDir,
          << "# Supports: absolute paths, paths relative to this ini file's "
             "directory,\n"
          << "#           and ${ENV_VAR} expansion (e.g. ${HOME}).\n"
-         << "# Default (if empty or missing): ${HOME}/.codex/uni-plan/cache\n"
+         << "# Default (if empty or missing): ${HOME}/.uni-plan/cache\n"
          << "dir = " << InCacheDir << "\n\n"
          << "# Enable or disable inventory caching globally.\n"
          << "# When false, equivalent to always passing --no-cache.\n"
