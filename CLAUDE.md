@@ -135,7 +135,7 @@ uni-plan/
 |-----------|-------|----------|
 | Rules | 2 | `.claude/rules/` — auto-loaded coding and naming enforcement |
 | Hooks | 3 | `.claude/hooks/` — using-namespace guard, pragma-once guard, auto-format |
-| Skills | 11 | `.claude/skills/upl-*/` — see skill table below |
+| Skills | 12 | `.claude/skills/upl-*/` — see skill table below |
 
 ## project_skills
 
@@ -152,6 +152,7 @@ uni-plan/
 | `upl-plan-creation` | `.claude/skills/upl-plan-creation/SKILL.md` | Create governed plan bundles |
 | `upl-plan-execution` | `.claude/skills/upl-plan-execution/SKILL.md` | Execute plan phases with governance gates |
 | `upl-plan-audit` | `.claude/skills/upl-plan-audit/SKILL.md` | Audit plan topics via uni-plan CLI |
+| `upl-unit-test` | `.claude/skills/upl-unit-test/SKILL.md` | Build and run unit tests for all CLI commands |
 
 ## cli_semver_discipline
 
