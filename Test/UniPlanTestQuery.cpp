@@ -56,6 +56,27 @@ TEST_F(FBundleTestFixture, TopicGetJsonHasFields)
     EXPECT_EQ(Json["title"], "Sample Topic for Testing and Reference");
 }
 
+TEST_F(FBundleTestFixture, TopicGetEmitsAllMetadataKeys)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTopicCommand(
+        {"get", "--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    // All 12 metadata fields must be emitted (null or populated)
+    for (const char *Key :
+         {"summary", "goals", "non_goals", "risks", "acceptance_criteria",
+          "problem_statement", "validation_commands", "baseline_audit",
+          "execution_strategy", "locked_decisions", "source_references",
+          "dependencies"})
+    {
+        EXPECT_TRUE(Json.contains(Key)) << "topic get missing key: " << Key;
+    }
+}
+
 TEST_F(FBundleTestFixture, TopicGetMissingTopicFails)
 {
     StartCapture();
@@ -140,6 +161,41 @@ TEST_F(FBundleTestFixture, PhaseGetJsonHasFields)
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["phase_index"], 0);
     EXPECT_EQ(Json["status"], "completed");
+}
+
+TEST_F(FBundleTestFixture, PhaseGetEmitsAllDesignMaterialKeys)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "SampleTopic", "--phase", "0", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    // All 11 design material keys must be emitted
+    for (const char *Key :
+         {"scope", "output", "investigation", "code_entity_contract",
+          "code_snippets", "best_practices", "multi_platforming",
+          "readiness_gate", "handoff", "validation_commands", "dependencies"})
+    {
+        EXPECT_TRUE(Json.contains(Key)) << "phase get missing key: " << Key;
+    }
+}
+
+TEST_F(FBundleTestFixture, PhaseGetReferenceEmitsMultiPlatforming)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "SampleTopic", "--phase", "0", "--reference",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json.contains("multi_platforming"));
 }
 
 TEST_F(FBundleTestFixture, PhaseGetOutOfRangeFails)

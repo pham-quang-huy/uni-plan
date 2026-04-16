@@ -208,6 +208,11 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
     EmitJsonFieldNullable("acceptance_criteria", Meta.mAcceptanceCriteria);
     EmitJsonFieldNullable("problem_statement", Meta.mProblemStatement);
     EmitJsonFieldNullable("validation_commands", Meta.mValidationCommands);
+    EmitJsonFieldNullable("baseline_audit", Meta.mBaselineAudit);
+    EmitJsonFieldNullable("execution_strategy", Meta.mExecutionStrategy);
+    EmitJsonFieldNullable("locked_decisions", Meta.mLockedDecisions);
+    EmitJsonFieldNullable("source_references", Meta.mSourceReferences);
+    EmitJsonFieldNullable("dependencies", Meta.mDependencies);
     EmitJsonFieldNullable("next_actions", Bundle.mNextActions);
     EmitJsonFieldSizeT("phase_count", Bundle.mPhases.size());
 
@@ -582,6 +587,8 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
                               Phase.mDesign.mCodeEntityContract);
         EmitJsonFieldNullable("code_snippets", Phase.mDesign.mCodeSnippets);
         EmitJsonFieldNullable("best_practices", Phase.mDesign.mBestPractices);
+        EmitJsonFieldNullable("multi_platforming",
+                              Phase.mDesign.mMultiPlatforming);
         EmitJsonFieldNullable("handoff", Phase.mDesign.mHandoff);
         EmitJsonFieldNullable("validation_commands",
                               Phase.mDesign.mValidationCommands);
@@ -612,6 +619,8 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         EmitJsonFieldNullable("code_entity_contract",
                               Phase.mDesign.mCodeEntityContract);
         EmitJsonFieldNullable("code_snippets", Phase.mDesign.mCodeSnippets);
+        EmitJsonFieldNullable("multi_platforming",
+                              Phase.mDesign.mMultiPlatforming);
     }
 
     // Lanes
