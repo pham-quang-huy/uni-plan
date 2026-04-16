@@ -6,7 +6,6 @@
 #include "UniPlanWatchSnapshot.h"
 
 #include <ftxui/component/component.hpp>
-#include <ftxui/component/loop.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
@@ -28,11 +27,26 @@ DocWatchApp::DocWatchApp(const std::string &InRepoRoot,
 
 DocWatchApp::~DocWatchApp()
 {
-    mRunning.store(false, std::memory_order_relaxed);
+    RequestStop();
     if (mDataThread.joinable())
     {
         mDataThread.join();
     }
+}
+
+void DocWatchApp::RequestStop()
+{
+    mRunning.store(false, std::memory_order_relaxed);
+    mStopCondition.notify_all();
+}
+
+bool DocWatchApp::WaitForNextPoll()
+{
+    std::unique_lock<std::mutex> Lock(mStopMutex);
+    mStopCondition.wait_for(
+        Lock, std::chrono::seconds(3),
+        [this] { return !mRunning.load(std::memory_order_relaxed); });
+    return mRunning.load(std::memory_order_relaxed);
 }
 
 int DocWatchApp::Run()
@@ -41,6 +55,7 @@ int DocWatchApp::Run()
 
     auto screen = ScreenInteractive::Fullscreen();
     screen.TrackMouse(false);
+    auto ExitLoop = screen.ExitLoopClosure();
 
     // Panels
     InventoryPanel PanelInventory;
@@ -246,11 +261,13 @@ int DocWatchApp::Run()
     // Keyboard handling
     dashboard = CatchEvent(
         dashboard,
-        [this, &screen](Event InEvent)
+        [this, ExitLoop](Event InEvent)
         {
-            if (InEvent == Event::Character('q'))
+            if (InEvent == Event::q || InEvent == Event::Q ||
+                InEvent == Event::Escape || InEvent == Event::CtrlC)
             {
-                screen.Exit();
+                RequestStop();
+                ExitLoop();
                 return true;
             }
             if (InEvent == Event::Character('a'))
@@ -544,7 +561,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('r'))
             {
-                mbForceRefresh = true;
+                mbForceRefresh.store(true, std::memory_order_relaxed);
                 return true;
             }
             return false;
@@ -558,8 +575,11 @@ int DocWatchApp::Run()
             bool bFirstTick = true;
             while (mRunning.load(std::memory_order_relaxed))
             {
+                const bool bForceRefresh =
+                    mbForceRefresh.exchange(false, std::memory_order_relaxed);
+
                 // Signature-based change detection (skip first tick)
-                if (!mbForceRefresh && !bFirstTick)
+                if (!bForceRefresh && !bFirstTick)
                 {
                     uint64_t NewSignature = 0;
                     std::string SignatureError;
@@ -568,12 +588,14 @@ int DocWatchApp::Run()
                                                       SignatureError);
                     if (NewSignature == mLastSignature)
                     {
-                        std::this_thread::sleep_for(std::chrono::seconds(3));
+                        if (!WaitForNextPoll())
+                        {
+                            break;
+                        }
                         continue;
                     }
                     mLastSignature = NewSignature;
                 }
-                mbForceRefresh = false;
 
                 // Full snapshot rebuild
                 FDocWatchSnapshot Fresh;
@@ -586,8 +608,16 @@ int DocWatchApp::Run()
                 {
                     std::cerr << "[watch] snapshot error: " << Ex.what()
                               << "\n";
-                    std::this_thread::sleep_for(std::chrono::seconds(3));
+                    if (!WaitForNextPoll())
+                    {
+                        break;
+                    }
                     continue;
+                }
+
+                if (!mRunning.load(std::memory_order_relaxed))
+                {
+                    break;
                 }
 
                 // Initialize signature after first build
@@ -601,29 +631,24 @@ int DocWatchApp::Run()
                     bFirstTick = false;
                 }
 
-                // Post snapshot to UI thread and trigger render
+                // Post the fresh snapshot back to the UI thread.
                 screen.Post(
-                    [this, Snap = std::move(Fresh), &screen]() mutable
+                    [this, Snap = std::move(Fresh)]() mutable
                     {
                         mSnapshot = std::move(Snap);
                         mTickCount++;
-                        screen.RequestAnimationFrame();
                     });
 
-                std::this_thread::sleep_for(std::chrono::seconds(3));
+                if (!WaitForNextPoll())
+                {
+                    break;
+                }
             }
         });
 
-    // Polling UI loop — RunOnce with sleep to process
-    // screen.Post callbacks between renders
-    Loop loop(&screen, dashboard);
-    while (!loop.HasQuitted())
-    {
-        loop.RunOnce();
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));
-    }
+    screen.Loop(dashboard);
 
-    mRunning.store(false, std::memory_order_relaxed);
+    RequestStop();
     if (mDataThread.joinable())
     {
         mDataThread.join();

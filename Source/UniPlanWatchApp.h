@@ -4,6 +4,8 @@
 #include "UniPlanWatchSnapshot.h"
 
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -22,6 +24,9 @@ public:
     int Run();
 
 private:
+    void RequestStop();
+    bool WaitForNextPoll();
+
     std::string mRepoRoot;
     DocConfig mConfig;
     bool mbUseCache = true;
@@ -29,6 +34,8 @@ private:
     FDocWatchSnapshot mSnapshot{};
     std::atomic<bool> mRunning{false};
     std::thread mDataThread;
+    std::mutex mStopMutex;
+    std::condition_variable mStopCondition;
     int mTickCount = 0;
     int mSelectedPlanIndex = 0;
     int mSelectedNonActiveIndex = -1;
@@ -40,7 +47,7 @@ private:
     bool mbShowImplPane = false;
     int mFilePageIndex = 0;
     uint64_t mLastSignature = 0;
-    bool mbForceRefresh = false;
+    std::atomic<bool> mbForceRefresh{false};
 };
 
 int RunDocWatch(const std::string& InRepoRoot, const DocConfig& InConfig);
