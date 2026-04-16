@@ -24,7 +24,7 @@ struct FChangeLogEntry
     int mPhase = -1; // phase index (0, 1, ...) or -1 for topic-level
     std::string mDate;
     std::string mChange;
-    std::string mAffected; // entity refs (e.g. "phase[0].jobs[2]")
+    std::string mAffected; // entity refs (e.g. "phases[0].jobs[2]")
     EChangeType mType = EChangeType::Chore;
     ETestingActor mActor = ETestingActor::Human;
 };

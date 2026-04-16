@@ -18,7 +18,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.47.0";
+static constexpr const char *kCliVersion = "0.48.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -51,6 +51,63 @@ static constexpr const char *kCacheClearSchema = "uni-plan-cache-clear-v1";
 static constexpr const char *kCacheConfigSchema = "uni-plan-cache-config-v1";
 static constexpr const char *kSectionContentSchema =
     "uni-plan-section-content-v1";
+
+// ---------------------------------------------------------------------------
+// Canonical mutation target strings
+//
+// Emitted in `target` fields of mutation output JSON and written to
+// FChangeLogEntry.mAffected by AppendAutoChangelog. Phase-scoped targets
+// are built at runtime via MakePhaseTarget / MakeJobTarget / etc.
+//
+// Reference convention: plural container name with positional index —
+// "phases[N]", "jobs[N]", "lanes[N]", "tasks[N]". Matches the JSON key
+// layout and JSON-pointer semantics (".../phases/0/jobs/1"). See
+// CLAUDE.md → documentation_rules.
+// ---------------------------------------------------------------------------
+
+static constexpr const char *kTargetPlan = "plan";
+static constexpr const char *kTargetChangelogs = "changelogs";
+static constexpr const char *kTargetVerifications = "verifications";
+
+inline std::string MakePhaseTarget(int InPhaseIndex)
+{
+    return "phases[" + std::to_string(InPhaseIndex) + "]";
+}
+inline std::string MakeJobTarget(int InPhaseIndex, int InJobIndex)
+{
+    return MakePhaseTarget(InPhaseIndex) + ".jobs[" +
+           std::to_string(InJobIndex) + "]";
+}
+inline std::string MakeLaneTarget(int InPhaseIndex, int InLaneIndex)
+{
+    return MakePhaseTarget(InPhaseIndex) + ".lanes[" +
+           std::to_string(InLaneIndex) + "]";
+}
+inline std::string MakeTaskTarget(int InPhaseIndex, int InJobIndex,
+                                  int InTaskIndex)
+{
+    return MakeJobTarget(InPhaseIndex, InJobIndex) + ".tasks[" +
+           std::to_string(InTaskIndex) + "]";
+}
+inline std::string MakeTestingTarget(int InPhaseIndex, int InIndex)
+{
+    return MakePhaseTarget(InPhaseIndex) + ".testing[" +
+           std::to_string(InIndex) + "]";
+}
+inline std::string MakeManifestTarget(int InPhaseIndex, int InIndex)
+{
+    return MakePhaseTarget(InPhaseIndex) + ".file_manifest[" +
+           std::to_string(InIndex) + "]";
+}
+inline std::string MakeVerificationTarget(int InIndex)
+{
+    return std::string(kTargetVerifications) + "[" + std::to_string(InIndex) +
+           "]";
+}
+inline std::string MakeChangelogTarget(int InIndex)
+{
+    return std::string(kTargetChangelogs) + "[" + std::to_string(InIndex) + "]";
+}
 
 // V4 bundle-native command schemas
 static constexpr const char *kTopicListSchema = "uni-plan-topic-list-v1";
@@ -722,7 +779,7 @@ struct ValidateCheck
     EValidationSeverity mSeverity = EValidationSeverity::Warning;
     bool mbOk = true;
     std::string mTopic; // which bundle (empty for aggregate checks)
-    std::string mPath;  // e.g. "phase[2].jobs[1].tasks[0]"
+    std::string mPath;  // e.g. "phases[2].jobs[1].tasks[0]"
     std::string mDetail;
     std::vector<std::string> mDiagnostics;
 };

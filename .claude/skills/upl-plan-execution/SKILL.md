@@ -8,7 +8,7 @@ implicit_invocation: true
 
 Use this skill to execute plan phases with proper governance gates and automatic re-auditing.
 
-Treat the bundle itself as the execution source of truth. Use `phase[n]`-style references in bundle text and evidence, and only mention legacy phase keys when quoting a real historical filename. Prefer CLI mutations, but honor explicit user requests for direct manual bundle repair and re-validate immediately after.
+Treat the bundle itself as the execution source of truth. Use `phases[n]`-style references in bundle text and evidence, and only mention legacy phase keys when quoting a real historical filename. Prefer CLI mutations, but honor explicit user requests for direct manual bundle repair and re-validate immediately after.
 
 ## Required Context
 

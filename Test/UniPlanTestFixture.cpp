@@ -160,6 +160,8 @@ void FBundleTestFixture::AssertISODate(const std::string &InValue)
 
 void FBundleTestFixture::AssertNoLegacyPhasePath(const std::string &InValue)
 {
-    EXPECT_EQ(InValue.find("phases["), std::string::npos)
-        << "Found legacy path in: " << InValue;
+    // Canonical form is plural "phases[N]". Reject singular "phase[" — which
+    // is a substring NOT present in "phases[" (position 5 is 's', not '[').
+    EXPECT_EQ(InValue.find("phase["), std::string::npos)
+        << "Found legacy singular phase[ path in: " << InValue;
 }

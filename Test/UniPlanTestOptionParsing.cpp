@@ -252,13 +252,13 @@ TEST(OptionParsing, ChangelogSetHappyPath)
 {
     const auto O = UniPlan::ParseChangelogSetOptions(
         {"--topic", "X", "--index", "2", "--phase", "topic", "--change",
-         "Updated", "--type", "fix", "--affected", "phase[2]"});
+         "Updated", "--type", "fix", "--affected", "phases[2]"});
     EXPECT_EQ(O.mTopic, "X");
     EXPECT_EQ(O.mIndex, 2);
     EXPECT_EQ(O.mPhase, -1);
     EXPECT_EQ(O.mChange, "Updated");
     EXPECT_EQ(O.mType, "fix");
-    EXPECT_EQ(O.mAffected, "phase[2]");
+    EXPECT_EQ(O.mAffected, "phases[2]");
 }
 
 TEST(OptionParsing, LaneAddRequiresPhase)

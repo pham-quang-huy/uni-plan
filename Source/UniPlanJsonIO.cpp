@@ -573,11 +573,11 @@ static bool DeserializeTopicBundleV4(const JsonValue &InRoot,
         const auto &PJ = InRoot["phases"][I];
         if (!PJ.is_object())
         {
-            OutError = "phase[" + std::to_string(I) + "]: expected object";
+            OutError = "phases[" + std::to_string(I) + "]: expected object";
             return false;
         }
         FPhaseRecord Phase;
-        const std::string PhaseCtx = "phase[" + std::to_string(I) + "]";
+        const std::string PhaseCtx = "phases[" + std::to_string(I) + "]";
         if (!DeserializePhaseRecordStrict(PJ, Phase, PhaseCtx, OutError))
             return false;
         OutBundle.mPhases.push_back(std::move(Phase));

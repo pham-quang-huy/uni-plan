@@ -503,3 +503,81 @@ TEST_F(FBundleTestFixture, ValidateMissingTopicFails)
     StopCapture();
     EXPECT_EQ(Code, 1);
 }
+
+TEST_F(FBundleTestFixture, ValidateFlagsLegacySingularAffectedRef)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FChangeLogEntry Legacy;
+    Legacy.mDate = "2026-04-01";
+    Legacy.mChange = "Legacy-form drift";
+    Legacy.mAffected =
+        "phase[0].jobs[1]"; // singular legacy: canonical is phases[0]
+    Bundle.mChangeLogs.push_back(std::move(Legacy));
+
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    bool bFound = false;
+    for (const auto &Issue : Json["issues"])
+    {
+        if (Issue["id"] == "canonical_entity_ref")
+        {
+            bFound = true;
+            EXPECT_NE(Issue["detail"].get<std::string>().find("legacy"),
+                      std::string::npos);
+            break;
+        }
+    }
+    EXPECT_TRUE(bFound);
+}
+
+TEST_F(FBundleTestFixture, ValidateAcceptsCanonicalAffectedRefs)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Canonical singular forms + top-level targets — all must pass
+    for (const std::string &A :
+         {"phases[0]", "phases[0].jobs[1]", "phases[0].lanes[2]",
+          "phases[0].jobs[1].tasks[3]", "phases[0].testing[0]",
+          "phases[0].file_manifest[2]", "phases[0].status", "changelogs[0]",
+          "verifications[1]", "plan", ""})
+    {
+        UniPlan::FChangeLogEntry E;
+        E.mDate = "2026-04-01";
+        E.mChange = "ok";
+        E.mAffected = A;
+        Bundle.mChangeLogs.push_back(E);
+    }
+
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    for (const auto &Issue : Json["issues"])
+    {
+        EXPECT_NE(Issue["id"], "canonical_entity_ref")
+            << "unexpected canonical_entity_ref failure for: " << Issue["path"];
+    }
+}

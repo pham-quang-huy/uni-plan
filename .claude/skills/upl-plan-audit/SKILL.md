@@ -8,7 +8,7 @@ implicit_invocation: true
 
 Use this skill for CLI-first topic audits. uni-plan IS the audit tool — use it directly.
 
-Treat `phase[n]`, `lane[n]`, `wave[n]`, `job[n]`, and `task[n]` as the canonical bundle entity references. Legacy phase keys should be reported only when they are being used as live bundle references, not when they appear inside a real historical filename.
+Treat `phases[n]`, `lane[n]`, `wave[n]`, `job[n]`, and `task[n]` as the canonical bundle entity references. Legacy phase keys should be reported only when they are being used as live bundle references, not when they appear inside a real historical filename.
 
 ## Workflow
 
@@ -52,7 +52,7 @@ Present structured findings in **table format**:
 
 | # | Severity | Topic | Path | Finding | Recommended Fix |
 |---|----------|-------|------|---------|----------------|
-| 1 | critical | TopicName | phase[0].scope | empty scope field | Populate phase scope |
+| 1 | critical | TopicName | phases[0].scope | empty scope field | Populate phase scope |
 
 ## Finding Taxonomy
 

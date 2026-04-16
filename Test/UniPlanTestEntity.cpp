@@ -28,7 +28,7 @@ TEST_F(FBundleTestFixture, TestingAddAppendsRecord)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_TRUE(Json["ok"].get<bool>());
-    EXPECT_EQ(Json["target"], "phase[1].testing");
+    EXPECT_EQ(Json["target"], "phases[1].testing");
     AssertNoLegacyPhasePath(Json["target"].get<std::string>());
 
     UniPlan::FTopicBundle After;
@@ -39,7 +39,7 @@ TEST_F(FBundleTestFixture, TestingAddAppendsRecord)
               UniPlan::ETestingActor::AI);
     EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
     ASSERT_FALSE(After.mChangeLogs.empty());
-    EXPECT_EQ(After.mChangeLogs.back().mAffected, "phase[1].testing");
+    EXPECT_EQ(After.mChangeLogs.back().mAffected, "phases[1].testing");
     AssertNoLegacyPhasePath(After.mChangeLogs.back().mAffected);
 }
 
@@ -90,7 +90,7 @@ TEST_F(FBundleTestFixture, ManifestAddAppendsItem)
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(Json["target"], "phase[1].file_manifest");
+    EXPECT_EQ(Json["target"], "phases[1].file_manifest");
     AssertNoLegacyPhasePath(Json["target"].get<std::string>());
 
     UniPlan::FTopicBundle After;
@@ -102,7 +102,7 @@ TEST_F(FBundleTestFixture, ManifestAddAppendsItem)
               UniPlan::EFileAction::Create);
     EXPECT_GT(After.mChangeLogs.size(), ChangelogsBefore);
     ASSERT_FALSE(After.mChangeLogs.empty());
-    EXPECT_EQ(After.mChangeLogs.back().mAffected, "phase[1].file_manifest");
+    EXPECT_EQ(After.mChangeLogs.back().mAffected, "phases[1].file_manifest");
     AssertNoLegacyPhasePath(After.mChangeLogs.back().mAffected);
 }
 

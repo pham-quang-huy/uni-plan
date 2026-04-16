@@ -35,7 +35,7 @@ bool OptionalStringArray(const JsonValue &InJson, const std::string &InKey,
 // ---------------------------------------------------------------------------
 // Typed enum validation — field must exist, be a string, and parse
 // to a valid enum value. Invalid values produce specific errors like:
-//   "phase[2].status: invalid value 'done', expected
+//   "phases[2].status: invalid value 'done', expected
 //    not_started|in_progress|completed|blocked"
 // ---------------------------------------------------------------------------
 
