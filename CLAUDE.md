@@ -158,16 +158,24 @@ uni-plan/
 
 ## cli_semver_discipline
 
+Post-1.0 the CLI follows strict SemVer. The v1.0.0 release locks in the
+current command surface, mutation target path format (`phases[N]`,
+`jobs[N]`, `lanes[N]`, `tasks[N]`, `testing[N]`, `file_manifest[N]`,
+`changelogs[N]`, `verifications[N]`), validator output schema, and
+auto-changelog `affected` contract as the stable baseline.
+
 | Bump | When |
 |------|------|
-| MAJOR | Breaking changes: command renames, removed options, schema format changes |
-| MINOR | New features: new commands, new validation checks, new output fields |
-| PATCH | Bug fixes, documentation, internal refactoring |
+| MAJOR | Breaking changes: command renames, removed options, schema format changes (JSON key renames, path format changes, validator path format changes, output field removals) |
+| MINOR | New features: new commands, new flags on existing commands, new validation checks, new output fields, new output schemas |
+| PATCH | Bug fixes, documentation, internal refactoring, performance improvements that do not change observable output |
 
 **Version source**: `Source/UniPlanTypes.h` → `kCliVersion`
 **Trigger files**: All files in `Source/`
 
-Before committing any `Source/` changes, verify `kCliVersion` was bumped appropriately.
+Before committing any `Source/` changes, verify `kCliVersion` was bumped
+appropriately. A breaking change MUST bump MAJOR — there is no pre-1.0
+exemption anymore.
 
 ## documentation_rules
 
@@ -186,7 +194,7 @@ Each active topic is a single `.Plan.json` file in `Docs/Plans/`. The bundle con
 
 The `.md` naming patterns below apply to non-plan documentation plus legacy historical fixtures. Active plan execution uses `.Plan.json` bundles.
 
-Bundle entity references should use `phases[n]`, `lane[n]`, `wave[n]`, `job[n]`, and `task[n]` inside errors, changelogs, and docs. Legacy phase keys such as `P1` should only appear when quoting an actual historical filename.
+Bundle entity references should use `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n]`, and `tasks[n]` inside errors, changelogs, and docs. Legacy phase keys such as `P1` should only appear when quoting an actual historical filename.
 
 | Doc Type | Pattern | Placement |
 |----------|---------|-----------|

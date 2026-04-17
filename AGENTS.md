@@ -186,7 +186,7 @@ Each active topic is a single `.Plan.json` file in `Docs/Plans/`. The bundle con
 
 The `.md` naming patterns below apply to non-plan documentation plus legacy historical fixtures. Active plan execution uses `.Plan.json` bundles.
 
-Bundle entity references should use `phases[n]`, `lane[n]`, `wave[n]`, `job[n]`, and `task[n]` inside errors, changelogs, and docs. Legacy phase keys such as `P1` should only appear when quoting an actual historical filename.
+Bundle entity references should use `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n]`, and `tasks[n]` inside errors, changelogs, and docs. Legacy phase keys such as `P1` should only appear when quoting an actual historical filename.
 
 | Doc Type | Pattern | Placement |
 |----------|---------|-----------|
