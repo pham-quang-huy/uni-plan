@@ -71,6 +71,67 @@ static JsonValue SerializeStringArray(const std::vector<std::string> &InArray)
     return Arr;
 }
 
+static JsonValue SerializeValidationCommand(const FValidationCommand &InEntry)
+{
+    JsonValue Entry = JsonValue::object();
+    Entry["platform"] = ToString(InEntry.mPlatform);
+    Entry["command"] = InEntry.mCommand;
+    Entry["description"] = InEntry.mDescription;
+    return Entry;
+}
+
+static JsonValue
+SerializeValidationCommandArray(const std::vector<FValidationCommand> &InArray)
+{
+    JsonValue Arr = JsonValue::array();
+    for (const FValidationCommand &C : InArray)
+        Arr.push_back(SerializeValidationCommand(C));
+    return Arr;
+}
+
+// Backward-compat deserializer: accepts either
+//   (a) an array of objects [{platform, command, description}, ...] — canonical
+//   (b) a string — legacy markdown-table form; stored as a single
+//       FValidationCommand with mPlatform=Any, mCommand=<raw>, mDescription=""
+//
+// The string form exists so bundles written by older uni-plan versions
+// continue to load. The migration script converts string form to array
+// form; the CLI always writes array form going forward.
+static void
+DeserializeValidationCommands(const JsonValue &InParent,
+                              const std::string &InKey,
+                              std::vector<FValidationCommand> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JsonValue &V = InParent[InKey];
+    if (V.is_array())
+    {
+        for (const JsonValue &E : V)
+        {
+            if (!E.is_object())
+                continue;
+            FValidationCommand C;
+            std::string Platform = GetString(E, "platform", "any");
+            if (!PlatformScopeFromString(Platform, C.mPlatform))
+                C.mPlatform = EPlatformScope::Any;
+            C.mCommand = GetString(E, "command");
+            C.mDescription = GetString(E, "description");
+            OutArray.push_back(std::move(C));
+        }
+        return;
+    }
+    if (V.is_string())
+    {
+        // Legacy string form — preserve raw text as a single record.
+        FValidationCommand C;
+        C.mPlatform = EPlatformScope::Any;
+        C.mCommand = V.get<std::string>();
+        OutArray.push_back(std::move(C));
+    }
+}
+
 static JsonValue SerializeLaneRecord(const FLaneRecord &InLane)
 {
     JsonValue Lane = JsonValue::object();
@@ -177,7 +238,8 @@ static JsonValue SerializePhaseRecord(const FPhaseRecord &InPhase)
     Phase["handoff"] = DM.mHandoff;
     Phase["code_entity_contract"] = DM.mCodeEntityContract;
     Phase["best_practices"] = DM.mBestPractices;
-    Phase["validation_commands"] = DM.mValidationCommands;
+    Phase["validation_commands"] =
+        SerializeValidationCommandArray(DM.mValidationCommands);
     Phase["multi_platforming"] = DM.mMultiPlatforming;
 
     return Phase;
@@ -199,7 +261,8 @@ static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["risks"] = Meta.mRisks;
     Root["acceptance_criteria"] = Meta.mAcceptanceCriteria;
     Root["problem_statement"] = Meta.mProblemStatement;
-    Root["validation_commands"] = Meta.mValidationCommands;
+    Root["validation_commands"] =
+        SerializeValidationCommandArray(Meta.mValidationCommands);
     Root["baseline_audit"] = Meta.mBaselineAudit;
     Root["execution_strategy"] = Meta.mExecutionStrategy;
     Root["locked_decisions"] = Meta.mLockedDecisions;
@@ -450,7 +513,8 @@ static bool DeserializePhaseRecordStrict(const JsonValue &InJson,
     OptionalString(InJson, "handoff", DM.mHandoff);
     OptionalString(InJson, "code_entity_contract", DM.mCodeEntityContract);
     OptionalString(InJson, "best_practices", DM.mBestPractices);
-    OptionalString(InJson, "validation_commands", DM.mValidationCommands);
+    DeserializeValidationCommands(InJson, "validation_commands",
+                                  DM.mValidationCommands);
     OptionalString(InJson, "multi_platforming", DM.mMultiPlatforming);
 
     // Optional arrays with strict record validation
@@ -559,7 +623,8 @@ static bool DeserializeTopicBundleV4(const JsonValue &InRoot,
     OptionalString(InRoot, "risks", Meta.mRisks);
     OptionalString(InRoot, "acceptance_criteria", Meta.mAcceptanceCriteria);
     OptionalString(InRoot, "problem_statement", Meta.mProblemStatement);
-    OptionalString(InRoot, "validation_commands", Meta.mValidationCommands);
+    DeserializeValidationCommands(InRoot, "validation_commands",
+                                  Meta.mValidationCommands);
     OptionalString(InRoot, "baseline_audit", Meta.mBaselineAudit);
     OptionalString(InRoot, "execution_strategy", Meta.mExecutionStrategy);
     OptionalString(InRoot, "locked_decisions", Meta.mLockedDecisions);

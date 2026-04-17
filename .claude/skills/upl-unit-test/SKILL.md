@@ -50,6 +50,7 @@ cd Build/CMake && ctest --output-on-failure
 | **Semantic lifecycle** | `Test/UniPlanTestSemantic.cpp` | Minimal fixtures via CreateMinimalFixture |
 | **Evidence shortcuts** | `Test/UniPlanTestEvidence.cpp` | SampleTopic fixture |
 | **Entity coverage** | `Test/UniPlanTestEntity.cpp` | SampleTopic fixture |
+| **Content-hygiene validation** | `Test/UniPlanTestValidationContent.cpp` | Minimal fixtures, regex-pattern injection, 13 content-hygiene checks + `--strict` gate |
 
 ## Coverage Requirements (MANDATORY)
 

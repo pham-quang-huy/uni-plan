@@ -2,8 +2,12 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanJsonIO.h"
+#include "UniPlanJsonLineIndex.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
+
+#include <fstream>
+#include <unordered_map>
 
 #include <algorithm>
 #include <filesystem>
@@ -16,6 +20,34 @@ namespace fs = std::filesystem;
 
 namespace UniPlan
 {
+
+// ---------------------------------------------------------------------------
+// EmitValidationCommandsJson — write a typed validation_commands array
+// as JSON: [{"platform":"...","command":"...","description":"..."}, ...]
+// Emits an empty array when the input vector is empty (never null).
+// ---------------------------------------------------------------------------
+
+static void
+EmitValidationCommandsJson(const char *InName,
+                           const std::vector<FValidationCommand> &InCommands,
+                           bool InTrailingComma = true)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InCommands.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FValidationCommand &C = InCommands[I];
+        std::cout << "{";
+        EmitJsonField("platform", ToString(C.mPlatform));
+        EmitJsonField("command", C.mCommand);
+        EmitJsonField("description", C.mDescription, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
 
 // ---------------------------------------------------------------------------
 // TryLoadBundleByTopic — recursive search for <TopicKey>.Plan.json
@@ -207,7 +239,7 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
     EmitJsonFieldNullable("risks", Meta.mRisks);
     EmitJsonFieldNullable("acceptance_criteria", Meta.mAcceptanceCriteria);
     EmitJsonFieldNullable("problem_statement", Meta.mProblemStatement);
-    EmitJsonFieldNullable("validation_commands", Meta.mValidationCommands);
+    EmitValidationCommandsJson("validation_commands", Meta.mValidationCommands);
     EmitJsonFieldNullable("baseline_audit", Meta.mBaselineAudit);
     EmitJsonFieldNullable("execution_strategy", Meta.mExecutionStrategy);
     EmitJsonFieldNullable("locked_decisions", Meta.mLockedDecisions);
@@ -590,8 +622,8 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         EmitJsonFieldNullable("multi_platforming",
                               Phase.mDesign.mMultiPlatforming);
         EmitJsonFieldNullable("handoff", Phase.mDesign.mHandoff);
-        EmitJsonFieldNullable("validation_commands",
-                              Phase.mDesign.mValidationCommands);
+        EmitValidationCommandsJson("validation_commands",
+                                   Phase.mDesign.mValidationCommands);
         std::vector<std::string> Warnings;
         PrintJsonClose(Warnings);
         return 0;
@@ -613,8 +645,8 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         EmitJsonFieldNullable("investigation", Phase.mDesign.mInvestigation);
         EmitJsonFieldNullable("dependencies", Phase.mDesign.mDependencies);
         EmitJsonFieldNullable("handoff", Phase.mDesign.mHandoff);
-        EmitJsonFieldNullable("validation_commands",
-                              Phase.mDesign.mValidationCommands);
+        EmitValidationCommandsJson("validation_commands",
+                                   Phase.mDesign.mValidationCommands);
         EmitJsonFieldNullable("best_practices", Phase.mDesign.mBestPractices);
         EmitJsonFieldNullable("code_entity_contract",
                               Phase.mDesign.mCodeEntityContract);
@@ -760,7 +792,20 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
     PrintField("Readiness Gate", Phase.mDesign.mReadinessGate);
     PrintField("Dependencies", Phase.mDesign.mDependencies);
     PrintField("Handoff", Phase.mDesign.mHandoff);
-    PrintField("Validation Commands", Phase.mDesign.mValidationCommands);
+
+    // Validation commands table — typed vector of FValidationCommand.
+    if (!Phase.mDesign.mValidationCommands.empty())
+    {
+        std::cout << kColorBold << "Validation Commands" << kColorReset << "\n";
+        HumanTable VCTable;
+        VCTable.mHeaders = {"Platform", "Command", "Description"};
+        for (const FValidationCommand &C : Phase.mDesign.mValidationCommands)
+        {
+            VCTable.AddRow({ToString(C.mPlatform), C.mCommand, C.mDescription});
+        }
+        VCTable.Print();
+        std::cout << "\n";
+    }
 
     // Lanes table
     if (!Phase.mLanes.empty())
@@ -1571,6 +1616,50 @@ int RunBundleBlockersCommand(const std::vector<std::string> &InArgs,
 // Validate — validates .Plan.json against schema constraints
 // ---------------------------------------------------------------------------
 
+// Resolve mLine for every ValidateCheck by consulting the raw JSON text of
+// the owning bundle. Each bundle's text is scanned at most once.
+static void ResolveIssueLines(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &InOutChecks)
+{
+    std::unordered_map<std::string, FJsonLineIndex> IndexByTopic;
+    const auto GetIndex =
+        [&](const std::string &InTopic) -> const FJsonLineIndex *
+    {
+        auto It = IndexByTopic.find(InTopic);
+        if (It != IndexByTopic.end())
+            return &It->second;
+        for (const FTopicBundle &B : InBundles)
+        {
+            if (B.mTopicKey != InTopic)
+                continue;
+            if (B.mBundlePath.empty())
+                break;
+            std::ifstream Stream(B.mBundlePath);
+            if (!Stream)
+                break;
+            const std::string Text((std::istreambuf_iterator<char>(Stream)),
+                                   std::istreambuf_iterator<char>());
+            FJsonLineIndex Index;
+            Index.Build(Text);
+            It = IndexByTopic.emplace(InTopic, std::move(Index)).first;
+            return &It->second;
+        }
+        return nullptr;
+    };
+
+    for (ValidateCheck &C : InOutChecks)
+    {
+        if (C.mLine >= 0)
+            continue;
+        if (C.mTopic.empty() || C.mPath.empty())
+            continue;
+        const FJsonLineIndex *rpIndex = GetIndex(C.mTopic);
+        if (rpIndex == nullptr)
+            continue;
+        C.mLine = rpIndex->LineFor(C.mPath);
+    }
+}
+
 static int RunBundleValidateJson(const fs::path &InRepoRoot,
                                  const FBundleValidateOptions &InOptions)
 {
@@ -1602,7 +1691,8 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
         Bundles = LoadAllBundles(InRepoRoot, BundleWarnings);
     }
 
-    const std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    ResolveIssueLines(Bundles, Checks);
 
     int ErrorMajorCount = 0;
     int ErrorMinorCount = 0;
@@ -1623,6 +1713,10 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
                 WarningCount++;
         }
     }
+
+    // --strict promotes ErrorMinor and Warning into the bValid gate.
+    if (InOptions.mbStrict && (ErrorMinorCount > 0 || WarningCount > 0))
+        bValid = false;
 
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kValidateSchema, UTC, InRepoRoot.string());
@@ -1649,6 +1743,10 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
         EmitJsonField("severity", ToString(C.mSeverity));
         EmitJsonFieldNullable("topic", C.mTopic);
         EmitJsonFieldNullable("path", C.mPath);
+        if (C.mLine > 0)
+            EmitJsonFieldInt("line", C.mLine);
+        else
+            std::cout << "\"line\":null,";
         EmitJsonField("detail", C.mDetail, false);
         std::cout << "}";
     }
@@ -1683,7 +1781,8 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
         Bundles = LoadAllBundles(InRepoRoot, BundleWarnings);
     }
 
-    const std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    ResolveIssueLines(Bundles, Checks);
 
     int ErrorMajorCount = 0;
     int ErrorMinorCount = 0;
@@ -1736,7 +1835,7 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
     if (TotalFailed > 0)
     {
         HumanTable Table;
-        Table.mHeaders = {"Severity", "Topic", "Path", "Detail"};
+        Table.mHeaders = {"Severity", "Topic", "Line", "Path", "Detail"};
         for (const ValidateCheck &C : Checks)
         {
             if (C.mbOk)
@@ -1755,13 +1854,17 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
             std::string Path = C.mPath;
             if (Path.size() > 35)
                 Path = Path.substr(0, 32) + "...";
-            Table.AddRow(
-                {Sev, C.mTopic, kColorDim + Path + kColorReset, Detail});
+            const std::string LineCell =
+                C.mLine > 0 ? std::to_string(C.mLine) : "-";
+            Table.AddRow({Sev, C.mTopic, LineCell,
+                          kColorDim + Path + kColorReset, Detail});
         }
         Table.Print();
     }
 
-    return ErrorMajorCount > 0 ? 1 : 0;
+    const bool bStrictFail =
+        InOptions.mbStrict && (ErrorMinorCount > 0 || WarningCount > 0);
+    return (ErrorMajorCount > 0 || bStrictFail) ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1923,8 +2026,26 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
               Options.mAcceptanceCriteria);
     ApplyMeta("problem_statement", Bundle.mMetadata.mProblemStatement,
               Options.mProblemStatement);
-    ApplyMeta("validation_commands", Bundle.mMetadata.mValidationCommands,
-              Options.mValidationCommands);
+
+    // validation_commands (typed vector) — --validation-clear empties the
+    // existing set, --validation-add appends new entries. Either or both
+    // triggers a change record.
+    if (Options.mbValidationClear || !Options.mValidationAdd.empty())
+    {
+        std::string OldDesc =
+            std::to_string(Bundle.mMetadata.mValidationCommands.size()) +
+            " entries";
+        if (Options.mbValidationClear)
+            Bundle.mMetadata.mValidationCommands.clear();
+        for (const FValidationCommand &C : Options.mValidationAdd)
+            Bundle.mMetadata.mValidationCommands.push_back(C);
+        std::string NewDesc =
+            std::to_string(Bundle.mMetadata.mValidationCommands.size()) +
+            " entries";
+        Changes.push_back({"validation_commands", {OldDesc, NewDesc}});
+        if (Desc.empty())
+            Desc = "Updated validation_commands";
+    }
     ApplyMeta("baseline_audit", Bundle.mMetadata.mBaselineAudit,
               Options.mBaselineAudit);
     ApplyMeta("execution_strategy", Bundle.mMetadata.mExecutionStrategy,
@@ -2068,8 +2189,25 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
     ApplyPhase("readiness_gate", Phase.mDesign.mReadinessGate,
                Options.mReadinessGate);
     ApplyPhase("handoff", Phase.mDesign.mHandoff, Options.mHandoff);
-    ApplyPhase("validation_commands", Phase.mDesign.mValidationCommands,
-               Options.mValidationCommands);
+
+    // validation_commands (typed vector) — see FTopicSetCommand above for
+    // the --validation-clear + --validation-add semantics.
+    if (Options.mbValidationClear || !Options.mValidationAdd.empty())
+    {
+        std::string OldDesc =
+            std::to_string(Phase.mDesign.mValidationCommands.size()) +
+            " entries";
+        if (Options.mbValidationClear)
+            Phase.mDesign.mValidationCommands.clear();
+        for (const FValidationCommand &C : Options.mValidationAdd)
+            Phase.mDesign.mValidationCommands.push_back(C);
+        std::string NewDesc =
+            std::to_string(Phase.mDesign.mValidationCommands.size()) +
+            " entries";
+        Changes.push_back({"validation_commands", {OldDesc, NewDesc}});
+        if (Desc.empty())
+            Desc = "Updated validation_commands";
+    }
     ApplyPhase("dependencies", Phase.mDesign.mDependencies,
                Options.mPhaseDependencies);
 

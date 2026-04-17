@@ -728,10 +728,46 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
                 ConsumeValuedOption(Remaining, Index, "--problem-statement");
             continue;
         }
-        if (Token == "--validation-commands")
+        if (Token == "--validation-clear")
         {
-            Options.mValidationCommands =
-                ConsumeValuedOption(Remaining, Index, "--validation-commands");
+            Options.mbValidationClear = true;
+            continue;
+        }
+        if (Token == "--validation-add")
+        {
+            // Parse "<platform>|<command>|<description>" (pipe-delimited).
+            // Platform field may be empty (→ Any). Command is required.
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--validation-add");
+            FValidationCommand C;
+            const size_t Pipe1 = Raw.find('|');
+            const std::string Plat =
+                Pipe1 == std::string::npos ? "" : Raw.substr(0, Pipe1);
+            if (!PlatformScopeFromString(Plat, C.mPlatform))
+                C.mPlatform = EPlatformScope::Any;
+            if (Pipe1 == std::string::npos)
+            {
+                C.mCommand = Raw;
+            }
+            else
+            {
+                const size_t Pipe2 = Raw.find('|', Pipe1 + 1);
+                if (Pipe2 == std::string::npos)
+                {
+                    C.mCommand = Raw.substr(Pipe1 + 1);
+                }
+                else
+                {
+                    C.mCommand = Raw.substr(Pipe1 + 1, Pipe2 - Pipe1 - 1);
+                    C.mDescription = Raw.substr(Pipe2 + 1);
+                }
+            }
+            if (C.mCommand.empty())
+                throw UsageError(
+                    "--validation-add requires a non-empty <command> "
+                    "segment; format: "
+                    "'<platform>|<command>|<description>'");
+            Options.mValidationAdd.push_back(std::move(C));
             continue;
         }
         if (Token == "--baseline-audit")
@@ -868,10 +904,46 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
                 ConsumeValuedOption(Remaining, Index, "--handoff");
             continue;
         }
-        if (Token == "--validation-commands")
+        if (Token == "--validation-clear")
         {
-            Options.mValidationCommands =
-                ConsumeValuedOption(Remaining, Index, "--validation-commands");
+            Options.mbValidationClear = true;
+            continue;
+        }
+        if (Token == "--validation-add")
+        {
+            // Parse "<platform>|<command>|<description>" (pipe-delimited).
+            // Platform field may be empty (→ Any). Command is required.
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--validation-add");
+            FValidationCommand C;
+            const size_t Pipe1 = Raw.find('|');
+            const std::string Plat =
+                Pipe1 == std::string::npos ? "" : Raw.substr(0, Pipe1);
+            if (!PlatformScopeFromString(Plat, C.mPlatform))
+                C.mPlatform = EPlatformScope::Any;
+            if (Pipe1 == std::string::npos)
+            {
+                C.mCommand = Raw;
+            }
+            else
+            {
+                const size_t Pipe2 = Raw.find('|', Pipe1 + 1);
+                if (Pipe2 == std::string::npos)
+                {
+                    C.mCommand = Raw.substr(Pipe1 + 1);
+                }
+                else
+                {
+                    C.mCommand = Raw.substr(Pipe1 + 1, Pipe2 - Pipe1 - 1);
+                    C.mDescription = Raw.substr(Pipe2 + 1);
+                }
+            }
+            if (C.mCommand.empty())
+                throw UsageError(
+                    "--validation-add requires a non-empty <command> "
+                    "segment; format: "
+                    "'<platform>|<command>|<description>'");
+            Options.mValidationAdd.push_back(std::move(C));
             continue;
         }
         if (Token == "--phase-dependencies")

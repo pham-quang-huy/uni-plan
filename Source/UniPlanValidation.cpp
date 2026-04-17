@@ -103,6 +103,154 @@ static void Fail(std::vector<ValidateCheck> &OutChecks, const std::string &InID,
 }
 
 // ---------------------------------------------------------------------------
+// Content-hygiene helper: regex-scan one prose string and emit a single
+// failure (capturing the matched fragment) when the pattern hits.
+// ---------------------------------------------------------------------------
+
+static void
+ScanProseField(const std::string &InTopic, const std::string &InPath,
+               const std::string &InContent, const std::regex &InPattern,
+               const std::string &InCheckID, EValidationSeverity InSeverity,
+               const std::string &InDetailPrefix,
+               std::vector<ValidateCheck> &OutChecks)
+{
+    if (InContent.empty())
+        return;
+    std::smatch Match;
+    if (std::regex_search(InContent, Match, InPattern))
+    {
+        std::string Hit = Match.str();
+        if (Hit.size() > 60)
+            Hit = Hit.substr(0, 57) + "...";
+        Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
+             InDetailPrefix + Hit);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Content-hygiene helper: scan every topic-level prose field.
+// ---------------------------------------------------------------------------
+
+static void ScanTopicProse(const FTopicBundle &InBundle,
+                           const std::regex &InPattern,
+                           const std::string &InCheckID,
+                           EValidationSeverity InSeverity,
+                           const std::string &InDetailPrefix,
+                           std::vector<ValidateCheck> &OutChecks)
+{
+    const FPlanMetadata &M = InBundle.mMetadata;
+    const std::string &Key = InBundle.mTopicKey;
+    const auto Scan = [&](const std::string &InField, const std::string &InVal)
+    {
+        ScanProseField(Key, InField, InVal, InPattern, InCheckID, InSeverity,
+                       InDetailPrefix, OutChecks);
+    };
+    Scan("summary", M.mSummary);
+    Scan("goals", M.mGoals);
+    Scan("non_goals", M.mNonGoals);
+    Scan("risks", M.mRisks);
+    Scan("acceptance_criteria", M.mAcceptanceCriteria);
+    Scan("problem_statement", M.mProblemStatement);
+    // validation_commands is a typed vector now — scan each element's
+    // command + description prose individually so path references like
+    // `validation_commands[3].command` surface in the issue output.
+    for (size_t I = 0; I < M.mValidationCommands.size(); ++I)
+    {
+        const FValidationCommand &C = M.mValidationCommands[I];
+        const std::string Base =
+            "validation_commands[" + std::to_string(I) + "]";
+        Scan(Base + ".command", C.mCommand);
+        Scan(Base + ".description", C.mDescription);
+    }
+    Scan("baseline_audit", M.mBaselineAudit);
+    Scan("execution_strategy", M.mExecutionStrategy);
+    Scan("locked_decisions", M.mLockedDecisions);
+    Scan("source_references", M.mSourceReferences);
+    Scan("dependencies", M.mDependencies);
+    Scan("next_actions", InBundle.mNextActions);
+}
+
+// ---------------------------------------------------------------------------
+// Content-hygiene helper: scan every per-phase prose field
+// (scope/output + all 9 design material fields + lifecycle prose).
+// ---------------------------------------------------------------------------
+
+static void ScanPhaseProse(
+    const FTopicBundle &InBundle, const std::regex &InPattern,
+    const std::string &InCheckID, EValidationSeverity InSeverity,
+    const std::string &InDetailPrefix, std::vector<ValidateCheck> &OutChecks,
+    const bool InIncludeLifecycle = true, const bool InIncludeChildren = true)
+{
+    const std::string &Key = InBundle.mTopicKey;
+    for (size_t PI = 0; PI < InBundle.mPhases.size(); ++PI)
+    {
+        const FPhaseRecord &P = InBundle.mPhases[PI];
+        const std::string Base = "phases[" + std::to_string(PI) + "]";
+        const auto Scan =
+            [&](const std::string &InSuffix, const std::string &InVal)
+        {
+            ScanProseField(Key, Base + "." + InSuffix, InVal, InPattern,
+                           InCheckID, InSeverity, InDetailPrefix, OutChecks);
+        };
+        Scan("scope", P.mScope);
+        Scan("output", P.mOutput);
+        Scan("investigation", P.mDesign.mInvestigation);
+        Scan("code_snippets", P.mDesign.mCodeSnippets);
+        Scan("dependencies", P.mDesign.mDependencies);
+        Scan("readiness_gate", P.mDesign.mReadinessGate);
+        Scan("handoff", P.mDesign.mHandoff);
+        Scan("code_entity_contract", P.mDesign.mCodeEntityContract);
+        Scan("best_practices", P.mDesign.mBestPractices);
+        for (size_t CI = 0; CI < P.mDesign.mValidationCommands.size(); ++CI)
+        {
+            const FValidationCommand &C = P.mDesign.mValidationCommands[CI];
+            const std::string VCBase =
+                "validation_commands[" + std::to_string(CI) + "]";
+            Scan(VCBase + ".command", C.mCommand);
+            Scan(VCBase + ".description", C.mDescription);
+        }
+        Scan("multi_platforming", P.mDesign.mMultiPlatforming);
+        if (InIncludeLifecycle)
+        {
+            Scan("done", P.mLifecycle.mDone);
+            Scan("remaining", P.mLifecycle.mRemaining);
+            Scan("blockers", P.mLifecycle.mBlockers);
+            Scan("agent_context", P.mLifecycle.mAgentContext);
+        }
+        if (InIncludeChildren)
+        {
+            for (size_t LI = 0; LI < P.mLanes.size(); ++LI)
+            {
+                const FLaneRecord &L = P.mLanes[LI];
+                const std::string LBase =
+                    Base + ".lanes[" + std::to_string(LI) + "]";
+                ScanProseField(Key, LBase + ".scope", L.mScope, InPattern,
+                               InCheckID, InSeverity, InDetailPrefix,
+                               OutChecks);
+                ScanProseField(Key, LBase + ".exit_criteria", L.mExitCriteria,
+                               InPattern, InCheckID, InSeverity, InDetailPrefix,
+                               OutChecks);
+            }
+            for (size_t JI = 0; JI < P.mJobs.size(); ++JI)
+            {
+                const FJobRecord &J = P.mJobs[JI];
+                const std::string JBase =
+                    Base + ".jobs[" + std::to_string(JI) + "]";
+                ScanProseField(Key, JBase + ".scope", J.mScope, InPattern,
+                               InCheckID, InSeverity, InDetailPrefix,
+                               OutChecks);
+                ScanProseField(Key, JBase + ".output", J.mOutput, InPattern,
+                               InCheckID, InSeverity, InDetailPrefix,
+                               OutChecks);
+                ScanProseField(Key, JBase + ".exit_criteria", J.mExitCriteria,
+                               InPattern, InCheckID, InSeverity, InDetailPrefix,
+                               OutChecks);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // V4 Bundle Validation — evaluators
 // ---------------------------------------------------------------------------
 
@@ -599,6 +747,619 @@ static void EvalCanonicalEntityRef(const std::vector<FTopicBundle> &InBundles,
 }
 
 // ---------------------------------------------------------------------------
+// V4 Bundle Validation — content-hygiene evaluators
+//
+// These 13 evaluators inspect the *content* of prose string fields (not just
+// structural integrity). Each uses the ScanProseField / ScanTopicProse /
+// ScanPhaseProse helpers above to emit one issue per offending field.
+// ---------------------------------------------------------------------------
+
+// 19. legacy_cli_free (Warning) — V3 `doc` CLI references.
+static void EvalLegacyCliFree(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern(
+        R"(\bdoc\.exe\b|\bdoc\s+(?:lint|phase|artifacts)\b|FIE_Doc[\\/]doc\b)",
+        std::regex_constants::icase);
+    for (const FTopicBundle &B : InBundles)
+    {
+        // Scan every topic, regardless of completion status — governance
+        // prose carrying V3 CLI references misleads agents who read the
+        // bundle, even if the phase that recorded the reference is closed.
+        // (Historical accuracy of audit trails is preserved by keeping
+        // the backtick quoting, not by skipping the check.)
+        ScanTopicProse(B, Pattern, "legacy_cli_free",
+                       EValidationSeverity::Warning,
+                       "legacy CLI reference: ", OutChecks);
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            const std::string Base = "phases[" + std::to_string(PI) + "]";
+            const auto Scan =
+                [&](const std::string &InField, const std::string &InVal)
+            {
+                ScanProseField(B.mTopicKey, Base + "." + InField, InVal,
+                               Pattern, "legacy_cli_free",
+                               EValidationSeverity::Warning,
+                               "legacy CLI reference: ", OutChecks);
+            };
+            Scan("scope", P.mScope);
+            Scan("output", P.mOutput);
+            Scan("investigation", P.mDesign.mInvestigation);
+            Scan("dependencies", P.mDesign.mDependencies);
+            Scan("readiness_gate", P.mDesign.mReadinessGate);
+            Scan("handoff", P.mDesign.mHandoff);
+            Scan("best_practices", P.mDesign.mBestPractices);
+            Scan("code_entity_contract", P.mDesign.mCodeEntityContract);
+            for (size_t CI = 0; CI < P.mDesign.mValidationCommands.size(); ++CI)
+            {
+                const FValidationCommand &C = P.mDesign.mValidationCommands[CI];
+                const std::string VCBase =
+                    "validation_commands[" + std::to_string(CI) + "]";
+                Scan(VCBase + ".command", C.mCommand);
+                Scan(VCBase + ".description", C.mDescription);
+            }
+            Scan("done", P.mLifecycle.mDone);
+            Scan("remaining", P.mLifecycle.mRemaining);
+            Scan("blockers", P.mLifecycle.mBlockers);
+        }
+    }
+}
+
+// 20. v3_terminology_free (Warning) — V3 plan/impl/playbook vocabulary,
+// including plain equivalent phrases that don't use the original slash
+// syntax (e.g., "implementation tracker", "tracker contract", "paired
+// plan"). All forms presuppose the retired V3 plan-triad model.
+static void EvalV3TerminologyFree(const std::vector<FTopicBundle> &InBundles,
+                                  std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern(
+        R"((?:playbook and detached sidecars|Sidecar evidence channels|)"
+        R"(plan/implementation/playbook|\.(?:Impl|Playbook)\.md|)"
+        R"(canonical pairing|Active-phase playbook|phase-scoped playbook|)"
+        R"(implementation tracker|tracker contract|Tracker contract|)"
+        R"(Plan contract|plan\s*\+\s*implementation tracker|)"
+        R"(Paired plan/tracker|Paired plan\+tracker|paired plan/tracker|)"
+        R"([Pp]aired\s+plan\b|)"
+        R"(playbook pairing|playbook discoverab\w+|sidecar discoverab\w+|)"
+        R"(plan/playbook/tracker|plan/tracker/playbook|)"
+        R"(plan/implementation pairing|pairing semantics|)"
+        R"(Docs/Implementation/[\w.-]+\.Plan\.json|)"
+        R"(Docs/Playbooks/[\w.-]+\.Plan\.json|)"
+        R"(Docs/Playbooks/`[\w.-]+|)"
+        R"(Docs/Implementation/`[\w.-]+|)"
+        R"(plan/playbook/implementation triad|plan/tracker/playbook triad))",
+        std::regex_constants::icase);
+    for (const FTopicBundle &B : InBundles)
+    {
+        ScanTopicProse(B, Pattern, "v3_terminology_free",
+                       EValidationSeverity::Warning,
+                       "V3 terminology: ", OutChecks);
+        ScanPhaseProse(B, Pattern, "v3_terminology_free",
+                       EValidationSeverity::Warning,
+                       "V3 terminology: ", OutChecks);
+    }
+}
+
+// 21. canonical_phase_ref_prose (Warning) — legacy P<N>/MP-<N> aliases
+// in governance prose where canonical `phases[N]` is required.
+//
+// Catches three forms:
+//   (a) Specific legacy references: `phase key (`P5`)`, `P6 → P7`,
+//       `MP-19a/b/c`.
+//   (b) Standalone `P<N>` in prescriptive fields — the common live form.
+//       Skips lines that declare themselves historical ("Plan.md task P",
+//       "original P1-P4", "legacy P", "historical P") and lines that
+//       contain statistical percentiles (P50/P95/P99).
+//   (c) Bare-text variants (`Px → Py`, `Px -> Py`, `PX phase`).
+//
+// Scope limited to prescriptive fields (not historical narrative fields
+// like execution_strategy, changelog.change, verification.result).
+static void
+EvalCanonicalPhaseRefProse(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex SpecificPattern(
+        R"(phase key \(`?P\d+`?\)|`?P\d+`?\s*(?:->|\xE2\x86\x92)\s*`?P\d+`?|\bMP-\d+[abc]\b)");
+    // Standalone P<N>, covering both bare `P5` and backtick-quoted `` `P5` ``
+    // forms. Backtick is INCLUDED as a valid token boundary — `` `P5` `` is
+    // the most common live phase-alias form. Excluded boundaries: word
+    // characters (avoids matching inside `phases5`), `[` (avoids matching
+    // the P in `phases[5]`), and `/` / `:` (avoids path segments).
+    // N is capped at 3 digits to skip C++ proposal numbers (`P2996`),
+    // feature-tag IDs, and other 4+ digit P-codes that are not phases.
+    static const std::regex StandalonePattern(
+        R"((?:^|[^\w\[])(P\d{1,3})(?:[^\]\w/:]|$))");
+    static const std::regex HistoricalMarker(
+        R"(Plan\.md task P|legacy Plan\.md|historical Plan\.md|original P\d|\(legacy P|legacy P\d+ playbook|historical P\d+|- P\d+ [A-Z])");
+    static const std::regex PercentileMarker(R"(\bP(?:50|95|99|99\.9)\b)");
+
+    const auto ScanPrescriptive = [&](const std::string &InTopic,
+                                      const std::string &InPath,
+                                      const std::string &InContent)
+    {
+        if (InContent.empty())
+            return;
+        // Pass 1 — specific forms (always fire).
+        std::smatch Match;
+        if (std::regex_search(InContent, Match, SpecificPattern))
+        {
+            Fail(OutChecks, "canonical_phase_ref_prose",
+                 EValidationSeverity::Warning, InTopic, InPath,
+                 "legacy phase alias: " + Match.str());
+            return;
+        }
+        // Pass 2 — standalone P<N> line-by-line with historical filter.
+        std::string Line;
+        for (size_t I = 0; I <= InContent.size(); ++I)
+        {
+            const char C = (I < InContent.size()) ? InContent[I] : '\n';
+            if (C != '\n')
+            {
+                Line += C;
+                continue;
+            }
+            if (!Line.empty())
+            {
+                const bool bHistorical =
+                    std::regex_search(Line, HistoricalMarker);
+                const bool bPercentile =
+                    std::regex_search(Line, PercentileMarker);
+                if (!bHistorical && !bPercentile &&
+                    std::regex_search(Line, Match, StandalonePattern))
+                {
+                    Fail(OutChecks, "canonical_phase_ref_prose",
+                         EValidationSeverity::Warning, InTopic, InPath,
+                         "legacy phase alias: " + Match[1].str());
+                    Line.clear();
+                    return;
+                }
+            }
+            Line.clear();
+        }
+    };
+
+    for (const FTopicBundle &B : InBundles)
+    {
+        // Topic-level prescriptive fields.
+        ScanPrescriptive(B.mTopicKey, "dependencies",
+                         B.mMetadata.mDependencies);
+        ScanPrescriptive(B.mTopicKey, "next_actions", B.mNextActions);
+        ScanPrescriptive(B.mTopicKey, "acceptance_criteria",
+                         B.mMetadata.mAcceptanceCriteria);
+        // Per-phase prescriptive fields.
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            const std::string Base = "phases[" + std::to_string(PI) + "]";
+            ScanPrescriptive(B.mTopicKey, Base + ".readiness_gate",
+                             P.mDesign.mReadinessGate);
+            ScanPrescriptive(B.mTopicKey, Base + ".handoff",
+                             P.mDesign.mHandoff);
+            ScanPrescriptive(B.mTopicKey, Base + ".dependencies",
+                             P.mDesign.mDependencies);
+            ScanPrescriptive(B.mTopicKey, Base + ".best_practices",
+                             P.mDesign.mBestPractices);
+            ScanPrescriptive(B.mTopicKey, Base + ".code_entity_contract",
+                             P.mDesign.mCodeEntityContract);
+            ScanPrescriptive(B.mTopicKey, Base + ".output", P.mOutput);
+            ScanPrescriptive(B.mTopicKey, Base + ".done", P.mLifecycle.mDone);
+            ScanPrescriptive(B.mTopicKey, Base + ".remaining",
+                             P.mLifecycle.mRemaining);
+            ScanPrescriptive(B.mTopicKey, Base + ".blockers",
+                             P.mLifecycle.mBlockers);
+            for (size_t LI = 0; LI < P.mLanes.size(); ++LI)
+            {
+                ScanPrescriptive(B.mTopicKey,
+                                 Base + ".lanes[" + std::to_string(LI) +
+                                     "].exit_criteria",
+                                 P.mLanes[LI].mExitCriteria);
+            }
+            for (size_t JI = 0; JI < P.mJobs.size(); ++JI)
+            {
+                ScanPrescriptive(B.mTopicKey,
+                                 Base + ".jobs[" + std::to_string(JI) +
+                                     "].exit_criteria",
+                                 P.mJobs[JI].mExitCriteria);
+            }
+        }
+    }
+}
+
+// validation_command_fields (ErrorMinor) — structural check that each
+// FValidationCommand record has a non-empty mCommand. mDescription is
+// advisory (Warning if empty) since a description aids humans but is not
+// strictly required.
+//
+// Replaces the deleted `shell_syntax_sane` workaround. That workaround
+// existed only to detect self-inflicted `\\ → /` corruption in the
+// string-form field; the typed vector makes that class of corruption
+// structurally impossible (mCommand is opaque to any bulk regex).
+static void
+EvalValidationCommandFields(const std::vector<FTopicBundle> &InBundles,
+                            std::vector<ValidateCheck> &OutChecks)
+{
+    const auto Scan = [&](const std::string &InTopic,
+                          const std::string &InPathBase,
+                          const std::vector<FValidationCommand> &InCommands)
+    {
+        for (size_t I = 0; I < InCommands.size(); ++I)
+        {
+            const FValidationCommand &C = InCommands[I];
+            const std::string Base = InPathBase + "[" + std::to_string(I) + "]";
+            if (C.mCommand.empty())
+                Fail(OutChecks, "validation_command_fields",
+                     EValidationSeverity::ErrorMinor, InTopic,
+                     Base + ".command", "empty command");
+            if (C.mDescription.empty())
+                Fail(OutChecks, "validation_command_fields",
+                     EValidationSeverity::Warning, InTopic,
+                     Base + ".description", "empty description");
+        }
+    };
+    for (const FTopicBundle &B : InBundles)
+    {
+        Scan(B.mTopicKey, "validation_commands",
+             B.mMetadata.mValidationCommands);
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            Scan(B.mTopicKey,
+                 "phases[" + std::to_string(PI) + "].validation_commands",
+                 B.mPhases[PI].mDesign.mValidationCommands);
+        }
+    }
+}
+
+// 33. path_resolves (ErrorMinor) — flags path references in prose that
+// cannot possibly resolve. The most common residual case: V4 bundles
+// live at `Docs/Plans/<Topic>.Plan.json`, but corrupted rewrites kept
+// the old `Docs/Implementation/` or `Docs/Playbooks/` prefix with a
+// `.Plan.json` suffix — pointing at files that do not exist.
+static void EvalPathResolves(const std::vector<FTopicBundle> &InBundles,
+                             std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex BadPath(
+        R"(Docs/(?:Implementation|Playbooks)/`?[\w.-]+\.Plan\.json)");
+
+    const auto Scan = [&](const std::string &InTopic, const std::string &InPath,
+                          const std::string &InContent)
+    {
+        if (InContent.empty())
+            return;
+        std::smatch Match;
+        if (std::regex_search(InContent, Match, BadPath))
+        {
+            Fail(OutChecks, "path_resolves", EValidationSeverity::ErrorMinor,
+                 InTopic, InPath,
+                 "impossible path ref (.Plan.json lives at Docs/Plans/, "
+                 "not Docs/Implementation|Playbooks/): " +
+                     Match.str());
+        }
+    };
+
+    for (const FTopicBundle &B : InBundles)
+    {
+        const FPlanMetadata &M = B.mMetadata;
+        Scan(B.mTopicKey, "dependencies", M.mDependencies);
+        Scan(B.mTopicKey, "source_references", M.mSourceReferences);
+        Scan(B.mTopicKey, "execution_strategy", M.mExecutionStrategy);
+        Scan(B.mTopicKey, "locked_decisions", M.mLockedDecisions);
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            const std::string Base = "phases[" + std::to_string(PI) + "]";
+            Scan(B.mTopicKey, Base + ".dependencies", P.mDesign.mDependencies);
+            Scan(B.mTopicKey, Base + ".investigation",
+                 P.mDesign.mInvestigation);
+            Scan(B.mTopicKey, Base + ".readiness_gate",
+                 P.mDesign.mReadinessGate);
+            Scan(B.mTopicKey, Base + ".handoff", P.mDesign.mHandoff);
+            Scan(B.mTopicKey, Base + ".code_entity_contract",
+                 P.mDesign.mCodeEntityContract);
+        }
+    }
+}
+
+// 22. no_dev_absolute_path (ErrorMinor) — dev-machine absolute paths leak
+// PII and break for other agents.
+static void EvalNoDevAbsolutePath(const std::vector<FTopicBundle> &InBundles,
+                                  std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern(
+        R"(/Users/[a-z][\w.-]*/|/home/[a-z][\w.-]*/|[A-Z]:\\Users\\[\w.-]+)");
+    for (const FTopicBundle &B : InBundles)
+    {
+        ScanTopicProse(B, Pattern, "no_dev_absolute_path",
+                       EValidationSeverity::ErrorMinor,
+                       "dev-machine absolute path: ", OutChecks);
+        ScanPhaseProse(B, Pattern, "no_dev_absolute_path",
+                       EValidationSeverity::ErrorMinor,
+                       "dev-machine absolute path: ", OutChecks);
+    }
+}
+
+// 23. no_hardcoded_endpoint (Warning) — localhost/LAN IPs steer agents to
+// developer-local network state that won't exist in CI.
+static void EvalNoHardcodedEndpoint(const std::vector<FTopicBundle> &InBundles,
+                                    std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern(
+        R"(\blocalhost:\d+\b|\b127\.0\.0\.1\b|\b192\.168\.\d+\.\d+\b|\b10\.\d+\.\d+\.\d+\b)");
+    for (const FTopicBundle &B : InBundles)
+    {
+        // Topic-level only — changelogs may legitimately record historical
+        // endpoint state; governance prose must not.
+        ScanTopicProse(B, Pattern, "no_hardcoded_endpoint",
+                       EValidationSeverity::Warning,
+                       "hardcoded endpoint: ", OutChecks);
+        // Per-phase: design material (forward-looking) only — lifecycle prose
+        // may contain historical run output.
+        ScanPhaseProse(B, Pattern, "no_hardcoded_endpoint",
+                       EValidationSeverity::Warning,
+                       "hardcoded endpoint: ", OutChecks,
+                       /*InIncludeLifecycle=*/false,
+                       /*InIncludeChildren=*/false);
+    }
+}
+
+// validation_command_platform_consistency (Warning) — structural check:
+// a FValidationCommand whose mCommand text contains Windows-specific
+// backslash path segments (`\Windows-x64\`, `\Debug\`, `\Tools\`) must
+// have mPlatform == Windows. A non-Windows (or Any) platform paired with
+// a Windows-only command is a mis-tagged record.
+//
+// Replaces the deleted `platform_path_sep_free` workaround, which
+// line-sniffed for `Windows |` prefixes in the old string form. The
+// typed record makes this check structural: mPlatform is the source of
+// truth, not a prose prefix.
+static void EvalValidationCommandPlatformConsistency(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex WindowsPath(
+        R"([A-Za-z]+\\(?:Windows-x64|Debug|Release|Tools|FIE_Doc)\\)");
+
+    const auto Scan = [&](const std::string &InTopic,
+                          const std::string &InPathBase,
+                          const std::vector<FValidationCommand> &InCommands)
+    {
+        for (size_t I = 0; I < InCommands.size(); ++I)
+        {
+            const FValidationCommand &C = InCommands[I];
+            if (C.mPlatform == EPlatformScope::Windows)
+                continue; // explicitly Windows — backslash paths OK
+            std::smatch Match;
+            if (std::regex_search(C.mCommand, Match, WindowsPath))
+            {
+                Fail(OutChecks, "validation_command_platform_consistency",
+                     EValidationSeverity::Warning, InTopic,
+                     InPathBase + "[" + std::to_string(I) + "]",
+                     "Windows path `" + Match.str() +
+                         "` in non-Windows command; set platform=windows");
+            }
+        }
+    };
+
+    for (const FTopicBundle &B : InBundles)
+    {
+        Scan(B.mTopicKey, "validation_commands",
+             B.mMetadata.mValidationCommands);
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            Scan(B.mTopicKey,
+                 "phases[" + std::to_string(PI) + "].validation_commands",
+                 B.mPhases[PI].mDesign.mValidationCommands);
+        }
+    }
+}
+
+// 25. no_smart_quotes (Warning) — Unicode curly quotes/dashes break shell
+// commands copy-pasted from bundle content.
+static void EvalNoSmartQuotes(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern("\xE2\x80\x98|\xE2\x80\x99|\xE2\x80\x9C|"
+                                    "\xE2\x80\x9D|\xE2\x80\x93|\xE2\x80\x94");
+    for (const FTopicBundle &B : InBundles)
+    {
+        ScanTopicProse(B, Pattern, "no_smart_quotes",
+                       EValidationSeverity::Warning,
+                       "unicode smart char: ", OutChecks);
+        ScanPhaseProse(B, Pattern, "no_smart_quotes",
+                       EValidationSeverity::Warning,
+                       "unicode smart char: ", OutChecks);
+    }
+}
+
+// 26. no_html_in_prose (Warning) — HTML tags break markdown rendering in
+// watch mode.
+static void EvalNoHtmlInProse(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern(R"(<(?:br|div|span|p|h[1-6])\b)",
+                                    std::regex_constants::icase);
+    for (const FTopicBundle &B : InBundles)
+    {
+        ScanTopicProse(B, Pattern, "no_html_in_prose",
+                       EValidationSeverity::Warning,
+                       "HTML tag in prose: ", OutChecks);
+        ScanPhaseProse(B, Pattern, "no_html_in_prose",
+                       EValidationSeverity::Warning,
+                       "HTML tag in prose: ", OutChecks);
+    }
+}
+
+// 27. no_empty_placeholder_literal (Warning) — literal "None"/"N/A"/"TBD"/"-"
+// should be empty string.
+static void
+EvalNoEmptyPlaceholderLiteral(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern(
+        R"(^\s*(?:None|N/A|n/a|none|TBD|tbd|-)\s*$)");
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            const std::string Base = "phases[" + std::to_string(PI) + "]";
+            const auto Scan =
+                [&](const std::string &InField, const std::string &InVal)
+            {
+                ScanProseField(B.mTopicKey, Base + "." + InField, InVal,
+                               Pattern, "no_empty_placeholder_literal",
+                               EValidationSeverity::Warning,
+                               "placeholder literal: ", OutChecks);
+            };
+            Scan("blockers", P.mLifecycle.mBlockers);
+            Scan("remaining", P.mLifecycle.mRemaining);
+            Scan("done", P.mLifecycle.mDone);
+            Scan("dependencies", P.mDesign.mDependencies);
+        }
+    }
+}
+
+// 28. no_unresolved_marker (Warning) — TODO/FIXME/TBD/unresolved markers
+// in governance prose or completed-phase fields signal fidelity drift.
+static void EvalNoUnresolvedMarker(const std::vector<FTopicBundle> &InBundles,
+                                   std::vector<ValidateCheck> &OutChecks)
+{
+    // Match only bare TODO-style markers, not prose like "todo list".
+    static const std::regex Pattern(
+        R"(\bTODO\b|\bFIXME\b|\bXXX\b|\bHACK\b|\?\?\?)");
+    for (const FTopicBundle &B : InBundles)
+    {
+        ScanTopicProse(B, Pattern, "no_unresolved_marker",
+                       EValidationSeverity::Warning,
+                       "unresolved marker: ", OutChecks);
+        // Per-phase: only scan phases that claim to be completed.
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            if (P.mLifecycle.mStatus != EExecutionStatus::Completed)
+                continue;
+            const std::string Base = "phases[" + std::to_string(PI) + "]";
+            const auto Scan =
+                [&](const std::string &InField, const std::string &InVal)
+            {
+                ScanProseField(
+                    B.mTopicKey, Base + "." + InField, InVal, Pattern,
+                    "no_unresolved_marker", EValidationSeverity::Warning,
+                    "unresolved marker in completed phase: ", OutChecks);
+            };
+            Scan("scope", P.mScope);
+            Scan("output", P.mOutput);
+            Scan("done", P.mLifecycle.mDone);
+            Scan("remaining", P.mLifecycle.mRemaining);
+            Scan("blockers", P.mLifecycle.mBlockers);
+        }
+    }
+}
+
+// 29. topic_ref_integrity (ErrorMinor) — `<X>.Plan.json` prose references
+// must resolve to a real topic key in the loaded bundle set.
+static void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
+                                  std::vector<ValidateCheck> &OutChecks)
+{
+    std::set<std::string> KnownKeys;
+    for (const FTopicBundle &B : InBundles)
+        KnownKeys.insert(B.mTopicKey);
+
+    static const std::regex Pattern(R"(([A-Z][A-Za-z0-9]+)\.Plan\.json)");
+
+    const auto Walk = [&](const std::string &InTopic, const std::string &InPath,
+                          const std::string &InContent)
+    {
+        if (InContent.empty())
+            return;
+        auto Begin =
+            std::sregex_iterator(InContent.begin(), InContent.end(), Pattern);
+        const auto End = std::sregex_iterator();
+        std::set<std::string> Reported;
+        for (auto It = Begin; It != End; ++It)
+        {
+            const std::string Ref = (*It)[1].str();
+            if (Ref == InTopic)
+                continue; // self-reference ok
+            if (KnownKeys.count(Ref) > 0)
+                continue;
+            if (!Reported.insert(Ref).second)
+                continue;
+            Fail(OutChecks, "topic_ref_integrity",
+                 EValidationSeverity::ErrorMinor, InTopic, InPath,
+                 "unknown topic reference: '" + Ref + ".Plan.json'");
+        }
+    };
+
+    for (const FTopicBundle &B : InBundles)
+    {
+        const FPlanMetadata &M = B.mMetadata;
+        Walk(B.mTopicKey, "summary", M.mSummary);
+        Walk(B.mTopicKey, "dependencies", M.mDependencies);
+        Walk(B.mTopicKey, "source_references", M.mSourceReferences);
+        Walk(B.mTopicKey, "execution_strategy", M.mExecutionStrategy);
+        Walk(B.mTopicKey, "locked_decisions", M.mLockedDecisions);
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            const std::string Base = "phases[" + std::to_string(PI) + "]";
+            Walk(B.mTopicKey, Base + ".dependencies", P.mDesign.mDependencies);
+            Walk(B.mTopicKey, Base + ".scope", P.mScope);
+            Walk(B.mTopicKey, Base + ".output", P.mOutput);
+        }
+    }
+}
+
+// 30. stale_plan_md_reference (Warning) — `.Plan.md` references are V3
+// filename residue; V4 uses `.Plan.json`.
+static void EvalStalePlanMdReference(const std::vector<FTopicBundle> &InBundles,
+                                     std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::regex Pattern(R"(\b[A-Z][A-Za-z0-9]+\.Plan\.md\b)");
+    for (const FTopicBundle &B : InBundles)
+    {
+        ScanTopicProse(B, Pattern, "stale_plan_md_reference",
+                       EValidationSeverity::Warning,
+                       "stale .Plan.md ref: ", OutChecks);
+        ScanPhaseProse(B, Pattern, "stale_plan_md_reference",
+                       EValidationSeverity::Warning,
+                       "stale .Plan.md ref: ", OutChecks);
+    }
+}
+
+// 31. no_duplicate_changelog (Warning) — same (phase, change text) pair
+// recorded more than once distorts the audit timeline.
+static void EvalNoDuplicateChangelog(const std::vector<FTopicBundle> &InBundles,
+                                     std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        std::map<std::pair<int, std::string>, size_t> FirstSeen;
+        for (size_t I = 0; I < B.mChangeLogs.size(); ++I)
+        {
+            const FChangeLogEntry &C = B.mChangeLogs[I];
+            if (C.mChange.empty())
+                continue;
+            const auto Key = std::make_pair(C.mPhase, C.mChange);
+            auto Found = FirstSeen.find(Key);
+            if (Found == FirstSeen.end())
+            {
+                FirstSeen.emplace(Key, I);
+                continue;
+            }
+            std::string Preview = C.mChange;
+            if (Preview.size() > 60)
+                Preview = Preview.substr(0, 57) + "...";
+            Fail(OutChecks, "no_duplicate_changelog",
+                 EValidationSeverity::Warning, B.mTopicKey,
+                 "changelogs[" + std::to_string(I) + "].change",
+                 "duplicate of changelogs[" + std::to_string(Found->second) +
+                     "]: '" + Preview + "'");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // V4 Bundle Validation — orchestrator
 // ---------------------------------------------------------------------------
 
@@ -631,6 +1392,26 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     EvalPhaseTracking(InBundles, Checks);
     EvalTestingActorCoverage(InBundles, Checks);
     EvalCanonicalEntityRef(InBundles, Checks);
+
+    // Content-hygiene (ErrorMinor + Warning)
+    EvalNoDevAbsolutePath(InBundles, Checks);
+    EvalTopicRefIntegrity(InBundles, Checks);
+    EvalLegacyCliFree(InBundles, Checks);
+    EvalV3TerminologyFree(InBundles, Checks);
+    EvalCanonicalPhaseRefProse(InBundles, Checks);
+    EvalNoHardcodedEndpoint(InBundles, Checks);
+    // Structural checks on typed FValidationCommand records (Phase A).
+    // Replace the former string-scanning workarounds
+    // (`platform_path_sep_free`, `shell_syntax_sane`).
+    EvalValidationCommandFields(InBundles, Checks);
+    EvalValidationCommandPlatformConsistency(InBundles, Checks);
+    EvalNoSmartQuotes(InBundles, Checks);
+    EvalNoHtmlInProse(InBundles, Checks);
+    EvalNoEmptyPlaceholderLiteral(InBundles, Checks);
+    EvalNoUnresolvedMarker(InBundles, Checks);
+    EvalStalePlanMdReference(InBundles, Checks);
+    EvalNoDuplicateChangelog(InBundles, Checks);
+    EvalPathResolves(InBundles, Checks);
 
     return Checks;
 }

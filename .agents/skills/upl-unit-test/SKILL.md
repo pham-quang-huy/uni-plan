@@ -10,17 +10,17 @@ Build and run the uni-plan test suite, add new tests, or debug failures.
 
 ## Mandatory: Coverage Audit After Every Run
 
-After building and running tests, you MUST spawn a coverage audit agent. This is not optional.
+After building and running tests, you MUST perform a coverage audit. Use the coverage audit agent when the current runtime explicitly allows subagents; otherwise perform the audit manually from `Source/UniPlanForwardDecls.h` and the `Test/UniPlanTest*.cpp` inventory before reporting results.
 
 ```
 Agent({
   description: "Audit test coverage",
   subagent_type: "Explore",
-  prompt: "Read .Codex/agents/upl-agent-senior-tester.md for your full instructions. Then execute the audit workflow: (1) Read Source/UniPlanForwardDecls.h to build the complete Run*Command inventory. (2) Read all Test/UniPlanTest*.cpp files to build the test inventory. (3) Produce a coverage matrix with columns: Command, Type, Happy, Negative, Bundle, Changelog, Gate Msg — marking Y or N for each. (4) Flag any N as a gap with the test file and test name that should be added."
+  prompt: "Read .claude/agents/upl-agent-senior-tester.md for your full instructions. Then execute the audit workflow: (1) Read Source/UniPlanForwardDecls.h to build the complete Run*Command inventory. (2) Read all Test/UniPlanTest*.cpp files to build the test inventory. (3) Produce a coverage matrix with columns: Command, Type, Happy, Negative, Bundle, Changelog, Gate Msg — marking Y or N for each. (4) Flag any N as a gap with the test file and test name that should be added."
 })
 ```
 
-Do NOT report test results to the user until the agent has completed and you have reviewed its coverage matrix. If the matrix shows gaps, fix them before reporting.
+Do NOT report test results to the user until the coverage audit is complete and you have reviewed its matrix. If the matrix shows gaps, fix them before reporting.
 
 ## Quick Run
 
@@ -50,6 +50,7 @@ cd Build/CMake && ctest --output-on-failure
 | **Semantic lifecycle** | `Test/UniPlanTestSemantic.cpp` | Minimal fixtures via CreateMinimalFixture |
 | **Evidence shortcuts** | `Test/UniPlanTestEvidence.cpp` | SampleTopic fixture |
 | **Entity coverage** | `Test/UniPlanTestEntity.cpp` | SampleTopic fixture |
+| **Content-hygiene validation** | `Test/UniPlanTestValidationContent.cpp` | Minimal fixtures, regex-pattern injection, 13 content-hygiene checks + `--strict` gate |
 
 ## Coverage Requirements (MANDATORY)
 

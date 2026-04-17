@@ -24,8 +24,9 @@ uni-plan phase list --topic <topic> --human
 # Specific phase detail (jobs, lanes, design material)
 uni-plan phase get --topic <topic> --phase <N> --human
 
-# V4 bundle validation (18 evaluators, 3 severity levels)
+# V4 bundle validation (28 evaluators across structural + content-hygiene tiers)
 uni-plan validate --topic <topic> --human
+uni-plan validate --topic <topic> --strict --human   # gate on Warning + ErrorMinor too
 
 # Blockers across all topics
 uni-plan blockers --human
@@ -44,7 +45,8 @@ Flag violations when a phase advances to `in_progress` without satisfying these:
 | Design material | Phase has populated investigation, code entity contract, and testing fields |
 | Content depth | Phase design material has substantive content, not empty strings |
 | Testing fields | Testable active phases have testing records with actor and step fields, including both manual and automation-capable coverage (`human` + `ai`/`automated`) |
-| Validation clean | `uni-plan validate --topic <topic>` reports no ErrorMajor issues |
+| Validation clean | `uni-plan validate --topic <topic>` reports no ErrorMajor issues; under `--strict`, no Warning or ErrorMinor issues either |
+| Content hygiene | No V3 terminology drift (`v3_terminology_free`), no legacy `doc` CLI refs (`legacy_cli_free`), no smart quotes (`no_smart_quotes`), no placeholder literals like `"None"`/`"TBD"` (`no_empty_placeholder_literal`), no duplicate changelogs (`no_duplicate_changelog`), no stale `.Plan.md` refs (`stale_plan_md_reference`), no broken topic refs (`topic_ref_integrity`) |
 
 ### 3. Report Findings
 

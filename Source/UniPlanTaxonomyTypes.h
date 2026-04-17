@@ -69,6 +69,20 @@ struct FFileManifestItem
 };
 
 // ---------------------------------------------------------------------------
+// FValidationCommand — one row in a bundle's validation_commands table.
+// Replaces the former `std::string mValidationCommands` markdown-table
+// field with a typed record so the validator can enforce shape (platform
+// scope, non-empty command, description) without regex-scanning prose.
+// ---------------------------------------------------------------------------
+
+struct FValidationCommand
+{
+    EPlatformScope mPlatform = EPlatformScope::Any;
+    std::string mCommand;     // shell command string (opaque to transforms)
+    std::string mDescription; // success criterion / purpose
+};
+
+// ---------------------------------------------------------------------------
 // FPhaseTaxonomy — display-oriented taxonomy for watch mode panels.
 // Tasks are flat here for display convenience (flattened from
 // nested FJobRecord.mTasks).

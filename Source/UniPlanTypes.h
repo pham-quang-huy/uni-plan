@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UniPlanEnums.h"
+#include "UniPlanTaxonomyTypes.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -18,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "1.0.0";
+static constexpr const char *kCliVersion = "0.53.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -386,7 +387,12 @@ struct FTopicSetOptions : BaseOptions
     std::string mRisks;
     std::string mAcceptanceCriteria;
     std::string mProblemStatement;
-    std::string mValidationCommands;
+    // Typed validation_commands mutation (structured, replaces the former
+    // string form). --validation-clear wipes the existing vector before
+    // --validation-add entries are appended. This lets agents build the
+    // set in one call or incrementally across calls.
+    bool mbValidationClear = false;
+    std::vector<FValidationCommand> mValidationAdd;
     std::string mBaselineAudit;
     std::string mExecutionStrategy;
     std::string mLockedDecisions;
@@ -414,7 +420,9 @@ struct FPhaseSetOptions : BaseOptions
     std::string mMultiPlatforming;
     std::string mReadinessGate;
     std::string mHandoff;
-    std::string mValidationCommands;
+    // Typed validation_commands mutation (see FTopicSetOptions above).
+    bool mbValidationClear = false;
+    std::vector<FValidationCommand> mValidationAdd;
     std::string mPhaseDependencies;
 };
 
@@ -781,6 +789,7 @@ struct ValidateCheck
     std::string mTopic; // which bundle (empty for aggregate checks)
     std::string mPath;  // e.g. "phases[2].jobs[1].tasks[0]"
     std::string mDetail;
+    int mLine = -1; // 1-based line in the bundle JSON; -1 = unknown
     std::vector<std::string> mDiagnostics;
 };
 

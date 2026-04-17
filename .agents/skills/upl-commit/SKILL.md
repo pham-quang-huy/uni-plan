@@ -69,7 +69,7 @@ git commit -m "$(cat <<'EOF'
 type: Subject in Title Case
 - Key change description
 
-Co-Authored-By: Codex Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -84,7 +84,7 @@ Before committing, check if any staged files are CLI trigger files:
 
 **If any trigger file is staged AND `kCliVersion` was not bumped in the diff**:
 1. Stop before committing
-2. Warn the user: "CLI source files changed but kCliVersion was not bumped. MAJOR for breaking changes, MINOR for new features/options, PATCH for backward-compatible fixes."
+2. Warn the user: "CLI source files changed but kCliVersion was not bumped. While pre-1.0 (0.x.y): MINOR for new features or breaking changes, PATCH for bug fixes / internal refactoring with no observable change. MAJOR is reserved for v1.0 and later — do not bump MAJOR while pre-1.0."
 3. Bump the version, rebuild, and verify before committing
 
 ## Safety Checks

@@ -147,7 +147,7 @@ uni-plan/
 | `upl-code-fix` | `.Codex/skills/upl-code-fix/SKILL.md` | Fixing bugs — workaround gate, SOLID assessment |
 | `upl-code-refactor` | `.Codex/skills/upl-code-refactor/SKILL.md` | Structural cleanup — SOLID enforcement, detection patterns |
 | `upl-schema-audit` | `.Codex/skills/upl-schema-audit/SKILL.md` | Audit Schemas/*.Schema.md for consistency |
-| `upl-validation-new` | `.Codex/skills/upl-validation-new/SKILL.md` | Add a new validation check — scaffold + wire |
+| `upl-validation-creation` | `.Codex/skills/upl-validation-creation/SKILL.md` | Scaffold a new validation check — scaffold + wire |
 | `upl-watch-panel` | `.Codex/skills/upl-watch-panel/SKILL.md` | Add/modify watch mode TUI panels |
 | `upl-Codex-audit` | `.Codex/skills/upl-Codex-audit/SKILL.md` | Audit .Codex/ system integrity |
 | `upl-Codex-learn` | `.Codex/skills/upl-Codex-learn/SKILL.md` | Learn from sessions, propose .Codex/ updates |
@@ -158,11 +158,16 @@ uni-plan/
 
 ## cli_semver_discipline
 
+uni-plan is still **pre-1.0** (currently `0.50.0`) and under active development. CLI surface, mutation paths, validator output, and auto-changelog contract are all subject to change. No stability commitment until v1.0 ships.
+
+While in the 0.x range:
+
 | Bump | When |
 |------|------|
-| MAJOR | Breaking changes: command renames, removed options, schema format changes |
-| MINOR | New features: new commands, new validation checks, new output fields |
-| PATCH | Bug fixes, documentation, internal refactoring |
+| MINOR (0.x.0 → 0.(x+1).0) | New features **or** breaking changes: new commands, new flags, new validation checks, new output fields, command renames, removed options, schema format changes |
+| PATCH (0.x.y → 0.x.(y+1)) | Bug fixes, documentation, internal refactoring with no observable output change |
+
+**MAJOR is reserved for v1.0 and later.** Do not bump MAJOR while pre-1.0.
 
 **Version source**: `Source/UniPlanTypes.h` → `kCliVersion`
 **Trigger files**: All files in `Source/`
@@ -196,7 +201,7 @@ Bundle entity references should use `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n
 
 ## schema_files
 
-The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 18 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
+The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 28 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
 
 | Schema | Purpose (lint only) |
 |--------|---------------------|
@@ -206,6 +211,46 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 | `*ChangeLog.Schema.md` (3) | ChangeLog .md sidecar structure |
 | `*Verification.Schema.md` (3) | Verification .md sidecar structure |
 | `Doc.Schema.md` | Base .md document structure |
+
+## validation_checks
+
+`uni-plan validate [--topic <T>] [--strict] [--human]` runs 28 evaluators across three tiers:
+
+### Structural — 15 checks (ErrorMajor + ErrorMinor)
+
+`required_fields`, `phases_present`, `phase_scope`, `phase_status_enum`, `job_required_fields`, `job_lane_ref`, `task_required_fields`, `lane_required_fields`, `changelog_phase_ref`, `changelog_required_fields`, `verification_phase_ref`, `verification_required_fields`, `testing_record_fields`, `file_manifest_fields`, `timestamp_format`.
+
+### Structural warnings — 3 checks
+
+`phase_tracking`, `testing_actor_coverage`, `canonical_entity_ref`.
+
+### Content-hygiene — 13 checks (ErrorMinor + Warning)
+
+Regex-scan prose fields for V3 drift, agent-safety hazards, format consistency, and reference integrity:
+
+| Check ID | Severity | Catches |
+|---|---|---|
+| `no_dev_absolute_path` | ErrorMinor | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` |
+| `topic_ref_integrity` | ErrorMinor | `<X>.Plan.json` references to unknown topics |
+| `legacy_cli_free` | Warning | `doc.exe`, `doc lint`, `doc phase`, `doc artifacts`, `FIE_Doc/doc` |
+| `v3_terminology_free` | Warning | `playbook and detached sidecars`, `plan/implementation/playbook`, `.Impl.md`, `.Playbook.md`, `canonical pairing`, `Active-phase playbook`, `phase-scoped playbook` |
+| `canonical_phase_ref_prose` | Warning | Legacy `P5` / `P6 → P7` / `MP-19a` aliases in governance prose |
+| `no_hardcoded_endpoint` | Warning | `localhost:N`, `127.0.0.1`, `192.168.*`, `10.*` in prose |
+| `platform_path_sep_free` | Warning | Windows `\` paths in `validation_commands` |
+| `no_smart_quotes` | Warning | Unicode curly quotes and en/em-dashes |
+| `no_html_in_prose` | Warning | `<br>`, `<div>`, `<span>`, `<p>`, `<hN>` |
+| `no_empty_placeholder_literal` | Warning | `"None"`/`"N/A"`/`"TBD"`/`"-"` literal strings (use empty) |
+| `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in governance prose or completed phases |
+| `stale_plan_md_reference` | Warning | `.Plan.md` filenames (V4 uses `.Plan.json`) |
+| `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
+
+### `--strict` flag
+
+Without `--strict`, only `ErrorMajor` flips `valid=false`. With `--strict`, `ErrorMinor` and `Warning` also flip `valid=false` and the CLI exits 1. Use `--strict` in CI gates and governance audits.
+
+### `line` field on each issue
+
+Every issue in `issues[]` carries a `line` field (1-based, or `null` if unresolvable) pointing to the JSON line of the offending path. Human output renders a `Line` column between `Topic` and `Path`.
 
 ## cli_commands
 

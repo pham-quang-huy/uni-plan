@@ -32,6 +32,32 @@ static bool ParseBundlePath(const std::string &InPath, std::string &OutFilePath,
 }
 
 // ---------------------------------------------------------------------------
+// Synthesize helper — render a typed validation_commands vector as a
+// markdown table string. Used by the Document-synthesis layer so legacy
+// markdown consumers continue to see readable output.
+// ---------------------------------------------------------------------------
+
+static std::string RenderValidationCommandsAsMarkdown(
+    const std::vector<FValidationCommand> &InCommands)
+{
+    if (InCommands.empty())
+        return "";
+    std::string Out = "| Platform | Command | Description |\n"
+                      "| --- | --- | --- |\n";
+    for (const FValidationCommand &C : InCommands)
+    {
+        Out += "| ";
+        Out += ToString(C.mPlatform);
+        Out += " | `";
+        Out += C.mCommand;
+        Out += "` | ";
+        Out += C.mDescription;
+        Out += " |\n";
+    }
+    return Out;
+}
+
+// ---------------------------------------------------------------------------
 // Synthesize helper — add a section from a V4 string field
 // ---------------------------------------------------------------------------
 
@@ -76,8 +102,9 @@ static bool ExtractDocumentFromBundle(const FTopicBundle &InBundle,
                               Meta.mAcceptanceCriteria);
         AddSynthesizedSection(OutDocument, "problem_statement",
                               Meta.mProblemStatement);
-        AddSynthesizedSection(OutDocument, "validation_commands",
-                              Meta.mValidationCommands);
+        AddSynthesizedSection(
+            OutDocument, "validation_commands",
+            RenderValidationCommandsAsMarkdown(Meta.mValidationCommands));
         AddSynthesizedSection(OutDocument, "baseline_audit",
                               Meta.mBaselineAudit);
         AddSynthesizedSection(OutDocument, "execution_strategy",
@@ -152,12 +179,14 @@ static bool ExtractDocumentFromBundle(const FTopicBundle &InBundle,
                               Phase.mDesign.mInvestigation);
         AddSynthesizedSection(OutDocument, "code_snippets",
                               Phase.mDesign.mCodeSnippets);
-        AddSynthesizedSection(OutDocument, "dependencies", Phase.mDesign.mDependencies);
+        AddSynthesizedSection(OutDocument, "dependencies",
+                              Phase.mDesign.mDependencies);
         AddSynthesizedSection(OutDocument, "readiness_gate",
                               Phase.mDesign.mReadinessGate);
         AddSynthesizedSection(OutDocument, "handoff", Phase.mDesign.mHandoff);
         AddSynthesizedSection(OutDocument, "validation_commands",
-                              Phase.mDesign.mValidationCommands);
+                              RenderValidationCommandsAsMarkdown(
+                                  Phase.mDesign.mValidationCommands));
         return true;
     }
 

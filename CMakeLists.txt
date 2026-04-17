@@ -30,6 +30,7 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanParsing.cpp
     Source/UniPlanCache.cpp
     Source/UniPlanValidation.cpp
+    Source/UniPlanJsonLineIndex.cpp
     Source/UniPlanOutputJson.cpp
     Source/UniPlanOutputText.cpp
     Source/UniPlanOutputHuman.cpp
@@ -100,6 +101,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestSemantic.cpp
         Test/UniPlanTestEvidence.cpp
         Test/UniPlanTestEntity.cpp
+        Test/UniPlanTestValidationContent.cpp
     )
 
     target_link_libraries(uni-plan-tests PRIVATE

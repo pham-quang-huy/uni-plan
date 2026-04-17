@@ -87,7 +87,7 @@ struct FPhaseDesignMaterial
     std::string mHandoff;
     std::string mCodeEntityContract;
     std::string mBestPractices;
-    std::string mValidationCommands;
+    std::vector<FValidationCommand> mValidationCommands;
     std::string mMultiPlatforming;
 };
 
@@ -122,7 +122,7 @@ struct FPlanMetadata
     std::string mRisks;
     std::string mAcceptanceCriteria;
     std::string mProblemStatement;
-    std::string mValidationCommands;
+    std::vector<FValidationCommand> mValidationCommands;
     std::string mBaselineAudit;
     std::string mExecutionStrategy;
     std::string mLockedDecisions;

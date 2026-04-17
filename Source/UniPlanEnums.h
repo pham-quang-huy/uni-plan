@@ -595,4 +595,59 @@ inline const char *ToString(EValidationSeverity InValue)
     return "warning";
 }
 
+// ---------------------------------------------------------------------------
+// EPlatformScope — platform targeting for a single validation command.
+// `Any` means the command runs on every supported platform.
+// ---------------------------------------------------------------------------
+
+enum class EPlatformScope : uint8_t
+{
+    Any,
+    MacOS,
+    Windows,
+    Linux
+};
+
+inline const char *ToString(EPlatformScope InValue)
+{
+    switch (InValue)
+    {
+    case EPlatformScope::Any:
+        return "any";
+    case EPlatformScope::MacOS:
+        return "macos";
+    case EPlatformScope::Windows:
+        return "windows";
+    case EPlatformScope::Linux:
+        return "linux";
+    }
+    return "any";
+}
+
+inline bool PlatformScopeFromString(const std::string &InValue,
+                                    EPlatformScope &OutValue)
+{
+    if (InValue == "any" || InValue.empty())
+    {
+        OutValue = EPlatformScope::Any;
+        return true;
+    }
+    if (InValue == "macos" || InValue == "macOS")
+    {
+        OutValue = EPlatformScope::MacOS;
+        return true;
+    }
+    if (InValue == "windows" || InValue == "Windows")
+    {
+        OutValue = EPlatformScope::Windows;
+        return true;
+    }
+    if (InValue == "linux" || InValue == "Linux")
+    {
+        OutValue = EPlatformScope::Linux;
+        return true;
+    }
+    return false;
+}
+
 } // namespace UniPlan

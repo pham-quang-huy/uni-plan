@@ -9,7 +9,13 @@
   "risks": "None — sample data only.",
   "acceptance_criteria": "All uni-plan CLI commands can read, query, mutate, and validate this bundle without errors.",
   "problem_statement": "New users and AI agents need a reference bundle showing the complete V4 schema with realistic data.",
-  "validation_commands": "uni-plan validate --topic SampleTopic --human",
+  "validation_commands": [
+    {
+      "platform": "any",
+      "command": "uni-plan validate --topic SampleTopic --human",
+      "description": "Validate bundle health after any mutation."
+    }
+  ],
   "baseline_audit": "",
   "execution_strategy": "Phase 0 is completed (reference data). Phase 1 is in_progress with partial job completion. Phase 2 is not_started (ready for phase start gate testing).",
   "locked_decisions": "",
@@ -131,7 +137,13 @@
       "handoff": "",
       "code_entity_contract": "FTopicBundle: topic key + status + metadata + phases + changelogs + verifications. FPhaseRecord: scope + output + lifecycle + design + lanes + jobs + testing + manifest.",
       "best_practices": "SOLID: single-responsibility sub-structs (FPhaseLifecycle, FPhaseDesignMaterial). Domain types: ETopicStatus, EExecutionStatus enums instead of raw strings.",
-      "validation_commands": "uni-plan validate --topic SampleTopic",
+      "validation_commands": [
+        {
+          "platform": "any",
+          "command": "uni-plan validate --topic SampleTopic",
+          "description": "Phase 0 validation check"
+        }
+      ],
       "multi_platforming": ""
     },
     {
@@ -221,7 +233,7 @@
       "handoff": "",
       "code_entity_contract": "18 Run*Command functions: 6 phase lifecycle + 3 topic lifecycle + 2 evidence + 4 query + 3 entity coverage.",
       "best_practices": "Gate enforcement: hard errors, no --force bypass. Auto-changelog on all mutations. Auto-cascade topic status.",
-      "validation_commands": "",
+      "validation_commands": [],
       "multi_platforming": ""
     },
     {
@@ -256,7 +268,7 @@
       "handoff": "",
       "code_entity_contract": "",
       "best_practices": "",
-      "validation_commands": "",
+      "validation_commands": [],
       "multi_platforming": ""
     }
   ],
