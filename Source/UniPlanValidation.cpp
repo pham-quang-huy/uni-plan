@@ -1383,21 +1383,25 @@ EvalNoDuplicatePhaseField(const std::vector<FTopicBundle> &InBundles,
                           std::vector<ValidateCheck> &OutChecks)
 {
     static const std::array<
-        std::pair<const char *, std::string (*)(const FPhaseRecord &)>, 8>
-        Fields = {{{"scope", [](const FPhaseRecord &P) { return P.mScope; }},
-                   {"output", [](const FPhaseRecord &P) { return P.mOutput; }},
-                   {"handoff",
-                    [](const FPhaseRecord &P) { return P.mDesign.mHandoff; }},
-                   {"readiness_gate", [](const FPhaseRecord &P)
-                    { return P.mDesign.mReadinessGate; }},
-                   {"investigation", [](const FPhaseRecord &P)
-                    { return P.mDesign.mInvestigation; }},
-                   {"code_entity_contract", [](const FPhaseRecord &P)
-                    { return P.mDesign.mCodeEntityContract; }},
-                   {"code_snippets", [](const FPhaseRecord &P)
-                    { return P.mDesign.mCodeSnippets; }},
-                   {"best_practices", [](const FPhaseRecord &P)
-                    { return P.mDesign.mBestPractices; }}}};
+        std::pair<const char *, std::string (*)(const FPhaseRecord &)>, 10>
+        Fields = {
+            {{"scope", [](const FPhaseRecord &P) { return P.mScope; }},
+             {"output", [](const FPhaseRecord &P) { return P.mOutput; }},
+             {"done", [](const FPhaseRecord &P) { return P.mLifecycle.mDone; }},
+             {"remaining",
+              [](const FPhaseRecord &P) { return P.mLifecycle.mRemaining; }},
+             {"handoff",
+              [](const FPhaseRecord &P) { return P.mDesign.mHandoff; }},
+             {"readiness_gate",
+              [](const FPhaseRecord &P) { return P.mDesign.mReadinessGate; }},
+             {"investigation",
+              [](const FPhaseRecord &P) { return P.mDesign.mInvestigation; }},
+             {"code_entity_contract", [](const FPhaseRecord &P)
+              { return P.mDesign.mCodeEntityContract; }},
+             {"code_snippets",
+              [](const FPhaseRecord &P) { return P.mDesign.mCodeSnippets; }},
+             {"best_practices",
+              [](const FPhaseRecord &P) { return P.mDesign.mBestPractices; }}}};
 
     for (const FTopicBundle &B : InBundles)
     {

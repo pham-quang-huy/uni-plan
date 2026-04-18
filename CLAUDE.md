@@ -282,7 +282,7 @@ V3-era vocabulary/filename/CLI drift checks (`v3_terminology_free`, `legacy_cli_
 | `no_empty_placeholder_literal` | Warning | `"None"`/`"N/A"`/`"TBD"`/`"-"` literal strings (use empty) |
 | `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in prescriptive prose and completed-phase evidence/lifecycle |
 | `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
-| `no_duplicate_phase_field` | Warning | Two phases of the same bundle share byte-identical non-empty content (≥20 chars) in a prescriptive field (`scope`, `output`, `handoff`, `readiness_gate`, `investigation`, `code_entity_contract`, `code_snippets`, `best_practices`) — signature of a migration script that stamped the same template across many phases |
+| `no_duplicate_phase_field` | Warning | Two phases of the same bundle share byte-identical non-empty content (≥20 chars) in a prescriptive or lifecycle field (`scope`, `output`, `done`, `remaining`, `handoff`, `readiness_gate`, `investigation`, `code_entity_contract`, `code_snippets`, `best_practices`) — signature of a migration script that stamped the same template across many phases |
 | `no_hollow_completed_phase` | Warning | A phase with `status=completed` but no execution evidence: empty `jobs[]`, empty `testing[]`, empty `file_manifest[]`, and both `code_snippets` and `investigation` empty. Catches governance lies where `completed` is claimed without substance. |
 
 ### `--strict` flag

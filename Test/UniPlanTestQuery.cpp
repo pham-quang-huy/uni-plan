@@ -199,6 +199,65 @@ TEST_F(FBundleTestFixture, PhaseGetReferenceEmitsMultiPlatforming)
     EXPECT_TRUE(Json.contains("multi_platforming"));
 }
 
+// Regression guard: every populated phase field must surface in --human
+// output. Prevents renderer drift where a new field is added to
+// FPhaseRecord and wired into JSON but silently missed by the human
+// printer.
+TEST_F(FBundleTestFixture, PhaseGetHumanRendersAllPopulatedSections)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    UniPlan::FPhaseRecord &Phase = Bundle.mPhases[0];
+    Phase.mScope = "Scope text";
+    Phase.mOutput = "Output text";
+    Phase.mLifecycle.mDone = "Done text";
+    Phase.mLifecycle.mRemaining = "Remaining text";
+    Phase.mLifecycle.mBlockers = "Blockers text";
+    Phase.mLifecycle.mAgentContext = "Agent context text";
+    Phase.mDesign.mReadinessGate = "Readiness gate text";
+    Phase.mDesign.mHandoff = "Handoff text";
+    Phase.mDesign.mMultiPlatforming = "Multi-platforming text";
+    Phase.mDesign.mInvestigation = "Investigation text";
+    Phase.mDesign.mCodeEntityContract = "Code entity contract text";
+    Phase.mDesign.mCodeSnippets = "Code snippets text";
+    Phase.mDesign.mBestPractices = "Best practices text";
+    UniPlan::FFileManifestItem FM;
+    FM.mFilePath = "Source/Foo.cpp";
+    FM.mAction = UniPlan::EFileAction::Create;
+    FM.mDescription = "Create Foo";
+    Phase.mFileManifest = {FM};
+    UniPlan::FTestingRecord TR;
+    TR.mActor = UniPlan::ETestingActor::AI;
+    TR.mSession = "S";
+    TR.mStep = "build";
+    TR.mAction = "cmake build";
+    TR.mExpected = "0 errors";
+    Phase.mTesting = {TR};
+    const fs::path BundlePath =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string WriteError;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, BundlePath, WriteError))
+        << WriteError;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "SampleTopic", "--phase", "0", "--human",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    for (const char *Heading :
+         {"Scope", "Output", "Done", "Remaining", "Blockers", "Agent Context",
+          "Readiness Gate", "Handoff", "Multi Platforming", "Investigation",
+          "Code Entity Contract", "Code Snippets", "Best Practices",
+          "File Manifest", "Testing"})
+    {
+        EXPECT_NE(mCapturedStdout.find(Heading), std::string::npos)
+            << "--human phase get missing heading: " << Heading;
+    }
+}
+
 TEST_F(FBundleTestFixture, PhaseGetOutOfRangeFails)
 {
     CopyFixture("SampleTopic");

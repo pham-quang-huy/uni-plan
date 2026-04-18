@@ -100,6 +100,16 @@ uni-plan phase add --topic <topic> --scope "Phase scope" --output "Expected deli
 
 Default status is `not_started`. Follow with `uni-plan phase set` to populate design material fields (`--investigation`, `--readiness-gate`, `--handoff`, etc.).
 
+### Optional: Normalize Smart Characters
+
+If design material was pasted from documents (word processors, web pages, chat), em-dashes, curly quotes, and NBSP may sneak in. Sweep a phase before validating:
+
+```bash
+uni-plan phase normalize --topic <topic> --phase <N> [--dry-run]
+```
+
+This replaces em/en/figure dashes with `-`, smart quotes with straight quotes, and NBSP with regular space — keeps the bundle clean against `no_smart_quotes`.
+
 ### Step 4: Validation
 
 ```bash

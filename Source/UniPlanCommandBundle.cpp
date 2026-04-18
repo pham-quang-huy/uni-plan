@@ -338,7 +338,43 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
     PrintField("Non-Goals", Bundle.mMetadata.mNonGoals);
     PrintField("Risks", Bundle.mMetadata.mRisks);
     PrintField("Acceptance Criteria", Bundle.mMetadata.mAcceptanceCriteria);
+    PrintField("Problem Statement", Bundle.mMetadata.mProblemStatement);
+    PrintField("Baseline Audit", Bundle.mMetadata.mBaselineAudit);
+    PrintField("Execution Strategy", Bundle.mMetadata.mExecutionStrategy);
+    PrintField("Locked Decisions", Bundle.mMetadata.mLockedDecisions);
+    PrintField("Source References", Bundle.mMetadata.mSourceReferences);
     PrintField("Next Actions", Bundle.mNextActions);
+
+    // Validation commands table
+    if (!Bundle.mMetadata.mValidationCommands.empty())
+    {
+        std::cout << kColorBold << "Validation Commands" << kColorReset << "\n";
+        HumanTable VCTable;
+        VCTable.mHeaders = {"Platform", "Command", "Description"};
+        for (const FValidationCommand &C : Bundle.mMetadata.mValidationCommands)
+        {
+            VCTable.AddRow({ToString(C.mPlatform), C.mCommand, C.mDescription});
+        }
+        VCTable.Print();
+        std::cout << "\n";
+    }
+
+    // Dependencies table
+    if (!Bundle.mMetadata.mDependencies.empty())
+    {
+        std::cout << kColorBold << "Dependencies" << kColorReset << "\n";
+        HumanTable DepTable;
+        DepTable.mHeaders = {"Kind", "Topic", "Phase", "Path", "Note"};
+        for (const FBundleReference &R : Bundle.mMetadata.mDependencies)
+        {
+            const std::string PhaseCell =
+                R.mPhase < 0 ? "" : std::to_string(R.mPhase);
+            DepTable.AddRow(
+                {ToString(R.mKind), R.mTopic, PhaseCell, R.mPath, R.mNote});
+        }
+        DepTable.Print();
+        std::cout << "\n";
+    }
 
     // Phase table
     std::cout << kColorBold << "Phases" << kColorReset << "\n";
@@ -818,11 +854,14 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
     };
 
     PrintField("Scope", Phase.mScope);
+    PrintField("Output", Phase.mOutput);
     PrintField("Done", Phase.mLifecycle.mDone);
     PrintField("Remaining", Phase.mLifecycle.mRemaining);
     PrintField("Blockers", Phase.mLifecycle.mBlockers);
+    PrintField("Agent Context", Phase.mLifecycle.mAgentContext);
     PrintField("Readiness Gate", Phase.mDesign.mReadinessGate);
     PrintField("Handoff", Phase.mDesign.mHandoff);
+    PrintField("Multi Platforming", Phase.mDesign.mMultiPlatforming);
 
     // Dependencies table — typed vector of FBundleReference.
     if (!Phase.mDesign.mDependencies.empty())
@@ -909,6 +948,43 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
     }
 
     PrintField("Investigation", Phase.mDesign.mInvestigation);
+    PrintField("Code Entity Contract", Phase.mDesign.mCodeEntityContract);
+    PrintField("Code Snippets", Phase.mDesign.mCodeSnippets);
+    PrintField("Best Practices", Phase.mDesign.mBestPractices);
+
+    // File manifest table
+    if (!Phase.mFileManifest.empty())
+    {
+        std::cout << kColorBold << "File Manifest" << kColorReset << "\n";
+        HumanTable ManTable;
+        ManTable.mHeaders = {"#", "Action", "File", "Description"};
+        for (size_t I = 0; I < Phase.mFileManifest.size(); ++I)
+        {
+            const FFileManifestItem &FM = Phase.mFileManifest[I];
+            ManTable.AddRow({std::to_string(I), ToString(FM.mAction),
+                             FM.mFilePath, FM.mDescription});
+        }
+        ManTable.Print();
+        std::cout << "\n";
+    }
+
+    // Testing table
+    if (!Phase.mTesting.empty())
+    {
+        std::cout << kColorBold << "Testing" << kColorReset << "\n";
+        HumanTable TestTable;
+        TestTable.mHeaders = {"#",      "Actor",    "Session", "Step",
+                              "Action", "Expected", "Evidence"};
+        for (size_t I = 0; I < Phase.mTesting.size(); ++I)
+        {
+            const FTestingRecord &T = Phase.mTesting[I];
+            TestTable.AddRow({std::to_string(I), ToString(T.mActor), T.mSession,
+                              T.mStep, T.mAction, T.mExpected, T.mEvidence});
+        }
+        TestTable.Print();
+        std::cout << "\n";
+    }
+
     return 0;
 }
 
@@ -1154,7 +1230,7 @@ static int RunBundleChangelogHuman(const fs::path &InRepoRoot,
               << " count=" << Filtered.size() << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Phase", "Date", "Type", "Change"};
+    Table.mHeaders = {"Phase", "Date", "Type", "Actor", "Affected", "Change"};
     for (const FChangeLogEntry *rpEntry : Filtered)
     {
         std::string Change = rpEntry->mChange;
@@ -1165,7 +1241,11 @@ static int RunBundleChangelogHuman(const fs::path &InRepoRoot,
         std::string PhaseDisplay = Label;
         if (PhaseDisplay.size() > 40)
             PhaseDisplay = PhaseDisplay.substr(0, 37) + "...";
+        std::string Affected = rpEntry->mAffected;
+        if (Affected.size() > 40)
+            Affected = Affected.substr(0, 37) + "...";
         Table.AddRow({PhaseDisplay, rpEntry->mDate, ToString(rpEntry->mType),
+                      ToString(rpEntry->mActor), Affected,
                       kColorDim + Change + kColorReset});
     }
     Table.Print();
@@ -1288,16 +1368,20 @@ RunBundleVerificationHuman(const fs::path &InRepoRoot,
               << " count=" << Filtered.size() << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Phase", "Date", "Check", "Result"};
+    Table.mHeaders = {"Phase", "Date", "Check", "Result", "Detail"};
     for (const FVerificationEntry *rpEntry : Filtered)
     {
         std::string Check = rpEntry->mCheck;
         if (Check.size() > 60)
             Check = Check.substr(0, 57) + "...";
+        std::string Detail = rpEntry->mDetail;
+        if (Detail.size() > 60)
+            Detail = Detail.substr(0, 57) + "...";
         const std::string PhaseDisplay =
             rpEntry->mPhase < 0 ? "(topic)" : std::to_string(rpEntry->mPhase);
         Table.AddRow({PhaseDisplay, rpEntry->mDate,
-                      kColorDim + Check + kColorReset, rpEntry->mResult});
+                      kColorDim + Check + kColorReset, rpEntry->mResult,
+                      Detail});
     }
     Table.Print();
     return 0;
@@ -1433,6 +1517,7 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
         std::string mDate;
         std::string mKind;
         int mPhase; // phase index or -1 for topic-level
+        std::string mType;
         std::string mText;
     };
 
@@ -1443,7 +1528,8 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
             continue;
         if (InOptions.mbHasPhaseFilter && CL.mPhase != InOptions.mPhaseFilter)
             continue;
-        Entries.push_back({CL.mDate, "changelog", CL.mPhase, CL.mChange});
+        Entries.push_back(
+            {CL.mDate, "changelog", CL.mPhase, ToString(CL.mType), CL.mChange});
     }
     for (const FVerificationEntry &VE : Bundle.mVerifications)
     {
@@ -1451,7 +1537,8 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
             continue;
         if (InOptions.mbHasPhaseFilter && VE.mPhase != InOptions.mPhaseFilter)
             continue;
-        Entries.push_back({VE.mDate, "verification", VE.mPhase, VE.mCheck});
+        Entries.push_back(
+            {VE.mDate, "verification", VE.mPhase, VE.mResult, VE.mCheck});
     }
     std::sort(Entries.begin(), Entries.end(),
               [](const FTimelineEntry &A, const FTimelineEntry &B)
@@ -1462,7 +1549,7 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
               << " count=" << Entries.size() << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Date", "Kind", "Phase", "Text"};
+    Table.mHeaders = {"Date", "Kind", "Phase", "Type/Result", "Text"};
     for (const FTimelineEntry &E : Entries)
     {
         std::string Text = E.mText;
@@ -1470,8 +1557,8 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
             Text = Text.substr(0, 57) + "...";
         const std::string PhaseDisplay =
             E.mPhase < 0 ? "(topic)" : std::to_string(E.mPhase);
-        Table.AddRow(
-            {E.mDate, E.mKind, PhaseDisplay, kColorDim + Text + kColorReset});
+        Table.AddRow({E.mDate, E.mKind, PhaseDisplay, E.mType,
+                      kColorDim + Text + kColorReset});
     }
     Table.Print();
     return 0;

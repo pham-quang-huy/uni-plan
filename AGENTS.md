@@ -239,7 +239,8 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 | `no_empty_placeholder_literal` | Warning | `"None"`/`"N/A"`/`"TBD"`/`"-"` literal strings (use empty) |
 | `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in prescriptive prose and completed-phase evidence/lifecycle |
 | `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
-| `no_duplicate_phase_field` | Warning | Two phases share byte-identical non-empty content (≥20 chars) in a prescriptive field — structural detection of migration-stamp artifacts |
+| `no_duplicate_phase_field` | Warning | Two phases share byte-identical non-empty content (≥20 chars) in `scope`/`output`/`done`/`remaining`/`handoff`/`readiness_gate`/`investigation`/`code_entity_contract`/`code_snippets`/`best_practices` — structural detection of migration-stamp artifacts |
+| `no_hollow_completed_phase` | Warning | A phase with `status=completed` but no execution evidence: empty `jobs[]`, empty `testing[]`, empty `file_manifest[]`, and both `code_snippets` and `investigation` empty |
 
 ### `--strict` flag
 
