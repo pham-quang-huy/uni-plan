@@ -154,7 +154,7 @@ int RunSearchCommand(const std::vector<std::string> &InArgs)
             {
                 if (Heading.mLine <= LineIndex)
                 {
-                    CurrentSection = Heading.mSectionId;
+                    CurrentSection = Heading.mSectionID;
                 }
                 else
                 {

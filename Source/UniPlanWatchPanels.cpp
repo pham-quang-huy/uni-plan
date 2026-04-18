@@ -1056,23 +1056,23 @@ static Element RenderSchemaBlock(const std::string &InTitle,
 
         if (Check.mbPresent && Check.mbCanonical && Check.mbRequired)
         {
-            Row = text(Indent + Check.mSectionId) | color(Color::Green);
+            Row = text(Indent + Check.mSectionID) | color(Color::Green);
         }
         else if (Check.mbPresent && Check.mbCanonical && !Check.mbRequired)
         {
-            Row = text(Indent + Check.mSectionId) | color(Color::Blue);
+            Row = text(Indent + Check.mSectionID) | color(Color::Blue);
         }
         else if (!Check.mbPresent && Check.mbCanonical && !Check.mbRequired)
         {
-            Row = text(Indent + Check.mSectionId) | dim;
+            Row = text(Indent + Check.mSectionID) | dim;
         }
         else if (Check.mbPresent && !Check.mbCanonical)
         {
-            Row = text(Indent + Check.mSectionId) | color(Color::Orange1);
+            Row = text(Indent + Check.mSectionID) | color(Color::Orange1);
         }
         else if (!Check.mbPresent && Check.mbRequired)
         {
-            Row = text(Indent + Check.mSectionId + " (MISSING)") |
+            Row = text(Indent + Check.mSectionID + " (MISSING)") |
                   color(Color::Red);
         }
         else

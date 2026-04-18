@@ -19,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.71.1";
+static constexpr const char *kCliVersion = "0.71.2";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -756,15 +756,15 @@ struct HeadingRecord
     int mLine = 0;
     int mLevel = 0;
     std::string mText;
-    std::string mSectionId;
+    std::string mSectionID;
 };
 
 struct MarkdownTableRecord
 {
-    int mTableId = 0;
+    int mTableID = 0;
     int mStartLine = 0;
     int mEndLine = 0;
-    std::string mSectionId;
+    std::string mSectionID;
     std::string mSectionHeading;
     std::vector<std::string> mHeaders;
     std::vector<std::vector<std::string>> mRows;
@@ -774,7 +774,7 @@ struct SectionResolution
 {
     bool mbFound = false;
     std::string mSectionQuery;
-    std::string mSectionId;
+    std::string mSectionID;
     std::string mSectionHeading;
     int mLevel = 0;
     int mStartLine = 0;
@@ -785,19 +785,19 @@ struct EvidenceEntry
 {
     std::string mSourcePath;
     std::string mPhaseKey;
-    int mTableId = 0;
+    int mTableID = 0;
     int mRowIndex = 0;
     std::vector<std::pair<std::string, std::string>> mFields;
 };
 
 struct RuleEntry
 {
-    std::string mId;
+    std::string mID;
     std::string mDescription;
     std::string mSource;
     std::string mSourcePath;
-    std::string mSourceSectionId;
-    int mSourceTableId = 0;
+    std::string mSourceSectionID;
+    int mSourceTableID = 0;
     int mSourceRowIndex = 0;
     std::string mSourceEvidence;
     bool mbSourceResolved = false;
@@ -806,13 +806,13 @@ struct RuleEntry
 struct RuleProvenanceProbe
 {
     std::string mPath;
-    std::string mSectionId;
+    std::string mSectionID;
     std::vector<std::string> mRowTerms;
 };
 
 struct SchemaField
 {
-    std::string mSectionId;
+    std::string mSectionID;
     std::string mProperty;
     std::string mValue;
 };
@@ -831,7 +831,7 @@ struct ValidateCheck
 
 struct GraphNode
 {
-    std::string mId;
+    std::string mID;
     std::string mType;
     std::string mPath;
     std::string mTopicKey;
@@ -842,15 +842,15 @@ struct GraphNode
 
 struct GraphEdge
 {
-    std::string mFromNodeId;
-    std::string mToNodeId;
+    std::string mFromNodeID;
+    std::string mToNodeID;
     std::string mKind;
     int mDepth = 0;
 };
 
 struct DriftItem
 {
-    std::string mId;
+    std::string mID;
     std::string mSeverity;
     std::string mTopicKey;
     std::string mPath;
@@ -878,7 +878,7 @@ struct PhaseItem
     std::string mPlaybookPath;
     std::string mDescription;
     std::string mNextAction;
-    int mTableId = 0;
+    int mTableID = 0;
     int mRowIndex = 0;
     std::vector<std::pair<std::string, std::string>> mFields;
 };
@@ -1061,7 +1061,7 @@ struct PlaybookBlankSectionsResult
 
 struct SectionSchemaEntry
 {
-    std::string mSectionId;
+    std::string mSectionID;
     bool mbRequired = false;
     int mOrder = 0;
 };

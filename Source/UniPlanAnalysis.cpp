@@ -17,7 +17,7 @@ namespace UniPlan
 {
 
 std::string EnsureGraphNode(const std::string &InRelativePath,
-                            std::map<std::string, GraphNode> &InOutNodesById)
+                            std::map<std::string, GraphNode> &InOutNodesByID)
 {
     std::string TopicKey;
     std::string PhaseKey;
@@ -25,20 +25,20 @@ std::string EnsureGraphNode(const std::string &InRelativePath,
     std::string DocKind;
     const std::string NodeType = ClassifyRelativeMarkdownPath(
         InRelativePath, &TopicKey, &PhaseKey, &OwnerKind, &DocKind);
-    const std::string NodeId = BuildGraphNodeId(NodeType, InRelativePath);
-    if (InOutNodesById.count(NodeId) == 0)
+    const std::string NodeID = BuildGraphNodeID(NodeType, InRelativePath);
+    if (InOutNodesByID.count(NodeID) == 0)
     {
         GraphNode Node;
-        Node.mId = NodeId;
+        Node.mID = NodeID;
         Node.mType = NodeType;
         Node.mPath = InRelativePath;
         Node.mTopicKey = TopicKey;
         Node.mPhaseKey = PhaseKey;
         Node.mOwnerKind = OwnerKind;
         Node.mDocKind = DocKind;
-        InOutNodesById.emplace(NodeId, std::move(Node));
+        InOutNodesByID.emplace(NodeID, std::move(Node));
     }
-    return NodeId;
+    return NodeID;
 }
 
 std::set<std::string>
@@ -410,7 +410,7 @@ std::vector<PhaseItem> CollectPhaseItemsFromPlan(
                 Item.mPhaseKey = PhaseKey;
                 Item.mStatusRaw = Status;
                 Item.mStatus = Status;
-                Item.mTableId = Table.mTableID;
+                Item.mTableID = Table.mTableID;
                 Item.mRowIndex = static_cast<int>(RowIndex) + 1;
                 Item.mPlaybookPath = PlaybookPath;
 

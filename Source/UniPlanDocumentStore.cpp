@@ -399,7 +399,7 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
                 continue;
 
             FSectionContent Section;
-            Section.mSectionID = Headings[HI].mSectionId;
+            Section.mSectionID = Headings[HI].mSectionID;
             Section.mHeading = Headings[HI].mText;
             Section.mLevel = Headings[HI].mLevel;
 
@@ -424,7 +424,7 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
                 if (T.mStartLine >= ContentStart && T.mStartLine <= SectionEnd)
                 {
                     FStructuredTable ST;
-                    ST.mTableID = T.mTableId;
+                    ST.mTableID = T.mTableID;
                     ST.mSectionID = Section.mSectionID;
                     ST.mHeaders = T.mHeaders;
                     for (const auto &Row : T.mRows)
@@ -473,7 +473,7 @@ bool TryLoadDocument(const fs::path &InRepoRoot,
                 if (Headings[SI].mLevel <= 2)
                     break;
                 if (Headings[SI].mLevel == 3)
-                    Section.mSubsectionIDs.push_back(Headings[SI].mSectionId);
+                    Section.mSubsectionIDs.push_back(Headings[SI].mSectionID);
             }
 
             OutDocument.mSections[Section.mSectionID] = std::move(Section);

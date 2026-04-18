@@ -189,7 +189,7 @@ ParseSchemaFields(const fs::path &InSchemaPath,
                 continue;
             }
             SchemaField Field;
-            Field.mSectionId = Table.mSectionId;
+            Field.mSectionID = Table.mSectionID;
             Field.mProperty = Row[0];
             Field.mValue = Row[1];
             Fields.push_back(std::move(Field));
@@ -352,7 +352,7 @@ bool TryResolveRuleProvenance(const fs::path &InRepoRoot,
     if (!TryReadFileLines(AbsolutePath, Lines, ReadError))
     {
         AddWarning(OutWarnings, "Rule provenance read failed for '" +
-                                    InProbe.mPath + "' (`" + InOutRule.mId +
+                                    InProbe.mPath + "' (`" + InOutRule.mID +
                                     "`): " + ReadError);
         return false;
     }
@@ -360,11 +360,11 @@ bool TryResolveRuleProvenance(const fs::path &InRepoRoot,
     const std::vector<HeadingRecord> Headings = ParseHeadingRecords(Lines);
     const std::vector<MarkdownTableRecord> Tables =
         ParseMarkdownTables(Lines, Headings);
-    const std::string TargetSectionId = NormalizeSectionId(InProbe.mSectionId);
+    const std::string TargetSectionID = NormalizeSectionID(InProbe.mSectionID);
 
     for (const MarkdownTableRecord &Table : Tables)
     {
-        if (!TargetSectionId.empty() && Table.mSectionId != TargetSectionId)
+        if (!TargetSectionID.empty() && Table.mSectionID != TargetSectionID)
         {
             continue;
         }
@@ -379,14 +379,14 @@ bool TryResolveRuleProvenance(const fs::path &InRepoRoot,
 
             InOutRule.mbSourceResolved = true;
             InOutRule.mSourcePath = InProbe.mPath;
-            InOutRule.mSourceSectionId = Table.mSectionId;
-            InOutRule.mSourceTableId = Table.mTableId;
+            InOutRule.mSourceSectionID = Table.mSectionID;
+            InOutRule.mSourceTableID = Table.mTableID;
             InOutRule.mSourceRowIndex = static_cast<int>(RowIndex) + 1;
             InOutRule.mSourceEvidence = JoinMarkdownRowCells(Row);
-            if (!InOutRule.mSourceSectionId.empty())
+            if (!InOutRule.mSourceSectionID.empty())
             {
                 InOutRule.mSource =
-                    InOutRule.mSourcePath + "#" + InOutRule.mSourceSectionId;
+                    InOutRule.mSourcePath + "#" + InOutRule.mSourceSectionID;
             }
             else
             {
@@ -396,9 +396,9 @@ bool TryResolveRuleProvenance(const fs::path &InRepoRoot,
         }
     }
 
-    AddWarning(OutWarnings, "Rule provenance unresolved for `" + InOutRule.mId +
+    AddWarning(OutWarnings, "Rule provenance unresolved for `" + InOutRule.mID +
                                 "` in '" + InProbe.mPath + "' section '" +
-                                InProbe.mSectionId + "'.");
+                                InProbe.mSectionID + "'.");
     return false;
 }
 
@@ -528,7 +528,7 @@ CollectActivePhaseRecords(const fs::path &InRepoRoot,
             ParseMarkdownTables(Lines, Headings);
         for (const MarkdownTableRecord &Table : Tables)
         {
-            if (Table.mSectionId != "implementation_phases")
+            if (Table.mSectionID != "implementation_phases")
             {
                 continue;
             }
@@ -583,7 +583,7 @@ BuildHeadingIdSet(const std::vector<HeadingRecord> &InHeadings)
     std::set<std::string> HeadingIds;
     for (const HeadingRecord &Heading : InHeadings)
     {
-        HeadingIds.insert(Heading.mSectionId);
+        HeadingIds.insert(Heading.mSectionID);
     }
     return HeadingIds;
 }
@@ -786,7 +786,7 @@ EvaluatePlaybookSchema(const fs::path &InRepoRoot,
     {
         if (Entry.mbRequired)
         {
-            RequiredSectionIds.push_back(Entry.mSectionId);
+            RequiredSectionIds.push_back(Entry.mSectionID);
         }
     }
 
@@ -810,7 +810,7 @@ EvaluatePlaybookSchema(const fs::path &InRepoRoot,
         {
             if (Heading.mLevel == 2)
             {
-                H2Ids.insert(Heading.mSectionId);
+                H2Ids.insert(Heading.mSectionID);
             }
         }
 
@@ -873,19 +873,19 @@ void AppendGraphEdgeUnique(std::vector<GraphEdge> &InOutEdges,
     InOutEdgeKeys.insert(Key);
 
     GraphEdge Edge;
-    Edge.mFromNodeId = InFromNodeId;
-    Edge.mToNodeId = InToNodeId;
+    Edge.mFromNodeID = InFromNodeId;
+    Edge.mToNodeID = InToNodeId;
     Edge.mKind = InKind;
     Edge.mDepth = InDepth;
     InOutEdges.push_back(std::move(Edge));
 }
 
-void AddDriftItem(std::vector<DriftItem> &InOutDrifts, const std::string &InId,
+void AddDriftItem(std::vector<DriftItem> &InOutDrifts, const std::string &InID,
                   const std::string &InSeverity, const std::string &InTopicKey,
                   const std::string &InPath, const std::string &InMessage)
 {
     DriftItem Item;
-    Item.mId = InId;
+    Item.mID = InID;
     Item.mSeverity = InSeverity;
     Item.mTopicKey = InTopicKey;
     Item.mPath = InPath;

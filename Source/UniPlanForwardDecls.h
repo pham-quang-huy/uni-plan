@@ -17,7 +17,7 @@ extern const std::regex kMarkdownPathRegex;
 
 // From DocAnalysis.cpp
 std::string EnsureGraphNode(const std::string &InRelativePath,
-                            std::map<std::string, GraphNode> &InOutNodesById);
+                            std::map<std::string, GraphNode> &InOutNodesByID);
 std::set<std::string>
 CollectPlanPathReferences(const fs::path &InRepoRoot,
                           const std::string &InRelativePath,
@@ -245,7 +245,7 @@ std::string GetLastCommitDate(const fs::path &InRepoRoot,
                               const std::string &InRelativePath);
 bool IsPathWithinRoot(const fs::path &InPath, const fs::path &InRoot);
 bool IsMarkdownTableLine(const std::string &InTrimmedLine);
-std::string NormalizeSectionId(const std::string &InHeadingText);
+std::string NormalizeSectionID(const std::string &InHeadingText);
 bool ParseFenceDelimiterLine(const std::string &InLine, char &OutFenceChar,
                              size_t &OutFenceLength, std::string &OutRemainder);
 std::vector<HeadingRecord>
@@ -301,7 +301,7 @@ std::string ClassifyRelativeMarkdownPath(const std::string &InRelativePath,
                                          std::string *const InOutPhaseKey,
                                          std::string *const InOutOwnerKind,
                                          std::string *const InOutDocKind);
-std::string BuildGraphNodeId(const std::string &InType,
+std::string BuildGraphNodeID(const std::string &InType,
                              const std::string &InPath);
 std::set<std::string>
 ExtractReferencedMarkdownPaths(const fs::path &InRepoRoot,

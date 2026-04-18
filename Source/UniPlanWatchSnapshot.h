@@ -22,7 +22,7 @@ struct FWatchInventoryCounters
 
 struct FWatchHeadingCheck
 {
-    std::string mSectionId;
+    std::string mSectionID;
     bool mbRequired = false;
     bool mbPresent = false;
     bool mbCanonical = true;

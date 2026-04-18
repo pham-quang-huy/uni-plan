@@ -1145,7 +1145,7 @@ bool IsMarkdownTableLine(const std::string &InTrimmedLine)
     return InTrimmedLine.find('|', 1) != std::string::npos;
 }
 
-std::string NormalizeSectionId(const std::string &InHeadingText)
+std::string NormalizeSectionID(const std::string &InHeadingText)
 {
     const std::string HeadingText = Trim(InHeadingText);
     size_t Start = 0;
@@ -1289,7 +1289,7 @@ ParseHeadingRecords(const std::vector<std::string> &InLines)
         Heading.mLine = static_cast<int>(Index) + 1;
         Heading.mLevel = static_cast<int>(Match[1].str().size());
         Heading.mText = HeadingText;
-        Heading.mSectionId = NormalizeSectionId(HeadingText);
+        Heading.mSectionID = NormalizeSectionID(HeadingText);
         Headings.push_back(std::move(Heading));
     }
     return Headings;
@@ -1301,9 +1301,9 @@ ParseMarkdownTables(const std::vector<std::string> &InLines,
 {
     std::vector<MarkdownTableRecord> Tables;
     size_t HeadingIndex = 0;
-    std::string CurrentSectionId;
+    std::string CurrentSectionID;
     std::string CurrentHeading;
-    int TableId = 1;
+    int TableID = 1;
 
     for (size_t Index = 0; Index < InLines.size(); ++Index)
     {
@@ -1311,7 +1311,7 @@ ParseMarkdownTables(const std::vector<std::string> &InLines,
         while (HeadingIndex < InHeadings.size() &&
                InHeadings[HeadingIndex].mLine <= LineNumber)
         {
-            CurrentSectionId = InHeadings[HeadingIndex].mSectionId;
+            CurrentSectionID = InHeadings[HeadingIndex].mSectionID;
             CurrentHeading = InHeadings[HeadingIndex].mText;
             ++HeadingIndex;
         }
@@ -1342,9 +1342,9 @@ ParseMarkdownTables(const std::vector<std::string> &InLines,
         }
 
         MarkdownTableRecord Table;
-        Table.mTableId = TableId;
+        Table.mTableID = TableID;
         Table.mStartLine = LineNumber;
-        Table.mSectionId = CurrentSectionId;
+        Table.mSectionID = CurrentSectionID;
         Table.mSectionHeading = CurrentHeading;
         Table.mHeaders = HeaderCells;
 
@@ -1372,7 +1372,7 @@ ParseMarkdownTables(const std::vector<std::string> &InLines,
 
         Table.mEndLine = static_cast<int>(RowIndex);
         Tables.push_back(std::move(Table));
-        TableId += 1;
+        TableID += 1;
         Index = (RowIndex == 0) ? Index : RowIndex - 1;
     }
 
@@ -1386,20 +1386,20 @@ ResolveSectionByQuery(const std::vector<std::string> &InLines,
 {
     SectionResolution Result;
     Result.mSectionQuery = InSectionQuery;
-    const std::string NormalizedQuery = NormalizeSectionId(InSectionQuery);
+    const std::string NormalizedQuery = NormalizeSectionID(InSectionQuery);
     const std::string LowerQuery = ToLower(Trim(InSectionQuery));
 
     for (size_t Index = 0; Index < InHeadings.size(); ++Index)
     {
         const HeadingRecord &Heading = InHeadings[Index];
-        if (Heading.mSectionId != NormalizedQuery &&
+        if (Heading.mSectionID != NormalizedQuery &&
             ToLower(Heading.mText) != LowerQuery)
         {
             continue;
         }
 
         Result.mbFound = true;
-        Result.mSectionId = Heading.mSectionId;
+        Result.mSectionID = Heading.mSectionID;
         Result.mSectionHeading = Heading.mText;
         Result.mLevel = Heading.mLevel;
         Result.mStartLine = Heading.mLine;
@@ -1728,7 +1728,7 @@ std::vector<EvidenceEntry> ParseEvidenceEntriesFromFile(
             EvidenceEntry Entry;
             Entry.mSourcePath = InRelativePath;
             Entry.mPhaseKey = InPhaseKey;
-            Entry.mTableId = Table.mTableId;
+            Entry.mTableID = Table.mTableID;
             Entry.mRowIndex = static_cast<int>(RowIndex) + 1;
             for (size_t HeaderIndex = 0; HeaderIndex < Table.mHeaders.size();
                  ++HeaderIndex)
@@ -1883,7 +1883,7 @@ std::string ClassifyRelativeMarkdownPath(const std::string &InRelativePath,
     return "reference";
 }
 
-std::string BuildGraphNodeId(const std::string &InType,
+std::string BuildGraphNodeID(const std::string &InType,
                              const std::string &InPath)
 {
     return InType + ":" + InPath;
@@ -2149,9 +2149,9 @@ TryParseSectionSchemaFromFile(const fs::path &InSchemaPath)
         SectionSchemaEntry Entry;
 
         // Extract section ID (strip backticks)
-        std::string RawId = Cells[static_cast<size_t>(SectionIdCol)];
-        RawId.erase(std::remove(RawId.begin(), RawId.end(), '`'), RawId.end());
-        Entry.mSectionId = Trim(RawId);
+        std::string RawID = Cells[static_cast<size_t>(SectionIdCol)];
+        RawID.erase(std::remove(RawID.begin(), RawID.end(), '`'), RawID.end());
+        Entry.mSectionID = Trim(RawID);
 
         // Extract order
         if (OrderCol >= 0 && static_cast<int>(Cells.size()) > OrderCol)
@@ -2183,7 +2183,7 @@ TryParseSectionSchemaFromFile(const fs::path &InSchemaPath)
             Entry.mbRequired = (Req == "required");
         }
 
-        if (!Entry.mSectionId.empty())
+        if (!Entry.mSectionID.empty())
         {
             Entries.push_back(std::move(Entry));
         }
