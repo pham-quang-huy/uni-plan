@@ -89,8 +89,8 @@ The repo ships a self-contained Claude Code operating system under `.claude/`: `
 
 | File | Enforces |
 | --- | --- |
-| [.claude/rules/coding-principles.md](.claude/rules/coding-principles.md) | SOLID, domain types, no if/else hell, memory ownership, no workarounds (with the Data Fix Gate) |
-| [.claude/rules/naming-enforcement.md](.claude/rules/naming-enforcement.md) | Type / member / param / pointer prefixes, PascalCase, ALL-CAPS acronyms, `UniPlan::` namespace |
+| [.claude/rules/upl-coding-principles.md](.claude/rules/upl-coding-principles.md) | SOLID, domain types, no if/else hell, memory ownership, no workarounds (with the Data Fix Gate) |
+| [.claude/rules/upl-naming-enforcement.md](.claude/rules/upl-naming-enforcement.md) | Type / member / param / pointer prefixes, PascalCase, ALL-CAPS acronyms, `UniPlan::` namespace |
 
 ### hooks_preposttooluse
 
