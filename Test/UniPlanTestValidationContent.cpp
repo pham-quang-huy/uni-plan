@@ -455,6 +455,83 @@ TEST_F(FBundleTestFixture, NoDuplicatePhaseFieldCleanBundlePasses)
 }
 
 // -------------------------------------------------------------------
+// no_hollow_completed_phase — completed phase with no execution evidence
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, NoHollowCompletedPhaseFlagsEmptyCompleted)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::Completed, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mJobs.clear();
+    Bundle.mPhases[0].mTesting.clear();
+    Bundle.mPhases[0].mFileManifest.clear();
+    Bundle.mPhases[0].mDesign.mCodeSnippets.clear();
+    Bundle.mPhases[0].mDesign.mInvestigation.clear();
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "no_hollow_completed_phase");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+    EXPECT_EQ(Issue["path"], "phases[0]");
+}
+
+TEST_F(FBundleTestFixture, NoHollowCompletedPhaseIgnoresPhaseWithJobs)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::Completed, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mTesting.clear();
+    Bundle.mPhases[0].mFileManifest.clear();
+    Bundle.mPhases[0].mDesign.mCodeSnippets.clear();
+    Bundle.mPhases[0].mDesign.mInvestigation.clear();
+    UniPlan::FJobRecord Job;
+    Job.mScope = "Real execution work";
+    Job.mOutput = "Shipping code";
+    Job.mExitCriteria = "Build passes";
+    Bundle.mPhases[0].mJobs = {Job};
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_hollow_completed_phase"), 0);
+}
+
+TEST_F(FBundleTestFixture, NoHollowCompletedPhaseIgnoresNotStartedPhase)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::NotStarted, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mJobs.clear();
+    Bundle.mPhases[0].mTesting.clear();
+    Bundle.mPhases[0].mFileManifest.clear();
+    Bundle.mPhases[0].mDesign.mCodeSnippets.clear();
+    Bundle.mPhases[0].mDesign.mInvestigation.clear();
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_hollow_completed_phase"), 0);
+}
+
+// -------------------------------------------------------------------
 // topic_ref_integrity — `<X>.Plan.json` must resolve
 // -------------------------------------------------------------------
 

@@ -1428,6 +1428,48 @@ EvalNoDuplicatePhaseField(const std::vector<FTopicBundle> &InBundles,
     }
 }
 
+// no_hollow_completed_phase (Warning) — a phase is marked `completed` but
+// has no execution evidence: no jobs, no testing records, no file manifest
+// entries, and no substantive design prose (code_snippets + investigation
+// both empty). This is the signature of a migration script that copied the
+// `status=completed` marker from a legacy tracker without harvesting the
+// underlying execution content, or of a post-hoc phase entry that was
+// marked done without ever being filled in.
+//
+// Structural — looks only at array sizes and string emptiness. Does not
+// enumerate any vocabulary or prose patterns. Exempts phases whose scope
+// is itself a stub (<20 chars) because those are signaled by other checks.
+static void
+EvalNoHollowCompletedPhase(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            if (Phase.mLifecycle.mStatus != EExecutionStatus::Completed)
+                continue;
+            if (!Phase.mJobs.empty())
+                continue;
+            if (!Phase.mTesting.empty())
+                continue;
+            if (!Phase.mFileManifest.empty())
+                continue;
+            if (!Phase.mDesign.mCodeSnippets.empty())
+                continue;
+            if (!Phase.mDesign.mInvestigation.empty())
+                continue;
+            Fail(OutChecks, "no_hollow_completed_phase",
+                 EValidationSeverity::Warning, B.mTopicKey,
+                 "phases[" + std::to_string(PI) + "]",
+                 "completed but has no jobs, no testing records, no file "
+                 "manifest, and no design prose "
+                 "(code_snippets + investigation both empty)");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // V4 Bundle Validation — orchestrator
 // ---------------------------------------------------------------------------
@@ -1475,6 +1517,7 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     EvalNoUnresolvedMarker(InBundles, Checks);
     EvalNoDuplicateChangelog(InBundles, Checks);
     EvalNoDuplicatePhaseField(InBundles, Checks);
+    EvalNoHollowCompletedPhase(InBundles, Checks);
     EvalPathResolves(InBundles, Checks);
 
     return Checks;
