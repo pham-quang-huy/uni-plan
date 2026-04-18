@@ -1,4 +1,5 @@
 #include "UniPlanEnums.h"
+#include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanJsonIO.h"
@@ -1971,7 +1972,7 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
             for (const FFileManifestItem &FM : P.mFileManifest)
             {
                 if (!FM.mFilePath.empty() &&
-                    !fs::exists(fs::path(FM.mFilePath)))
+                    !ManifestPathExists(InRepoRoot, FM.mFilePath))
                     ++Missing;
             }
             EmitJsonFieldSizeT("file_manifest_missing", Missing, false);
@@ -4868,8 +4869,7 @@ int RunManifestListCommand(const std::vector<std::string> &InArgs,
             for (size_t MI = 0; MI < Phase.mFileManifest.size(); ++MI)
             {
                 const FFileManifestItem &FM = Phase.mFileManifest[MI];
-                const bool bExists =
-                    !FM.mFilePath.empty() && fs::exists(fs::path(FM.mFilePath));
+                const bool bExists = ManifestPathExists(RepoRoot, FM.mFilePath);
                 if (Options.mbMissingOnly && bExists)
                     continue;
                 if (!bFirst)

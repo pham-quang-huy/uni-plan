@@ -49,123 +49,123 @@ namespace UniPlan
 // Phase list all — collects phases from every plan in the inventory
 // ---------------------------------------------------------------------------
 
-void PrintUsage()
+void PrintUsage(std::ostream &Out)
 {
-    std::cout << "Usage:\n";
-    std::cout << "  uni-plan --version\n";
-    std::cout << "  uni-plan --help\n";
-    std::cout << "\n";
-    std::cout << "Query commands:\n";
-    std::cout << "  uni-plan topic list [--status <filter>]\n";
-    std::cout << "  uni-plan topic get --topic <T>\n";
-    std::cout << "  uni-plan topic status\n";
-    std::cout << "  uni-plan phase list --topic <T> "
-                 "[--status <filter>]\n";
-    std::cout << "  uni-plan phase get --topic <T> "
-                 "--phase <N> [--brief|--execution|"
-                 "--reference]\n";
-    std::cout << "  uni-plan phase next --topic <T>\n";
-    std::cout << "  uni-plan phase readiness --topic <T> "
-                 "--phase <N>\n";
-    std::cout << "  uni-plan phase wave-status --topic <T> "
-                 "--phase <N>\n";
-    std::cout << "  uni-plan changelog --topic <T> "
-                 "[--phase <N>]\n";
-    std::cout << "  uni-plan verification --topic <T> "
-                 "[--phase <N>]\n";
-    std::cout << "  uni-plan timeline --topic <T> "
-                 "[--since <date>]\n";
-    std::cout << "  uni-plan blockers [--topic <T>]\n";
-    std::cout << "  uni-plan validate [--topic <T>]\n";
-    std::cout << "\n";
-    std::cout << "Semantic lifecycle commands:\n";
-    std::cout << "  uni-plan topic start --topic <T>\n";
-    std::cout << "  uni-plan topic complete --topic <T> "
-                 "[--verification <text>]\n";
-    std::cout << "  uni-plan topic block --topic <T> "
-                 "--reason <text>\n";
-    std::cout << "  uni-plan phase start --topic <T> "
-                 "--phase <N> [--context <text>]\n";
-    std::cout << "  uni-plan phase complete --topic <T> "
-                 "--phase <N> --done <text> "
-                 "[--verification <text>]\n";
-    std::cout << "  uni-plan phase block --topic <T> "
-                 "--phase <N> --reason <text>\n";
-    std::cout << "  uni-plan phase unblock --topic <T> "
-                 "--phase <N>\n";
-    std::cout << "  uni-plan phase progress --topic <T> "
-                 "--phase <N> --done <text> "
-                 "--remaining <text>\n";
-    std::cout << "  uni-plan phase complete-jobs --topic <T> "
-                 "--phase <N>\n";
-    std::cout << "  uni-plan phase log --topic <T> "
-                 "--phase <N> --change <text> "
-                 "[--type <type>]\n";
-    std::cout << "  uni-plan phase verify --topic <T> "
-                 "--phase <N> --check <text> "
-                 "[--result <text>]\n";
-    std::cout << "\n";
-    std::cout << "Raw mutation commands:\n";
-    std::cout << "  uni-plan topic set --topic <T> "
-                 "[--status <s>] [--summary <t>] "
-                 "[--goals <t>] ...\n";
-    std::cout << "  uni-plan phase set --topic <T> "
-                 "--phase <N> [--status <s>] "
-                 "[--scope <t>] [--investigation <t>] ...\n";
-    std::cout << "  uni-plan phase add --topic <T> "
-                 "[--scope <t>] [--output <t>] [--status <s>]\n";
-    std::cout << "  uni-plan phase remove --topic <T> --phase <N>\n";
-    std::cout << "  uni-plan phase normalize --topic <T> "
-                 "--phase <N> [--dry-run]\n";
-    std::cout << "  uni-plan job set --topic <T> "
-                 "--phase <N> --job <N> [--status <s>] "
-                 "[--scope <t>] ...\n";
-    std::cout << "  uni-plan task set --topic <T> "
-                 "--phase <N> --job <N> --task <N> "
-                 "[--status <s>]\n";
-    std::cout << "  uni-plan changelog add --topic <T> "
-                 "--change <text> [--phase <N>] "
-                 "[--type <type>]\n";
-    std::cout << "  uni-plan changelog set --topic <T> "
-                 "--index <N> [--phase <N|topic>] "
-                 "[--date <d>] [--change <t>] [--type <t>]\n";
-    std::cout << "  uni-plan verification add --topic <T> "
-                 "--check <text> [--phase <N>] "
-                 "[--result <text>]\n";
-    std::cout << "  uni-plan verification set --topic <T> "
-                 "--index <N> [--check <t>] [--result <t>] "
-                 "[--detail <t>]\n";
-    std::cout << "  uni-plan lane set --topic <T> "
-                 "--phase <N> --lane <N> [--status <s>] "
-                 "[--scope <t>] ...\n";
-    std::cout << "  uni-plan lane add --topic <T> "
-                 "--phase <N> [--status <s>] "
-                 "[--scope <t>] [--exit-criteria <t>]\n";
-    std::cout << "  uni-plan testing add --topic <T> "
-                 "--phase <N> --step <text> "
-                 "--action <text> --expected <text>\n";
-    std::cout << "  uni-plan testing set --topic <T> "
-                 "--phase <N> --index <N> [--session <t>] "
-                 "[--actor <t>] [--step <t>] ...\n";
-    std::cout << "  uni-plan manifest add --topic <T> "
-                 "--phase <N> --file <path> "
-                 "--action <a> --description <text>\n";
-    std::cout << "  uni-plan manifest remove --topic <T> "
-                 "--phase <N> --index <N>\n";
-    std::cout << "  uni-plan manifest list "
-                 "[--topic <T>] [--phase <N>] [--missing-only]\n";
-    std::cout << "  uni-plan manifest set --topic <T> "
-                 "--phase <N> --index <N> [--file <t>] "
-                 "[--action <t>] [--description <t>]\n";
-    std::cout << "\n";
-    std::cout << "Utility:\n";
-    std::cout << "  uni-plan cache [info|clear|config]\n";
-    std::cout << "  uni-plan watch [--repo-root <path>]\n";
-    std::cout << "\n";
-    std::cout << "Output is JSON by default.\n";
-    std::cout << "Global options:\n";
-    std::cout << "  --human       Formatted ANSI tables\n";
-    std::cout << "  --repo-root   Override repository root\n";
+    Out << "Usage:\n";
+    Out << "  uni-plan --version\n";
+    Out << "  uni-plan --help\n";
+    Out << "\n";
+    Out << "Query commands:\n";
+    Out << "  uni-plan topic list [--status <filter>]\n";
+    Out << "  uni-plan topic get --topic <T>\n";
+    Out << "  uni-plan topic status\n";
+    Out << "  uni-plan phase list --topic <T> "
+           "[--status <filter>]\n";
+    Out << "  uni-plan phase get --topic <T> "
+           "--phase <N> [--brief|--execution|"
+           "--reference]\n";
+    Out << "  uni-plan phase next --topic <T>\n";
+    Out << "  uni-plan phase readiness --topic <T> "
+           "--phase <N>\n";
+    Out << "  uni-plan phase wave-status --topic <T> "
+           "--phase <N>\n";
+    Out << "  uni-plan changelog --topic <T> "
+           "[--phase <N>]\n";
+    Out << "  uni-plan verification --topic <T> "
+           "[--phase <N>]\n";
+    Out << "  uni-plan timeline --topic <T> "
+           "[--since <date>]\n";
+    Out << "  uni-plan blockers [--topic <T>]\n";
+    Out << "  uni-plan validate [--topic <T>]\n";
+    Out << "\n";
+    Out << "Semantic lifecycle commands:\n";
+    Out << "  uni-plan topic start --topic <T>\n";
+    Out << "  uni-plan topic complete --topic <T> "
+           "[--verification <text>]\n";
+    Out << "  uni-plan topic block --topic <T> "
+           "--reason <text>\n";
+    Out << "  uni-plan phase start --topic <T> "
+           "--phase <N> [--context <text>]\n";
+    Out << "  uni-plan phase complete --topic <T> "
+           "--phase <N> --done <text> "
+           "[--verification <text>]\n";
+    Out << "  uni-plan phase block --topic <T> "
+           "--phase <N> --reason <text>\n";
+    Out << "  uni-plan phase unblock --topic <T> "
+           "--phase <N>\n";
+    Out << "  uni-plan phase progress --topic <T> "
+           "--phase <N> --done <text> "
+           "--remaining <text>\n";
+    Out << "  uni-plan phase complete-jobs --topic <T> "
+           "--phase <N>\n";
+    Out << "  uni-plan phase log --topic <T> "
+           "--phase <N> --change <text> "
+           "[--type <type>]\n";
+    Out << "  uni-plan phase verify --topic <T> "
+           "--phase <N> --check <text> "
+           "[--result <text>]\n";
+    Out << "\n";
+    Out << "Raw mutation commands:\n";
+    Out << "  uni-plan topic set --topic <T> "
+           "[--status <s>] [--summary <t>] "
+           "[--goals <t>] ...\n";
+    Out << "  uni-plan phase set --topic <T> "
+           "--phase <N> [--status <s>] "
+           "[--scope <t>] [--investigation <t>] ...\n";
+    Out << "  uni-plan phase add --topic <T> "
+           "[--scope <t>] [--output <t>] [--status <s>]\n";
+    Out << "  uni-plan phase remove --topic <T> --phase <N>\n";
+    Out << "  uni-plan phase normalize --topic <T> "
+           "--phase <N> [--dry-run]\n";
+    Out << "  uni-plan job set --topic <T> "
+           "--phase <N> --job <N> [--status <s>] "
+           "[--scope <t>] ...\n";
+    Out << "  uni-plan task set --topic <T> "
+           "--phase <N> --job <N> --task <N> "
+           "[--status <s>]\n";
+    Out << "  uni-plan changelog add --topic <T> "
+           "--change <text> [--phase <N>] "
+           "[--type <type>]\n";
+    Out << "  uni-plan changelog set --topic <T> "
+           "--index <N> [--phase <N|topic>] "
+           "[--date <d>] [--change <t>] [--type <t>]\n";
+    Out << "  uni-plan verification add --topic <T> "
+           "--check <text> [--phase <N>] "
+           "[--result <text>]\n";
+    Out << "  uni-plan verification set --topic <T> "
+           "--index <N> [--check <t>] [--result <t>] "
+           "[--detail <t>]\n";
+    Out << "  uni-plan lane set --topic <T> "
+           "--phase <N> --lane <N> [--status <s>] "
+           "[--scope <t>] ...\n";
+    Out << "  uni-plan lane add --topic <T> "
+           "--phase <N> [--status <s>] "
+           "[--scope <t>] [--exit-criteria <t>]\n";
+    Out << "  uni-plan testing add --topic <T> "
+           "--phase <N> --step <text> "
+           "--action <text> --expected <text>\n";
+    Out << "  uni-plan testing set --topic <T> "
+           "--phase <N> --index <N> [--session <t>] "
+           "[--actor <t>] [--step <t>] ...\n";
+    Out << "  uni-plan manifest add --topic <T> "
+           "--phase <N> --file <path> "
+           "--action <a> --description <text>\n";
+    Out << "  uni-plan manifest remove --topic <T> "
+           "--phase <N> --index <N>\n";
+    Out << "  uni-plan manifest list "
+           "[--topic <T>] [--phase <N>] [--missing-only]\n";
+    Out << "  uni-plan manifest set --topic <T> "
+           "--phase <N> --index <N> [--file <t>] "
+           "[--action <t>] [--description <t>]\n";
+    Out << "\n";
+    Out << "Utility:\n";
+    Out << "  uni-plan cache [info|clear|config]\n";
+    Out << "  uni-plan watch [--repo-root <path>]\n";
+    Out << "\n";
+    Out << "Output is JSON by default.\n";
+    Out << "Global options:\n";
+    Out << "  --human       Formatted ANSI tables\n";
+    Out << "  --repo-root   Override repository root\n";
 }
 
 // FCommandHelpEntry + kHuman* constants moved to DocTypes.h
@@ -362,14 +362,13 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  uni-plan validate --topic MultiPlatforming\n"},
 };
 
-void PrintCommandUsage(const std::string &InCommand)
+void PrintCommandUsage(std::ostream &Out, const std::string &InCommand)
 {
     // Removed: section, table (dead .md commands)
     // Special-case: cache (multi-subcommand layout)
     if (InCommand == "cache")
     {
-        std::cout
-            << "Manage the persisted inventory cache.\n\n"
+        Out << "Manage the persisted inventory cache.\n\n"
                "uni-plan scans the repository for all plans, playbooks, "
                "implementations,\n"
                "and sidecar documents to build a documentation inventory. This "
@@ -426,23 +425,23 @@ void PrintCommandUsage(const std::string &InCommand)
         {
             continue;
         }
-        std::cout << Entry.mUsageLine << Entry.mDescription;
+        Out << Entry.mUsageLine << Entry.mDescription;
         if (Entry.mRequiredOptions != nullptr)
         {
-            std::cout << Entry.mRequiredOptions;
+            Out << Entry.mRequiredOptions;
         }
-        std::cout << "Options:\n";
+        Out << "Options:\n";
         if (Entry.mSpecificOptions != nullptr)
         {
-            std::cout << Entry.mSpecificOptions;
+            Out << Entry.mSpecificOptions;
         }
-        std::cout << Entry.mHumanLabel
-                  << "  --repo-root <path>      Override repository root\n\n"
-                  << Entry.mExamples;
+        Out << Entry.mHumanLabel
+            << "  --repo-root <path>      Override repository root\n\n"
+            << Entry.mExamples;
         return;
     }
     // Unknown command — fall back to global usage
-    PrintUsage();
+    PrintUsage(Out);
 }
 
 int RunMain(const int InArgc, char *InArgv[])
@@ -476,13 +475,13 @@ int RunMain(const int InArgc, char *InArgv[])
 
     if (Tokens.empty())
     {
-        PrintUsage();
+        PrintUsage(std::cout);
         return 0;
     }
 
     if (Tokens.size() == 1 && (Tokens[0] == "--help" || Tokens[0] == "-h"))
     {
-        PrintUsage();
+        PrintUsage(std::cout);
         return 0;
     }
 
@@ -655,7 +654,7 @@ int RunMain(const int InArgc, char *InArgv[])
             if (ContainsHelpFlag(
                     std::vector<std::string>(Tokens.begin() + 1, Tokens.end())))
             {
-                PrintCommandUsage("cache");
+                PrintCommandUsage(std::cout, "cache");
                 return 0;
             }
 
@@ -758,9 +757,9 @@ int RunMain(const int InArgc, char *InArgv[])
     {
         std::cerr << kColorRed << "error: " << InError.what() << kColorReset
                   << "\n\n";
-        std::cout << kColorDim;
-        PrintCommandUsage(Command);
-        std::cout << kColorReset;
+        std::cerr << kColorDim;
+        PrintCommandUsage(std::cerr, Command);
+        std::cerr << kColorReset;
         return 2;
     }
 }

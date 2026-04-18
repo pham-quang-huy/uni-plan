@@ -2,6 +2,7 @@
 
 #include "UniPlanForwardDecls.h"
 #include "UniPlanJsonIO.h"
+#include "UniPlanRuntime.h"
 #include "UniPlanTypes.h"
 
 #include <gtest/gtest.h>
@@ -391,6 +392,129 @@ TEST(OptionParsing, ManifestListAcceptsEmptyArgs)
 {
     // All args optional — no throw when called with no filters.
     EXPECT_NO_THROW(UniPlan::ParseManifestListOptions({}));
+}
+
+// v0.71.1 regression: exists_on_disk checks must resolve relative
+// file_manifest paths against --repo-root, not the process cwd. The
+// test-process cwd is the build dir, so a path like
+// "Docs/Plans/SampleTopic.Plan.json" exists only when the check walks
+// through mRepoRoot — prior to the fix it was always reported missing.
+TEST_F(FBundleTestFixture, ManifestListResolvesPathsAgainstRepoRoot)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    UniPlan::FFileManifestItem Item;
+    Item.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
+    Item.mAction = UniPlan::EFileAction::Modify;
+    Item.mDescription = "Bundle file — exists relative to repo root";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--phase", "0", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+
+    bool bFound = false;
+    for (const auto &E : Json["entries"])
+    {
+        if (E["file_path"].get<std::string>() ==
+            "Docs/Plans/SampleTopic.Plan.json")
+        {
+            EXPECT_TRUE(E["exists_on_disk"].get<bool>())
+                << "--repo-root not threaded: path relative to repo root "
+                   "reported missing when cwd != repo-root";
+            bFound = true;
+        }
+    }
+    EXPECT_TRUE(bFound) << "seeded manifest entry not returned by list";
+}
+
+// v0.71.1 regression: validate summary.file_manifest_missing must also
+// use the repo-root-aware existence check. Seeds one existing relative
+// path + one missing path and asserts the counter is exactly 1.
+TEST_F(FBundleTestFixture, ValidateSummaryResolvesManifestAgainstRepoRoot)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    Bundle.mPhases[0].mFileManifest.clear();
+    UniPlan::FFileManifestItem Exists;
+    Exists.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
+    Exists.mAction = UniPlan::EFileAction::Modify;
+    Exists.mDescription = "Real relative path";
+    Bundle.mPhases[0].mFileManifest.push_back(Exists);
+    UniPlan::FFileManifestItem Missing;
+    Missing.mFilePath = "does/not/exist.cpp";
+    Missing.mAction = UniPlan::EFileAction::Create;
+    Missing.mDescription = "Invented path";
+    Bundle.mPhases[0].mFileManifest.push_back(Missing);
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("summary"));
+    const auto &Phase0 = Json["summary"]["topics"][0]["phases"][0];
+    EXPECT_EQ(Phase0["file_manifest_count"].get<size_t>(), 2u);
+    EXPECT_EQ(Phase0["file_manifest_missing"].get<size_t>(), 1u)
+        << "summary.file_manifest_missing did not resolve against "
+           "--repo-root";
+}
+
+// v0.71.1 regression: RunMain must route UsageError output to stderr
+// (error message + usage banner) and leave stdout empty so downstream
+// `2>/dev/null | jq` pipelines see empty input instead of ANSI-laden
+// usage text.
+TEST_F(FBundleTestFixture, RunMainRoutesInvalidFlagToStderr)
+{
+    const char *Arg0 = "uni-plan";
+    const char *Arg1 = "validate";
+    const char *Arg2 = "--definitely-not-a-real-flag";
+    char *Argv[] = {const_cast<char *>(Arg0), const_cast<char *>(Arg1),
+                    const_cast<char *>(Arg2)};
+    StartCapture();
+    const int Code = UniPlan::RunMain(3, Argv);
+    StopCapture();
+    EXPECT_EQ(Code, 2);
+    EXPECT_TRUE(mCapturedStdout.empty())
+        << "Usage banner leaked to stdout: " << mCapturedStdout;
+    EXPECT_NE(mCapturedStderr.find("Unknown option"), std::string::npos)
+        << "Error line missing from stderr: " << mCapturedStderr;
+    EXPECT_NE(mCapturedStderr.find("Usage:"), std::string::npos)
+        << "Usage banner missing from stderr: " << mCapturedStderr;
+}
+
+// v0.71.1 regression: RunMain success paths (--help, bare invocation,
+// --version) must still write to stdout, not stderr.
+TEST_F(FBundleTestFixture, RunMainHelpGoesToStdout)
+{
+    const char *Arg0 = "uni-plan";
+    const char *Arg1 = "--help";
+    char *Argv[] = {const_cast<char *>(Arg0), const_cast<char *>(Arg1)};
+    StartCapture();
+    const int Code = UniPlan::RunMain(2, Argv);
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    EXPECT_NE(mCapturedStdout.find("Usage:"), std::string::npos)
+        << "--help did not write usage to stdout";
+    EXPECT_TRUE(mCapturedStderr.empty())
+        << "--help leaked to stderr: " << mCapturedStderr;
 }
 
 // ===================================================================
