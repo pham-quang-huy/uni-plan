@@ -80,7 +80,7 @@ type: Subject in Title Case
 - Bullet point describing key change
 - Another bullet point
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 ```
 
 **Types**: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`

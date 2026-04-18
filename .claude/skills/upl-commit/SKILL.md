@@ -69,7 +69,7 @@ git commit -m "$(cat <<'EOF'
 type: Subject in Title Case
 - Key change description
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 EOF
 )"
 ```
