@@ -90,6 +90,16 @@ uni-plan changelog add --topic <topic> --change "Plan created" --type feat
 uni-plan verification add --topic <topic> --check "Bundle validates" --result pass --detail "uni-plan validate passes"
 ```
 
+### Optional: Extend with Additional Phases
+
+Use `uni-plan phase add` to append trailing phases via CLI (auto-changelog, typed serializer) instead of hand-editing JSON:
+
+```bash
+uni-plan phase add --topic <topic> --scope "Phase scope" --output "Expected deliverables"
+```
+
+Default status is `not_started`. Follow with `uni-plan phase set` to populate design material fields (`--investigation`, `--readiness-gate`, `--handoff`, etc.).
+
 ### Step 4: Validation
 
 ```bash

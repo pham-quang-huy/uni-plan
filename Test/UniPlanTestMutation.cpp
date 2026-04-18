@@ -158,6 +158,65 @@ TEST_F(FBundleTestFixture, PhaseSetOutOfRangeFails)
     EXPECT_EQ(Code, 1);
 }
 
+TEST_F(FBundleTestFixture, PhaseAddAppendsTrailingPhase)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseAddCommand(
+        {"--topic", "T", "--scope", "New scope for phase 2", "--output",
+         "New output", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases.size(), 3u);
+    EXPECT_EQ(After.mPhases[2].mScope, "New scope for phase 2");
+    EXPECT_EQ(After.mPhases[2].mOutput, "New output");
+    EXPECT_EQ(After.mPhases[2].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::NotStarted);
+    EXPECT_GT(After.mChangeLogs.size(), 0u);
+    EXPECT_EQ(After.mChangeLogs.back().mPhase, -1);
+    EXPECT_NE(After.mChangeLogs.back().mChange.find("Added phases[2]"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseAddDefaultsToNotStarted)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseAddCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases.size(), 2u);
+    EXPECT_EQ(After.mPhases[1].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::NotStarted);
+    EXPECT_TRUE(After.mPhases[1].mScope.empty());
+}
+
+TEST_F(FBundleTestFixture, PhaseAddRejectsInvalidStatus)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    StartCapture();
+    const int Code =
+        UniPlan::RunPhaseAddCommand({"--topic", "T", "--status", "bogus",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("Invalid status"), std::string::npos);
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases.size(), 1u);
+}
+
 TEST_F(FBundleTestFixture, PhaseRemoveTrailingNotStartedPhase)
 {
     CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 3,

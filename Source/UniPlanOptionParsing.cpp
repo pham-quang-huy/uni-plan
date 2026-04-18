@@ -2116,4 +2116,38 @@ FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FPhaseAddOptions ParsePhaseAddOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--scope")
+        {
+            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+            continue;
+        }
+        if (Token == "--output")
+        {
+            Options.mOutput = ConsumeValuedOption(Remaining, Index, "--output");
+            continue;
+        }
+        if (Token == "--status")
+        {
+            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            continue;
+        }
+        throw UsageError("Unknown option for phase add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase add requires --topic");
+    return Options;
+}
+
 } // namespace UniPlan

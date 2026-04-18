@@ -19,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.63.0";
+static constexpr const char *kCliVersion = "0.64.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -402,6 +402,14 @@ struct FTopicSetOptions : BaseOptions
     // entries are appended.
     bool mbDependencyClear = false;
     std::vector<FBundleReference> mDependencyAdd;
+};
+
+struct FPhaseAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mScope;
+    std::string mOutput;
+    std::string mStatus; // optional; default not_started
 };
 
 struct FPhaseSetOptions : BaseOptions

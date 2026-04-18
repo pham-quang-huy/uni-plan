@@ -129,6 +129,7 @@ FBundleValidateOptions
 ParseBundleValidateOptions(const std::vector<std::string> &InTokens);
 FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens);
 FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens);
+FPhaseAddOptions ParsePhaseAddOptions(const std::vector<std::string> &InTokens);
 FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens);
 FTaskSetOptions ParseTaskSetOptions(const std::vector<std::string> &InTokens);
 FChangelogAddOptions
@@ -429,6 +430,8 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
                        const std::string &InRepoRoot);
 int RunPhaseRemoveCommand(const std::vector<std::string> &InArgs,
                           const std::string &InRepoRoot);
+int RunPhaseAddCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
 int RunJobSetCommand(const std::vector<std::string> &InArgs,
                      const std::string &InRepoRoot);
 int RunTaskSetCommand(const std::vector<std::string> &InArgs,

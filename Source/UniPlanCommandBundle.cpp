@@ -921,8 +921,8 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
 {
     if (InArgs.empty() || ContainsHelpFlag(InArgs))
     {
-        throw UsageError("phase requires a subcommand: list, get, set, "
-                         "start, complete, block, unblock, progress, "
+        throw UsageError("phase requires a subcommand: list, get, set, add, "
+                         "remove, start, complete, block, unblock, progress, "
                          "complete-jobs, log, verify, next, readiness, "
                          "wave-status");
     }
@@ -960,6 +960,11 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseRemoveCommand(SubArgs, InRepoRoot);
     }
 
+    if (Sub == "add")
+    {
+        return RunPhaseAddCommand(SubArgs, InRepoRoot);
+    }
+
     // Semantic phase commands
     if (Sub == "start")
         return RunPhaseStartCommand(SubArgs, InRepoRoot);
@@ -985,9 +990,9 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseWaveStatusCommand(SubArgs, InRepoRoot);
 
     throw UsageError("Unknown phase subcommand: " + Sub +
-                     ". Expected: list, get, set, start, complete, block, "
-                     "unblock, progress, complete-jobs, log, verify, next, "
-                     "readiness, wave-status");
+                     ". Expected: list, get, set, add, remove, start, "
+                     "complete, block, unblock, progress, complete-jobs, "
+                     "log, verify, next, readiness, wave-status");
 }
 
 // ===================================================================
@@ -2399,6 +2404,82 @@ int RunPhaseRemoveCommand(const std::vector<std::string> &InArgs,
     // index — otherwise AppendAutoChangelog sets mPhase to Idx and leaves
     // a dangling changelogs[*].phase reference flagged by
     // changelog_phase_ref.
+    AppendAutoChangelog(Bundle, kTargetPlan, Desc);
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase add — append a new trailing phase to a topic
+//
+// Creates a new phase at index phases.size() (trailing). Default status is
+// not_started; --scope / --output / --status are optional bootstrap fields.
+// Any other per-phase content is added afterwards via `phase set` or the
+// corresponding lane/job/testing/manifest commands.
+//
+// Auto-changelog entry is filed topic-scoped ("Added phases[N]...") rather
+// than phase-scoped — a phase that was just created has no prior history
+// to correlate against, and topic-scoping keeps the new phase's own
+// changelogs[] slice clean.
+// ---------------------------------------------------------------------------
+
+int RunPhaseAddCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot)
+{
+    const FPhaseAddOptions Options = ParsePhaseAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    EExecutionStatus NewStatus = EExecutionStatus::NotStarted;
+    if (!Options.mStatus.empty() &&
+        !ExecutionStatusFromString(Options.mStatus, NewStatus))
+    {
+        std::cerr << "Invalid status: " << Options.mStatus << "\n";
+        return 1;
+    }
+
+    FPhaseRecord NewPhase;
+    NewPhase.mScope = Options.mScope;
+    NewPhase.mOutput = Options.mOutput;
+    NewPhase.mLifecycle.mStatus = NewStatus;
+    if (NewStatus == EExecutionStatus::InProgress)
+        NewPhase.mLifecycle.mStartedAt = GetUtcNow();
+    else if (NewStatus == EExecutionStatus::Completed)
+    {
+        const std::string UTC = GetUtcNow();
+        NewPhase.mLifecycle.mStartedAt = UTC;
+        NewPhase.mLifecycle.mCompletedAt = UTC;
+    }
+
+    const size_t NewIdx = Bundle.mPhases.size();
+    Bundle.mPhases.push_back(std::move(NewPhase));
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back(
+        {"phases[" + std::to_string(NewIdx) + "]", {"(new)", Options.mScope}});
+
+    const std::string Target = MakePhaseTarget(static_cast<int>(NewIdx));
+    const std::string Desc =
+        "Added " + Target +
+        (Options.mScope.empty() ? "" : ": " + Options.mScope);
+    // File topic-scoped: a just-created phase has no prior timeline, so
+    // auto-changelog filed against kTargetPlan keeps phases[NewIdx] own
+    // changelog slice empty until the first real mutation lands there.
     AppendAutoChangelog(Bundle, kTargetPlan, Desc);
 
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
