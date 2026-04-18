@@ -1,6 +1,5 @@
 #include "UniPlanSchemaValidation.h"
 
-#include <algorithm>
 #include <cctype>
 
 namespace UniPlan
@@ -213,86 +212,6 @@ bool RequireTestingActor(const JsonValue &InJson, const std::string &InKey,
 }
 
 // ---------------------------------------------------------------------------
-// ParseExecutionStatusLenient — V1/V2 backward compat
-// ---------------------------------------------------------------------------
-
-EExecutionStatus ParseExecutionStatusLenient(const std::string &InRaw)
-{
-    // Try strict match first
-    EExecutionStatus Status;
-    if (ExecutionStatusFromString(InRaw, Status))
-        return Status;
-
-    // Normalize and match patterns
-    const std::string N = NormalizeLower(InRaw);
-    if (N.find("complete") != std::string::npos || N == "done" || N == "closed")
-        return EExecutionStatus::Completed;
-    if (N.find("progress") != std::string::npos || N == "active")
-        return EExecutionStatus::InProgress;
-    if (N.find("block") != std::string::npos)
-        return EExecutionStatus::Blocked;
-    return EExecutionStatus::NotStarted;
-}
-
-// ---------------------------------------------------------------------------
-// ParseFileActionLenient
-// ---------------------------------------------------------------------------
-
-EFileAction ParseFileActionLenient(const std::string &InRaw)
-{
-    EFileAction Action;
-    if (FileActionFromString(InRaw, Action))
-        return Action;
-
-    const std::string N = NormalizeLower(InRaw);
-    if (N.find("modif") != std::string::npos || N == "update" || N == "edit" ||
-        N == "change")
-        return EFileAction::Modify;
-    if (N.find("delet") != std::string::npos || N == "remove")
-        return EFileAction::Delete;
-    return EFileAction::Create;
-}
-
-// ---------------------------------------------------------------------------
-// ParseTestingActorLenient
-// ---------------------------------------------------------------------------
-
-ETestingActor ParseTestingActorLenient(const std::string &InRaw)
-{
-    ETestingActor Actor;
-    if (TestingActorFromString(InRaw, Actor))
-        return Actor;
-
-    const std::string N = NormalizeLower(InRaw);
-    if (N == "ai" || N == "claude" || N == "llm" || N == "agent")
-        return ETestingActor::AI;
-    if (N == "auto" || N.find("automat") != std::string::npos || N == "ci" ||
-        N == "script")
-        return ETestingActor::Automated;
-    return ETestingActor::Human;
-}
-
-// ---------------------------------------------------------------------------
-// ParseChangeTypeLenient
-// ---------------------------------------------------------------------------
-
-EChangeType ParseChangeTypeLenient(const std::string &InRaw)
-{
-    EChangeType Type;
-    if (ChangeTypeFromString(InRaw, Type))
-        return Type;
-
-    const std::string N = NormalizeLower(InRaw);
-    if (N == "feature" || N == "add" || N == "new")
-        return EChangeType::Feat;
-    if (N == "bugfix" || N == "patch" || N == "hotfix")
-        return EChangeType::Fix;
-    if (N == "cleanup" || N == "restructure")
-        return EChangeType::Refactor;
-    return EChangeType::Chore;
-}
-
-// ---------------------------------------------------------------------------
 // RequireChangeType
 // ---------------------------------------------------------------------------
 
@@ -313,6 +232,70 @@ bool RequireChangeType(const JsonValue &InJson, const std::string &InKey,
         return false;
     }
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// OptionalChangeType — missing/empty leaves OutValue untouched
+// ---------------------------------------------------------------------------
+
+bool OptionalChangeType(const JsonValue &InJson, const std::string &InKey,
+                        EChangeType &OutValue, const std::string &InContext,
+                        std::string &OutError)
+{
+    if (!InJson.contains(InKey) || !InJson[InKey].is_string())
+        return true;
+    const std::string Raw = InJson[InKey].get<std::string>();
+    if (Raw.empty())
+        return true;
+    if (!ChangeTypeFromString(Raw, OutValue))
+    {
+        OutError = InContext + "." + InKey + ": invalid value '" + Raw +
+                   "', expected feat|fix|refactor|chore";
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// OptionalTestingActor — missing/empty leaves OutValue untouched
+// ---------------------------------------------------------------------------
+
+bool OptionalTestingActor(const JsonValue &InJson, const std::string &InKey,
+                          ETestingActor &OutValue, const std::string &InContext,
+                          std::string &OutError)
+{
+    if (!InJson.contains(InKey) || !InJson[InKey].is_string())
+        return true;
+    const std::string Raw = InJson[InKey].get<std::string>();
+    if (Raw.empty())
+        return true;
+    if (!TestingActorFromString(Raw, OutValue))
+    {
+        OutError = InContext + "." + InKey + ": invalid value '" + Raw +
+                   "', expected human|ai|automated";
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// ParseExecutionStatusLenient — V3 playbook markdown table fallback
+// ---------------------------------------------------------------------------
+
+EExecutionStatus ParseExecutionStatusLenient(const std::string &InRaw)
+{
+    EExecutionStatus Status;
+    if (ExecutionStatusFromString(InRaw, Status))
+        return Status;
+
+    const std::string N = NormalizeLower(InRaw);
+    if (N.find("complete") != std::string::npos || N == "done" || N == "closed")
+        return EExecutionStatus::Completed;
+    if (N.find("progress") != std::string::npos || N == "active")
+        return EExecutionStatus::InProgress;
+    if (N.find("block") != std::string::npos)
+        return EExecutionStatus::Blocked;
+    return EExecutionStatus::NotStarted;
 }
 
 } // namespace UniPlan

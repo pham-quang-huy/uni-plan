@@ -2,10 +2,7 @@
 #include "UniPlanJson.h"
 #include "UniPlanSchemaValidation.h"
 
-#include <algorithm>
 #include <fstream>
-#include <regex>
-#include <set>
 #include <sstream>
 
 namespace UniPlan
@@ -363,31 +360,6 @@ static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     return Root;
 }
 
-static FChangeLogEntry DeserializeChangeLogEntry(const JsonValue &InJson)
-{
-    FChangeLogEntry Entry;
-    if (InJson.count("phase") && InJson["phase"].is_number())
-        Entry.mPhase = InJson["phase"].get<int>();
-    Entry.mDate = GetString(InJson, "date");
-    Entry.mChange = GetString(InJson, "change");
-    Entry.mAffected = GetString(InJson, "affected");
-    Entry.mType = ParseChangeTypeLenient(GetString(InJson, "type"));
-    Entry.mActor = ParseTestingActorLenient(GetString(InJson, "actor"));
-    return Entry;
-}
-
-static FVerificationEntry DeserializeVerificationEntry(const JsonValue &InJson)
-{
-    FVerificationEntry Entry;
-    if (InJson.count("phase") && InJson["phase"].is_number())
-        Entry.mPhase = InJson["phase"].get<int>();
-    Entry.mDate = GetString(InJson, "date");
-    Entry.mCheck = GetString(InJson, "check");
-    Entry.mResult = GetString(InJson, "result");
-    Entry.mDetail = GetString(InJson, "detail");
-    return Entry;
-}
-
 static bool DeserializeLaneRecordStrict(const JsonValue &InJson,
                                         FLaneRecord &OutLane,
                                         const std::string &InContext,
@@ -526,8 +498,12 @@ static bool DeserializeChangeLogStrict(const JsonValue &InJson,
     if (!RequireString(InJson, "change", OutEntry.mChange, InContext, OutError))
         return false;
     OptionalString(InJson, "affected", OutEntry.mAffected);
-    OutEntry.mType = ParseChangeTypeLenient(GetString(InJson, "type"));
-    OutEntry.mActor = ParseTestingActorLenient(GetString(InJson, "actor"));
+    if (!OptionalChangeType(InJson, "type", OutEntry.mType, InContext,
+                            OutError))
+        return false;
+    if (!OptionalTestingActor(InJson, "actor", OutEntry.mActor, InContext,
+                              OutError))
+        return false;
     return true;
 }
 

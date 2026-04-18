@@ -56,19 +56,31 @@ bool RequireTestingActor(const JsonValue &InJson, const std::string &InKey,
                          ETestingActor &OutValue, const std::string &InContext,
                          std::string &OutError);
 
-// ---------------------------------------------------------------------------
-// Lenient enum parsing for V1/V2 backward compatibility.
-// Handles aliases ("done" → Completed, "active" → InProgress, etc.).
-// Never fails — returns a sensible default.
-// ---------------------------------------------------------------------------
-
-EExecutionStatus ParseExecutionStatusLenient(const std::string &InRaw);
-EFileAction ParseFileActionLenient(const std::string &InRaw);
-ETestingActor ParseTestingActorLenient(const std::string &InRaw);
-EChangeType ParseChangeTypeLenient(const std::string &InRaw);
-
 bool RequireChangeType(const JsonValue &InJson, const std::string &InKey,
                        EChangeType &OutValue, const std::string &InContext,
                        std::string &OutError);
+
+// ---------------------------------------------------------------------------
+// Optional enum parsing — returns false only when the field is present but
+// invalid. Missing or empty values succeed with OutValue left untouched so
+// the caller's struct default applies.
+// ---------------------------------------------------------------------------
+
+bool OptionalChangeType(const JsonValue &InJson, const std::string &InKey,
+                        EChangeType &OutValue, const std::string &InContext,
+                        std::string &OutError);
+
+bool OptionalTestingActor(const JsonValue &InJson, const std::string &InKey,
+                          ETestingActor &OutValue, const std::string &InContext,
+                          std::string &OutError);
+
+// ---------------------------------------------------------------------------
+// Lenient execution status parsing for V3 playbook markdown table rows.
+// Accepts loose column text like "done" / "closed" / "active" and falls
+// back to EExecutionStatus::NotStarted when the cell is unparseable. Used
+// only by the legacy .Playbook.md lane deserialization path.
+// ---------------------------------------------------------------------------
+
+EExecutionStatus ParseExecutionStatusLenient(const std::string &InRaw);
 
 } // namespace UniPlan
