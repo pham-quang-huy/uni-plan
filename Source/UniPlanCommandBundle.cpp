@@ -965,6 +965,11 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseAddCommand(SubArgs, InRepoRoot);
     }
 
+    if (Sub == "normalize")
+    {
+        return RunPhaseNormalizeCommand(SubArgs, InRepoRoot);
+    }
+
     // Semantic phase commands
     if (Sub == "start")
         return RunPhaseStartCommand(SubArgs, InRepoRoot);
@@ -2481,6 +2486,152 @@ int RunPhaseAddCommand(const std::vector<std::string> &InArgs,
     // auto-changelog filed against kTargetPlan keeps phases[NewIdx] own
     // changelog slice empty until the first real mutation lands there.
     AppendAutoChangelog(Bundle, kTargetPlan, Desc);
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase normalize
+//
+// Sweep every prose field on a phase and replace common Unicode format
+// artifacts with ASCII equivalents (em/en/figure dash + horizontal bar ->
+// "-", smart quotes -> straight quotes, NBSP -> regular space). Fields
+// covered: top-level scope/output, lifecycle done/remaining/blockers,
+// agent_context, and all design fields (investigation,
+// code_entity_contract, code_snippets, best_practices,
+// multi_platforming, readiness_gate, handoff). Also sweeps each
+// jobs[*] scope/output/exit_criteria, lanes[*] scope/exit_criteria,
+// testing[*] step/action/expected/evidence/session, and
+// file_manifest[*] description.
+//
+// Closes the CLI gap that forced callers to reach for direct JSON
+// edits when content with smart quotes or dashes tripped
+// no_smart_quotes. All writes go through the typed mutation pipeline.
+//
+// --dry-run reports what would change without writing. Auto-changelog
+// is filed phase-scoped with a "Normalized phases[N] prose (N
+// replacements in N fields)" entry.
+// ---------------------------------------------------------------------------
+
+int RunPhaseNormalizeCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot)
+{
+    const FPhaseNormalizeOptions Options = ParsePhaseNormalizeOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase = Bundle.mPhases[Options.mPhaseIndex];
+
+    size_t TotalReplacements = 0;
+    size_t FieldsChanged = 0;
+    auto Sweep = [&](std::string &InOutField)
+    {
+        if (Options.mbDryRun)
+        {
+            std::string Copy = InOutField;
+            const size_t R = NormalizeSmartChars(Copy);
+            if (R > 0)
+            {
+                ++FieldsChanged;
+                TotalReplacements += R;
+            }
+            return;
+        }
+        const size_t R = NormalizeSmartChars(InOutField);
+        if (R > 0)
+        {
+            ++FieldsChanged;
+            TotalReplacements += R;
+        }
+    };
+
+    // Top-level phase text fields
+    Sweep(Phase.mScope);
+    Sweep(Phase.mOutput);
+    Sweep(Phase.mLifecycle.mDone);
+    Sweep(Phase.mLifecycle.mRemaining);
+    Sweep(Phase.mLifecycle.mBlockers);
+    Sweep(Phase.mLifecycle.mAgentContext);
+    // Design material fields
+    Sweep(Phase.mDesign.mInvestigation);
+    Sweep(Phase.mDesign.mCodeEntityContract);
+    Sweep(Phase.mDesign.mCodeSnippets);
+    Sweep(Phase.mDesign.mBestPractices);
+    Sweep(Phase.mDesign.mMultiPlatforming);
+    Sweep(Phase.mDesign.mReadinessGate);
+    Sweep(Phase.mDesign.mHandoff);
+    // Lanes
+    for (FLaneRecord &Lane : Phase.mLanes)
+    {
+        Sweep(Lane.mScope);
+        Sweep(Lane.mExitCriteria);
+    }
+    // Jobs + tasks
+    for (FJobRecord &Job : Phase.mJobs)
+    {
+        Sweep(Job.mScope);
+        Sweep(Job.mOutput);
+        Sweep(Job.mExitCriteria);
+        for (FTaskRecord &Task : Job.mTasks)
+        {
+            Sweep(Task.mDescription);
+            Sweep(Task.mEvidence);
+            Sweep(Task.mNotes);
+        }
+    }
+    // Testing
+    for (FTestingRecord &T : Phase.mTesting)
+    {
+        Sweep(T.mSession);
+        Sweep(T.mStep);
+        Sweep(T.mAction);
+        Sweep(T.mExpected);
+        Sweep(T.mEvidence);
+    }
+    // File manifest
+    for (FFileManifestItem &FM : Phase.mFileManifest)
+    {
+        Sweep(FM.mDescription);
+    }
+
+    const std::string Target = MakePhaseTarget(Options.mPhaseIndex);
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back({"normalized",
+                       {std::to_string(FieldsChanged) + " fields",
+                        std::to_string(TotalReplacements) + " replacements"}});
+
+    if (Options.mbDryRun || TotalReplacements == 0)
+    {
+        EmitMutationJson(Options.mTopic, Target, Changes, true);
+        return 0;
+    }
+
+    const std::string Desc = "Normalized " + Target + " prose (" +
+                             std::to_string(TotalReplacements) +
+                             " replacements in " +
+                             std::to_string(FieldsChanged) + " fields)";
+    AppendAutoChangelog(Bundle, Target, Desc);
 
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {

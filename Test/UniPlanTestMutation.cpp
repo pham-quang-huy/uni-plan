@@ -200,6 +200,116 @@ TEST_F(FBundleTestFixture, PhaseAddDefaultsToNotStarted)
     EXPECT_TRUE(After.mPhases[1].mScope.empty());
 }
 
+TEST_F(FBundleTestFixture, PhaseNormalizeReplacesSmartChars)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mDesign.mInvestigation =
+        "Baseline \xE2\x80\x94 D3D12 reference uses \xE2\x80\x9Csmart\xE2\x80"
+        "\x9D quotes.";
+    Bundle.mPhases[0].mDesign.mReadinessGate = "Phase 6 \xE2\x80\x93 complete";
+    {
+        const fs::path BundlePath =
+            mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+        std::string WriteError;
+        ASSERT_TRUE(
+            UniPlan::TryWriteTopicBundle(Bundle, BundlePath, WriteError))
+            << WriteError;
+    }
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseNormalizeCommand(
+        {"--topic", "T", "--phase", "0", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases[0].mDesign.mInvestigation,
+              "Baseline - D3D12 reference uses \"smart\" quotes.");
+    EXPECT_EQ(After.mPhases[0].mDesign.mReadinessGate, "Phase 6 - complete");
+    EXPECT_GT(After.mChangeLogs.size(), 0u);
+    EXPECT_NE(After.mChangeLogs.back().mChange.find("Normalized phases[0]"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseNormalizeDryRunDoesNotMutate)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    const std::string Original = "Dash\xE2\x80\x94here";
+    Bundle.mPhases[0].mDesign.mHandoff = Original;
+    {
+        const fs::path BundlePath =
+            mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+        std::string WriteError;
+        ASSERT_TRUE(
+            UniPlan::TryWriteTopicBundle(Bundle, BundlePath, WriteError))
+            << WriteError;
+    }
+    const size_t ChangelogBefore = Bundle.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseNormalizeCommand(
+        {"--topic", "T", "--phase", "0", "--dry-run", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases[0].mDesign.mHandoff, Original);
+    EXPECT_EQ(After.mChangeLogs.size(), ChangelogBefore);
+}
+
+TEST_F(FBundleTestFixture, PhaseNormalizeCleanPhaseIsNoOp)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mDesign.mHandoff = "Clean prose with no smart chars.";
+    {
+        const fs::path BundlePath =
+            mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+        std::string WriteError;
+        ASSERT_TRUE(
+            UniPlan::TryWriteTopicBundle(Bundle, BundlePath, WriteError))
+            << WriteError;
+    }
+    const size_t ChangelogBefore = Bundle.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseNormalizeCommand(
+        {"--topic", "T", "--phase", "0", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mChangeLogs.size(), ChangelogBefore);
+}
+
+TEST_F(FBundleTestFixture, PhaseNormalizeOutOfRangePhaseFails)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseNormalizeCommand(
+        {"--topic", "T", "--phase", "5", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("out of range"), std::string::npos);
+}
+
 TEST_F(FBundleTestFixture, PhaseAddRejectsInvalidStatus)
 {
     CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,

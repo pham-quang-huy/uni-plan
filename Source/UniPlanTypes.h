@@ -19,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.65.0";
+static constexpr const char *kCliVersion = "0.66.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -410,6 +410,13 @@ struct FPhaseAddOptions : BaseOptions
     std::string mScope;
     std::string mOutput;
     std::string mStatus; // optional; default not_started
+};
+
+struct FPhaseNormalizeOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    bool mbDryRun = false;
 };
 
 struct FPhaseSetOptions : BaseOptions

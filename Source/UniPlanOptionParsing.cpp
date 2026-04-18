@@ -2150,4 +2150,37 @@ FPhaseAddOptions ParsePhaseAddOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FPhaseNormalizeOptions
+ParsePhaseNormalizeOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseNormalizeOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            Options.mPhaseIndex =
+                std::stoi(ConsumeValuedOption(Remaining, Index, "--phase"));
+            continue;
+        }
+        if (Token == "--dry-run")
+        {
+            Options.mbDryRun = true;
+            continue;
+        }
+        throw UsageError("Unknown option for phase normalize: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase normalize requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("phase normalize requires --phase");
+    return Options;
+}
+
 } // namespace UniPlan
