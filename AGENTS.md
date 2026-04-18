@@ -214,7 +214,7 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 
 ## validation_checks
 
-`uni-plan validate [--topic <T>] [--strict] [--human]` runs 28 evaluators across three tiers:
+`uni-plan validate [--topic <T>] [--strict] [--human]` runs evaluators across three tiers. V3-era vocabulary/filename/CLI drift checks were removed in v0.63.0 — pattern enumeration against free-text prose is intrinsically incomplete; drift prevention now belongs in authoring discipline, not validator regex.
 
 ### Structural — 15 checks (ErrorMajor + ErrorMinor)
 
@@ -224,25 +224,22 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 
 `phase_tracking`, `testing_actor_coverage`, `canonical_entity_ref`.
 
-### Content-hygiene — 13 checks (ErrorMinor + Warning)
-
-Regex-scan prose fields for V3 drift, agent-safety hazards, format consistency, and reference integrity:
+### Content-hygiene — 11 checks (ErrorMinor + Warning)
 
 | Check ID | Severity | Catches |
 |---|---|---|
 | `no_dev_absolute_path` | ErrorMinor | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` |
 | `topic_ref_integrity` | ErrorMinor | `<X>.Plan.json` references to unknown topics |
-| `legacy_cli_free` | Warning | `doc.exe`, `doc lint`, `doc phase`, `doc artifacts`, `FIE_Doc/doc` |
-| `v3_terminology_free` | Warning | `playbook and detached sidecars`, `plan/implementation/playbook`, `.Impl.md`, `.Playbook.md`, `canonical pairing`, `Active-phase playbook`, `phase-scoped playbook` |
-| `canonical_phase_ref_prose` | Warning | Legacy `P5` / `P6 → P7` / `MP-19a` aliases in governance prose |
+| `path_resolves` | ErrorMinor | Impossible path refs (`Docs/Implementation/X.Plan.json` — V4 bundles live at `Docs/Plans/`) |
+| `validation_command_fields` | ErrorMinor / Warning | Typed `FValidationCommand` records require non-empty `command` (ErrorMinor) and `description` (Warning) |
+| `validation_command_platform_consistency` | Warning | A command with Windows backslash paths must set `platform: windows` |
 | `no_hardcoded_endpoint` | Warning | `localhost:N`, `127.0.0.1`, `192.168.*`, `10.*` in prose |
-| `platform_path_sep_free` | Warning | Windows `\` paths in `validation_commands` |
 | `no_smart_quotes` | Warning | Unicode curly quotes and en/em-dashes |
 | `no_html_in_prose` | Warning | `<br>`, `<div>`, `<span>`, `<p>`, `<hN>` |
 | `no_empty_placeholder_literal` | Warning | `"None"`/`"N/A"`/`"TBD"`/`"-"` literal strings (use empty) |
-| `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in governance prose or completed phases |
-| `stale_plan_md_reference` | Warning | `.Plan.md` filenames (V4 uses `.Plan.json`) |
+| `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in prescriptive prose and completed-phase evidence/lifecycle |
 | `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
+| `no_duplicate_phase_field` | Warning | Two phases share byte-identical non-empty content (≥20 chars) in a prescriptive field — structural detection of migration-stamp artifacts |
 
 ### `--strict` flag
 
@@ -302,6 +299,7 @@ Low-level field setters. Use semantic commands above when possible.
 ```bash
 uni-plan topic set --topic <T> [--status <s>] [--next-actions <text>] [--summary <t>] [--goals <t>] [--non-goals <t>] [--risks <t>] [--acceptance-criteria <t>] [--problem-statement <t>] [--validation-commands <t>] [--baseline-audit <t>] [--execution-strategy <t>] [--locked-decisions <t>] [--source-references <t>] [--dependencies <t>]
 uni-plan phase set --topic <T> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>] [--scope <t>] [--output <t>] [--investigation <t>] [--code-entity-contract <t>] [--code-snippets <t>] [--best-practices <t>] [--multi-platforming <t>] [--readiness-gate <t>] [--handoff <t>] [--validation-commands <t>] [--phase-dependencies <t>]
+uni-plan phase remove --topic <T> --phase <N>  # trailing-only; requires not_started + no changelog/verification refs
 uni-plan job set --topic <T> --phase <N> --job <N> [--status <s>] [--scope <t>] [--output <t>] [--exit-criteria <t>] [--lane <N>] [--wave <N>]
 uni-plan task set --topic <T> --phase <N> --job <N> --task <N> [--status <s>] [--evidence <t>] [--notes <t>]
 uni-plan changelog add --topic <T> [--phase <N>] --change <text> [--type <feat|fix|refactor|chore>] [--affected <t>]

@@ -46,7 +46,7 @@ Flag violations when a phase advances to `in_progress` without satisfying these:
 | Content depth | Phase design material has substantive content, not empty strings |
 | Testing fields | Testable active phases have testing records with actor and step fields, including both manual and automation-capable coverage (`human` + `ai`/`automated`) |
 | Validation clean | `uni-plan validate --topic <topic>` reports no ErrorMajor issues; under `--strict`, no Warning or ErrorMinor issues either |
-| Content hygiene | No V3 terminology drift (`v3_terminology_free`), no legacy `doc` CLI refs (`legacy_cli_free`), no smart quotes (`no_smart_quotes`), no placeholder literals like `"None"`/`"TBD"` (`no_empty_placeholder_literal`), no duplicate changelogs (`no_duplicate_changelog`), no stale `.Plan.md` refs (`stale_plan_md_reference`), no broken topic refs (`topic_ref_integrity`) |
+| Content hygiene | No smart quotes (`no_smart_quotes`), no HTML tags (`no_html_in_prose`), no dev-machine absolute paths (`no_dev_absolute_path`), no hardcoded endpoints (`no_hardcoded_endpoint`), no placeholder literals like `"None"`/`"TBD"` (`no_empty_placeholder_literal`), no unresolved markers in prescriptive prose or completed-phase evidence (`no_unresolved_marker`), no duplicate changelogs (`no_duplicate_changelog`), no duplicate phase-field content (`no_duplicate_phase_field`), no broken topic refs (`topic_ref_integrity`), no impossible path refs (`path_resolves`), typed validation commands are well-formed (`validation_command_fields`, `validation_command_platform_consistency`) |
 
 ### 3. Report Findings
 
