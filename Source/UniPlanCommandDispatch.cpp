@@ -152,6 +152,8 @@ void PrintUsage()
                  "--action <a> --description <text>\n";
     std::cout << "  uni-plan manifest remove --topic <T> "
                  "--phase <N> --index <N>\n";
+    std::cout << "  uni-plan manifest list "
+                 "[--topic <T>] [--phase <N>] [--missing-only]\n";
     std::cout << "  uni-plan manifest set --topic <T> "
                  "--phase <N> --index <N> [--file <t>] "
                  "[--action <t>] [--description <t>]\n";
@@ -631,7 +633,14 @@ int RunMain(const int InArgc, char *InArgv[])
                                                        Args.end());
                 return RunManifestRemoveCommand(SubArgs, CWD);
             }
-            throw UsageError("manifest requires subcommand: add, set, remove");
+            if (!Args.empty() && Args[0] == "list")
+            {
+                const std::vector<std::string> SubArgs(Args.begin() + 1,
+                                                       Args.end());
+                return RunManifestListCommand(SubArgs, CWD);
+            }
+            throw UsageError(
+                "manifest requires subcommand: add, set, remove, list");
         }
 
         // --- Old .md-based commands removed ---

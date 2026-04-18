@@ -1,6 +1,7 @@
 #include "UniPlanTestFixture.h"
 
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJsonIO.h"
 #include "UniPlanTypes.h"
 
 #include <gtest/gtest.h>
@@ -313,6 +314,83 @@ TEST_F(FBundleTestFixture, ManifestRemoveOutOfRangeFails)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
+}
+
+// v0.71.0: manifest list is the CLI-native path for cross-topic
+// manifest enumeration (replaces the raw-JSON loop that violated the
+// "uni-plan CLI is the only interface to .Plan.json" rule).
+TEST_F(FBundleTestFixture, ManifestListEnumeratesEntries)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("entries"));
+    EXPECT_GT(Json["entry_count"].get<size_t>(), 0u);
+    const auto &First = Json["entries"][0];
+    EXPECT_TRUE(First.contains("topic"));
+    EXPECT_TRUE(First.contains("phase_index"));
+    EXPECT_TRUE(First.contains("manifest_index"));
+    EXPECT_TRUE(First.contains("file_path"));
+    EXPECT_TRUE(First.contains("action"));
+    EXPECT_TRUE(First.contains("description"));
+    EXPECT_TRUE(First.contains("exists_on_disk"));
+}
+
+TEST_F(FBundleTestFixture, ManifestListFiltersByPhase)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    for (const auto &E : Json["entries"])
+        EXPECT_EQ(E["phase_index"].get<size_t>(), 1u);
+}
+
+TEST_F(FBundleTestFixture, ManifestListMissingOnlyFiltersExistent)
+{
+    CopyFixture("SampleTopic");
+    // Seed one non-existent path alongside whatever the fixture has.
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    UniPlan::FFileManifestItem Item;
+    Item.mFilePath = "does/not/exist/on/disk.cpp";
+    Item.mAction = UniPlan::EFileAction::Create;
+    Item.mDescription = "Invented path for test";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--missing-only", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_GT(Json["entry_count"].get<size_t>(), 0u);
+    for (const auto &E : Json["entries"])
+        EXPECT_FALSE(E["exists_on_disk"].get<bool>())
+            << "--missing-only returned an existing path: "
+            << E["file_path"].get<std::string>();
+}
+
+TEST(OptionParsing, ManifestListAcceptsEmptyArgs)
+{
+    // All args optional — no throw when called with no filters.
+    EXPECT_NO_THROW(UniPlan::ParseManifestListOptions({}));
 }
 
 // ===================================================================

@@ -1968,6 +1968,35 @@ ParseVerificationSetOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FManifestListOptions
+ParseManifestListOptions(const std::vector<std::string> &InTokens)
+{
+    FManifestListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--missing-only")
+        {
+            Options.mbMissingOnly = true;
+            continue;
+        }
+        throw UsageError("Unknown option for manifest list: " + Token);
+    }
+    // All arguments optional — no post-validation.
+    return Options;
+}
+
 FManifestRemoveOptions
 ParseManifestRemoveOptions(const std::vector<std::string> &InTokens)
 {

@@ -1,5 +1,9 @@
 # uni-plan
 
+## hard_rule_cli_only
+
+**`.Plan.json` files MUST be read through the `uni-plan` CLI — never `json.load` / raw JSON parsing.** The CLI is the authoritative interface; raw reads bypass the typed domain model, validation, and schema guarantees. If a needed query isn't expressible via existing CLI commands, that is a CLI gap — report it and stop, do not work around with raw reads. `uni-plan validate` (with its `summary` section) and `uni-plan manifest list [--missing-only]` cover the aggregate-query cases.
+
 ## project_overview
 
 uni-plan is a standalone C++17 CLI tool for plan governance — managing, validating, and monitoring `.Plan.json` topic bundles across repositories. Each topic is a single JSON file containing phases, changelogs, verifications, and plan metadata.
@@ -315,6 +319,7 @@ uni-plan testing add --topic <T> --phase <N> --session <text> --step <text> --ac
 uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
 uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
 uni-plan manifest remove --topic <T> --phase <N> --index <N>
+uni-plan manifest list [--topic <T>] [--phase <N>] [--missing-only]  # enumerate file_manifest entries; --missing-only filters to paths that don't resolve on disk
 uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]
 ```
 

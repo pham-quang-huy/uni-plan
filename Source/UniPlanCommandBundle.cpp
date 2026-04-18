@@ -1901,6 +1901,86 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
         std::cout << "}";
     }
     std::cout << "],";
+
+    // summary — aggregate structural stats across the loaded bundle set.
+    // Consumers use this to ask "which phases look thin" or "which
+    // manifest paths are missing" in one call instead of looping
+    // `phase get` per phase. Bypasses the raw-JSON-read temptation
+    // that led to v0.70.x violations.
+    std::cout << "\"summary\":{";
+    EmitJsonFieldSizeT("topic_count", Bundles.size());
+    std::cout << "\"topics\":[";
+    for (size_t BI = 0; BI < Bundles.size(); ++BI)
+    {
+        const FTopicBundle &B = Bundles[BI];
+        PrintJsonSep(BI);
+        std::cout << "{";
+        EmitJsonField("topic", B.mTopicKey);
+        EmitJsonFieldSizeT("phase_count", B.mPhases.size());
+
+        // Status distribution
+        size_t cNotStarted = 0, cInProgress = 0, cCompleted = 0, cBlocked = 0;
+        for (const FPhaseRecord &P : B.mPhases)
+        {
+            switch (P.mLifecycle.mStatus)
+            {
+            case EExecutionStatus::NotStarted:
+                ++cNotStarted;
+                break;
+            case EExecutionStatus::InProgress:
+                ++cInProgress;
+                break;
+            case EExecutionStatus::Completed:
+                ++cCompleted;
+                break;
+            case EExecutionStatus::Blocked:
+                ++cBlocked;
+                break;
+            }
+        }
+        std::cout << "\"status_distribution\":{";
+        EmitJsonFieldSizeT("not_started", cNotStarted);
+        EmitJsonFieldSizeT("in_progress", cInProgress);
+        EmitJsonFieldSizeT("completed", cCompleted);
+        EmitJsonFieldSizeT("blocked", cBlocked, false);
+        std::cout << "},";
+
+        // Per-phase stats
+        std::cout << "\"phases\":[";
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            PrintJsonSep(PI);
+            std::cout << "{";
+            EmitJsonFieldSizeT("index", PI);
+            EmitJsonField("status", ToString(P.mLifecycle.mStatus));
+            EmitJsonFieldSizeT("scope_chars", P.mScope.size());
+            EmitJsonFieldSizeT("output_chars", P.mOutput.size());
+            const size_t DesignChars = P.mDesign.mInvestigation.size() +
+                                       P.mDesign.mCodeEntityContract.size() +
+                                       P.mDesign.mCodeSnippets.size() +
+                                       P.mDesign.mBestPractices.size() +
+                                       P.mDesign.mHandoff.size() +
+                                       P.mDesign.mReadinessGate.size() +
+                                       P.mDesign.mMultiPlatforming.size();
+            EmitJsonFieldSizeT("design_chars", DesignChars);
+            EmitJsonFieldSizeT("jobs_count", P.mJobs.size());
+            EmitJsonFieldSizeT("testing_count", P.mTesting.size());
+            EmitJsonFieldSizeT("file_manifest_count", P.mFileManifest.size());
+            size_t Missing = 0;
+            for (const FFileManifestItem &FM : P.mFileManifest)
+            {
+                if (!FM.mFilePath.empty() &&
+                    !fs::exists(fs::path(FM.mFilePath)))
+                    ++Missing;
+            }
+            EmitJsonFieldSizeT("file_manifest_missing", Missing, false);
+            std::cout << "}";
+        }
+        std::cout << "]}";
+    }
+    std::cout << "]},";
+
     PrintJsonClose(BundleWarnings);
     return bValid ? 0 : 1;
 }
@@ -4733,6 +4813,84 @@ int RunManifestRemoveCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
     EmitMutationJson(Options.mTopic, PhaseTarget, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// manifest list — enumerate file_manifest entries across bundles
+//
+// Read-only aggregate query. Optional --topic filters to a single bundle,
+// --phase further narrows to a single phase index, --missing-only filters
+// to entries whose file_path does not resolve on disk. Designed so that
+// "which manifest paths are broken across all 42 bundles" is a single
+// CLI call instead of a Python loop over raw JSON reads — the gap that
+// prompted this feature in v0.71.0.
+// ---------------------------------------------------------------------------
+
+int RunManifestListCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot)
+{
+    const FManifestListOptions Options = ParseManifestListOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    std::vector<std::string> BundleWarnings;
+    std::vector<FTopicBundle> Bundles;
+    if (!Options.mTopic.empty())
+    {
+        FTopicBundle Bundle;
+        std::string Error;
+        if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+        {
+            std::cerr << Error << "\n";
+            return 1;
+        }
+        Bundles.push_back(std::move(Bundle));
+    }
+    else
+    {
+        Bundles = LoadAllBundles(RepoRoot, BundleWarnings);
+    }
+
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
+    std::cout << "\"entries\":[";
+    bool bFirst = true;
+    size_t TotalEntries = 0;
+    for (const FTopicBundle &B : Bundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            if (Options.mPhaseIndex >= 0 &&
+                PI != static_cast<size_t>(Options.mPhaseIndex))
+                continue;
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            for (size_t MI = 0; MI < Phase.mFileManifest.size(); ++MI)
+            {
+                const FFileManifestItem &FM = Phase.mFileManifest[MI];
+                const bool bExists =
+                    !FM.mFilePath.empty() && fs::exists(fs::path(FM.mFilePath));
+                if (Options.mbMissingOnly && bExists)
+                    continue;
+                if (!bFirst)
+                    std::cout << ",";
+                bFirst = false;
+                ++TotalEntries;
+                std::cout << "{";
+                EmitJsonField("topic", B.mTopicKey);
+                EmitJsonFieldSizeT("phase_index", PI);
+                EmitJsonFieldSizeT("manifest_index", MI);
+                EmitJsonField("file_path", FM.mFilePath);
+                EmitJsonField("action", ToString(FM.mAction));
+                EmitJsonField("description", FM.mDescription);
+                EmitJsonFieldBool("exists_on_disk", bExists, false);
+                std::cout << "}";
+            }
+        }
+    }
+    std::cout << "],";
+    EmitJsonFieldSizeT("entry_count", TotalEntries);
+    PrintJsonClose(BundleWarnings);
     return 0;
 }
 

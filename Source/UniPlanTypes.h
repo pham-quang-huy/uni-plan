@@ -19,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.70.0";
+static constexpr const char *kCliVersion = "0.71.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -622,6 +622,14 @@ struct FManifestRemoveOptions : BaseOptions
     std::string mTopic;
     int mPhaseIndex = -1;
     int mIndex = -1;
+};
+
+struct FManifestListOptions : BaseOptions
+{
+    std::string mTopic;         // optional — filters to single topic
+    int mPhaseIndex = -1;       // optional — filters to single phase
+    bool mbMissingOnly = false; // --missing-only: only emit entries whose
+                                // file_path does not resolve on disk
 };
 
 struct FManifestSetOptions : BaseOptions

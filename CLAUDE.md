@@ -182,6 +182,10 @@ appropriately for the kind of change introduced.
 
 ## documentation_rules
 
+### V4 bundle access — CLI-only
+
+**`.Plan.json` files MUST be accessed through the `uni-plan` CLI — never `json.load` / raw JSON parsing.** The CLI is the authoritative interface to the V4 bundle schema; raw reads bypass the typed domain model, validation, and schema-evolution guarantees. If a needed query isn't expressible via existing CLI commands, that is a CLI gap — report it and stop, do not work around with raw file reads. The `uni-plan validate` `summary` section and `uni-plan manifest list` command (both added in v0.71.0) cover the aggregate-query cases that previously tempted circumvention.
+
 ### V4 bundle model
 
 Each active topic is a single `.Plan.json` file in `Docs/Plans/`. The bundle contains all plan metadata, phases (with lifecycle + design material), changelogs, and verifications. Legacy markdown implementation/playbook documents may still exist in this repo for regression coverage, fixture data, or historical reference, but they are not the active source of truth for bundle-governed topics.
@@ -325,6 +329,10 @@ uni-plan blockers [--topic <T>] [--human]
 uni-plan validate [--topic <T>] [--strict] [--human]
 ```
 
+The default (non-`--human`) output is JSON with two top-level sections:
+- `issues[]` — one entry per failing check (id, severity, topic, path, line, detail)
+- `summary` — aggregate stats for cross-topic queries without raw JSON reads: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing` (count of `file_manifest[*].file_path` entries that don't resolve on disk). Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation.
+
 ### Semantic lifecycle commands
 
 Enforce gates with hard errors. Prefer these over raw `set` commands.
@@ -370,6 +378,7 @@ uni-plan testing add --topic <T> --phase <N> --session <text> --step <text> --ac
 uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
 uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
 uni-plan manifest remove --topic <T> --phase <N> --index <N>
+uni-plan manifest list [--topic <T>] [--phase <N>] [--missing-only]  # enumerate file_manifest entries; --missing-only filters to paths that don't resolve on disk
 uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]
 ```
 

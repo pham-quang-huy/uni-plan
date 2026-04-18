@@ -484,6 +484,52 @@ TEST_F(FBundleTestFixture, ValidatePassesOnValidFixture)
     EXPECT_EQ(Code, 0);
 }
 
+// v0.71.0: validate --json output must include a top-level `summary`
+// section with per-topic + per-phase aggregate stats so that cross-topic
+// audits don't require raw `.Plan.json` reads.
+TEST_F(FBundleTestFixture, ValidateEmitsSummaryWithTopicCount)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("summary"));
+    EXPECT_EQ(Json["summary"]["topic_count"].get<size_t>(), 1u);
+    ASSERT_TRUE(Json["summary"].contains("topics"));
+    ASSERT_EQ(Json["summary"]["topics"].size(), 1u);
+    EXPECT_EQ(Json["summary"]["topics"][0]["topic"].get<std::string>(),
+              "SampleTopic");
+}
+
+TEST_F(FBundleTestFixture, ValidateSummaryIncludesPhaseStats)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    const auto &Topic = Json["summary"]["topics"][0];
+    ASSERT_TRUE(Topic.contains("status_distribution"));
+    ASSERT_TRUE(Topic.contains("phases"));
+    ASSERT_GT(Topic["phases"].size(), 0u);
+    const auto &Phase0 = Topic["phases"][0];
+    EXPECT_TRUE(Phase0.contains("index"));
+    EXPECT_TRUE(Phase0.contains("status"));
+    EXPECT_TRUE(Phase0.contains("scope_chars"));
+    EXPECT_TRUE(Phase0.contains("design_chars"));
+    EXPECT_TRUE(Phase0.contains("jobs_count"));
+    EXPECT_TRUE(Phase0.contains("testing_count"));
+    EXPECT_TRUE(Phase0.contains("file_manifest_count"));
+    EXPECT_TRUE(Phase0.contains("file_manifest_missing"));
+}
+
 TEST_F(FBundleTestFixture, ValidateWarnsActivePhaseMissingActorCoverage)
 {
     CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
