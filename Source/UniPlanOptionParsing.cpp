@@ -1795,6 +1795,8 @@ ParseTestingAddOptions(const std::vector<std::string> &InTokens)
         throw UsageError("testing add requires --topic");
     if (Options.mPhaseIndex < 0)
         throw UsageError("testing add requires --phase");
+    if (Options.mSession.empty())
+        throw UsageError("testing add requires --session");
     if (Options.mStep.empty())
         throw UsageError("testing add requires --step");
     if (Options.mAction.empty())

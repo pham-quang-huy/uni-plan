@@ -218,7 +218,7 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 
 ### Structural — 15 checks (ErrorMajor + ErrorMinor)
 
-`required_fields`, `phases_present`, `phase_scope`, `phase_status_enum`, `job_required_fields`, `job_lane_ref`, `task_required_fields`, `lane_required_fields`, `changelog_phase_ref`, `changelog_required_fields`, `verification_phase_ref`, `verification_required_fields`, `testing_record_fields`, `file_manifest_fields`, `timestamp_format`.
+`required_fields`, `phases_present`, `phase_scope`, `job_required_fields`, `job_lane_ref`, `task_required_fields`, `lane_required_fields`, `changelog_phase_ref`, `changelog_required_fields`, `verification_phase_ref`, `verification_required_fields`, `testing_record_fields`, `file_manifest_fields`, `timestamp_format`.
 
 ### Structural warnings — 3 checks
 
@@ -311,7 +311,7 @@ uni-plan verification add --topic <T> [--phase <N>] --check <text> [--result <te
 uni-plan verification set --topic <T> --index <N> [--check <t>] [--result <t>] [--detail <t>]
 uni-plan lane set --topic <T> --phase <N> --lane <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
 uni-plan lane add --topic <T> --phase <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
-uni-plan testing add --topic <T> --phase <N> --step <text> --action <text> --expected <text> [--actor <human|ai|automated>] [--session <s>] [--evidence <t>]
+uni-plan testing add --topic <T> --phase <N> --session <text> --step <text> --action <text> --expected <text> [--actor <human|ai|automated>] [--evidence <t>]
 uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
 uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
 uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]

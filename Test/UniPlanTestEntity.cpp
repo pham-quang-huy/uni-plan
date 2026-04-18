@@ -48,9 +48,9 @@ TEST_F(FBundleTestFixture, TestingAddInvalidActorFails)
     CopyFixture("SampleTopic");
     StartCapture();
     const int Code = UniPlan::RunTestingAddCommand(
-        {"--topic", "SampleTopic", "--phase", "0", "--actor", "robot", "--step",
-         "X", "--action", "Y", "--expected", "Z", "--repo-root",
-         mRepoRoot.string()},
+        {"--topic", "SampleTopic", "--phase", "0", "--session", "T1", "--actor",
+         "robot", "--step", "X", "--action", "Y", "--expected", "Z",
+         "--repo-root", mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
@@ -61,11 +61,20 @@ TEST_F(FBundleTestFixture, TestingAddOutOfRangeFails)
     CopyFixture("SampleTopic");
     StartCapture();
     const int Code = UniPlan::RunTestingAddCommand(
-        {"--topic", "SampleTopic", "--phase", "99", "--step", "X", "--action",
-         "Y", "--expected", "Z", "--repo-root", mRepoRoot.string()},
+        {"--topic", "SampleTopic", "--phase", "99", "--session", "T1", "--step",
+         "X", "--action", "Y", "--expected", "Z", "--repo-root",
+         mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
+}
+
+TEST(OptionParsing, TestingAddRequiresSession)
+{
+    EXPECT_THROW(UniPlan::ParseTestingAddOptions(
+                     {"--topic", "T", "--phase", "0", "--step", "X", "--action",
+                      "Y", "--expected", "Z"}),
+                 UniPlan::UsageError);
 }
 
 // ===================================================================

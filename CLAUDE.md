@@ -231,7 +231,6 @@ Required fields, index references, enum values, timestamp format, and referentia
 | `required_fields` | ErrorMajor | topic key + title |
 | `phases_present` | ErrorMajor | ≥1 phase |
 | `phase_scope` | ErrorMinor | per-phase scope non-empty |
-| `phase_status_enum` | ErrorMinor | valid enum value |
 | `job_required_fields` / `task_required_fields` / `lane_required_fields` | ErrorMinor | required child fields |
 | `job_lane_ref` | ErrorMinor | job→lane index valid |
 | `changelog_phase_ref` / `verification_phase_ref` | ErrorMinor | phase index valid |
@@ -367,7 +366,7 @@ uni-plan verification add --topic <T> [--phase <N>] --check <text> [--result <te
 uni-plan verification set --topic <T> --index <N> [--check <t>] [--result <t>] [--detail <t>]
 uni-plan lane set --topic <T> --phase <N> --lane <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
 uni-plan lane add --topic <T> --phase <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
-uni-plan testing add --topic <T> --phase <N> --step <text> --action <text> --expected <text> [--actor <human|ai|automated>] [--session <s>] [--evidence <t>]
+uni-plan testing add --topic <T> --phase <N> --session <text> --step <text> --action <text> --expected <text> [--actor <human|ai|automated>] [--evidence <t>]
 uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
 uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
 uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]

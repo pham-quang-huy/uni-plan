@@ -490,18 +490,6 @@ static void EvalPhaseScope(const std::vector<FTopicBundle> &InBundles,
 }
 
 // 5. phase_status_enum (ErrorMinor)
-static void EvalPhaseStatusEnum(const std::vector<FTopicBundle> &InBundles,
-                                std::vector<ValidateCheck> &OutChecks)
-{
-    // EExecutionStatus is already an enum — deserialization validates.
-    // This check catches phases where the raw JSON had an invalid string
-    // that was lenient-parsed to NotStarted.
-    // In V4 strict mode, invalid enums would fail at load time.
-    // This is a safety net for lenient parsing.
-    (void)InBundles;
-    (void)OutChecks;
-}
-
 // 6. job_required_fields (ErrorMinor)
 static void EvalJobRequiredFields(const std::vector<FTopicBundle> &InBundles,
                                   std::vector<ValidateCheck> &OutChecks)
@@ -1490,7 +1478,8 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
 
     // ErrorMinor
     EvalPhaseScope(InBundles, Checks);
-    EvalPhaseStatusEnum(InBundles, Checks);
+    // phase_status_enum removed in v0.69.0 - EExecutionStatus is enforced
+    // at JSON parse time; the separate post-parse check was a no-op.
     EvalJobRequiredFields(InBundles, Checks);
     EvalJobLaneRef(InBundles, Checks);
     EvalTaskRequiredFields(InBundles, Checks);
