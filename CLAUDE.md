@@ -369,6 +369,7 @@ uni-plan lane add --topic <T> --phase <N> [--status <s>] [--scope <t>] [--exit-c
 uni-plan testing add --topic <T> --phase <N> --session <text> --step <text> --action <text> --expected <text> [--actor <human|ai|automated>] [--evidence <t>]
 uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
 uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
+uni-plan manifest remove --topic <T> --phase <N> --index <N>
 uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]
 ```
 

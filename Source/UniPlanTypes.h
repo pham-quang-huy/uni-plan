@@ -19,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.69.0";
+static constexpr const char *kCliVersion = "0.70.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -615,6 +615,13 @@ struct FVerificationSetOptions : BaseOptions
     std::string mCheck;
     std::string mResult;
     std::string mDetail;
+};
+
+struct FManifestRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mIndex = -1;
 };
 
 struct FManifestSetOptions : BaseOptions

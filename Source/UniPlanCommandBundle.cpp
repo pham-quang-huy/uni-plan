@@ -4671,6 +4671,72 @@ int RunManifestSetCommand(const std::vector<std::string> &InArgs,
 }
 
 // ---------------------------------------------------------------------------
+// manifest remove - drop a file manifest entry by index
+//
+// Needed to undo bad manifest adds (e.g., invented file paths that
+// don't exist on disk). No trailing-only restriction - unlike phase
+// remove, file_manifest entries are not referenced by other entities
+// so removing any index is safe. Auto-changelog is filed phase-scoped
+// (not targeted at the removed index) so the removed-index path does
+// not dangle.
+// ---------------------------------------------------------------------------
+
+int RunManifestRemoveCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot)
+{
+    const FManifestRemoveOptions Options = ParseManifestRemoveOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    if (static_cast<size_t>(Options.mIndex) >= Phase.mFileManifest.size())
+    {
+        std::cerr << "Manifest index out of range: " << Options.mIndex
+                  << " (size " << Phase.mFileManifest.size() << ")\n";
+        return 1;
+    }
+
+    const std::string RemovedFile =
+        Phase.mFileManifest[static_cast<size_t>(Options.mIndex)].mFilePath;
+    Phase.mFileManifest.erase(Phase.mFileManifest.begin() + Options.mIndex);
+
+    const std::string PhaseTarget = MakePhaseTarget(Options.mPhaseIndex);
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back({"file_manifest[" + std::to_string(Options.mIndex) + "]",
+                       {RemovedFile, "(removed)"}});
+
+    AppendAutoChangelog(Bundle, PhaseTarget,
+                        "file_manifest[" + std::to_string(Options.mIndex) +
+                            "] removed from phases[" +
+                            std::to_string(Options.mPhaseIndex) +
+                            "]: " + RemovedFile);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, PhaseTarget, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // changelog set — modify an existing changelog entry by index
 // ---------------------------------------------------------------------------
 

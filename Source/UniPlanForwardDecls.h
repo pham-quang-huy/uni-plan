@@ -175,6 +175,8 @@ FVerificationSetOptions
 ParseVerificationSetOptions(const std::vector<std::string> &InTokens);
 FManifestSetOptions
 ParseManifestSetOptions(const std::vector<std::string> &InTokens);
+FManifestRemoveOptions
+ParseManifestRemoveOptions(const std::vector<std::string> &InTokens);
 FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens);
 FChangelogSetOptions
 ParseChangelogSetOptions(const std::vector<std::string> &InTokens);
@@ -494,6 +496,8 @@ int RunTestingSetCommand(const std::vector<std::string> &InArgs,
                          const std::string &InRepoRoot);
 int RunVerificationSetCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot);
+int RunManifestRemoveCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot);
 int RunManifestSetCommand(const std::vector<std::string> &InArgs,
                           const std::string &InRepoRoot);
 int RunLaneAddCommand(const std::vector<std::string> &InArgs,

@@ -1968,6 +1968,40 @@ ParseVerificationSetOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FManifestRemoveOptions
+ParseManifestRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FManifestRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for manifest remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("manifest remove requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("manifest remove requires --phase");
+    if (Options.mIndex < 0)
+        throw UsageError("manifest remove requires --index");
+    return Options;
+}
+
 FManifestSetOptions
 ParseManifestSetOptions(const std::vector<std::string> &InTokens)
 {

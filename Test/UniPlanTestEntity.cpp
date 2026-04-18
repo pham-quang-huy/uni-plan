@@ -275,6 +275,46 @@ TEST_F(FBundleTestFixture, ManifestSetOutOfRangeFails)
     EXPECT_EQ(Code, 1);
 }
 
+TEST_F(FBundleTestFixture, ManifestRemoveDropsEntry)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t CountBefore = Before.mPhases[1].mFileManifest.size();
+    ASSERT_GT(CountBefore, 0u);
+    const std::string RemovedFile =
+        Before.mPhases[1].mFileManifest[0].mFilePath;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestRemoveCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--index", "0",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mFileManifest.size(), CountBefore - 1);
+    EXPECT_GT(After.mChangeLogs.size(), 0u);
+    EXPECT_NE(After.mChangeLogs.back().mChange.find("file_manifest[0] removed"),
+              std::string::npos);
+    EXPECT_NE(After.mChangeLogs.back().mChange.find(RemovedFile),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, ManifestRemoveOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunManifestRemoveCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--index", "999",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
 // ===================================================================
 // lane add
 // ===================================================================
