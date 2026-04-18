@@ -2394,8 +2394,19 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
-    AppendAutoChangelog(Bundle, Target,
-                        Desc.empty() ? Target + " updated" : Desc);
+    // Build the changelog message from the full field list so repeated
+    // set calls with different field subsets produce distinct entries.
+    // Previously only the last-changed field ended up in Desc, which
+    // caused no_duplicate_changelog warnings whenever the same single
+    // field was set twice.
+    std::string FieldList;
+    for (const auto &C : Changes)
+    {
+        if (!FieldList.empty())
+            FieldList += ", ";
+        FieldList += C.first;
+    }
+    AppendAutoChangelog(Bundle, Target, Target + " updated: " + FieldList);
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
@@ -2841,8 +2852,19 @@ int RunJobSetCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
-    AppendAutoChangelog(Bundle, Target,
-                        Desc.empty() ? Target + " updated" : Desc);
+    // Build the changelog message from the full field list so repeated
+    // set calls with different field subsets produce distinct entries.
+    // Previously only the last-changed field ended up in Desc, which
+    // caused no_duplicate_changelog warnings whenever the same single
+    // field was set twice.
+    std::string FieldList;
+    for (const auto &C : Changes)
+    {
+        if (!FieldList.empty())
+            FieldList += ", ";
+        FieldList += C.first;
+    }
+    AppendAutoChangelog(Bundle, Target, Target + " updated: " + FieldList);
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
@@ -4242,8 +4264,19 @@ int RunLaneSetCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
-    AppendAutoChangelog(Bundle, Target,
-                        Desc.empty() ? Target + " updated" : Desc);
+    // Build the changelog message from the full field list so repeated
+    // set calls with different field subsets produce distinct entries.
+    // Previously only the last-changed field ended up in Desc, which
+    // caused no_duplicate_changelog warnings whenever the same single
+    // field was set twice.
+    std::string FieldList;
+    for (const auto &C : Changes)
+    {
+        if (!FieldList.empty())
+            FieldList += ", ";
+        FieldList += C.first;
+    }
+    AppendAutoChangelog(Bundle, Target, Target + " updated: " + FieldList);
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
@@ -4304,9 +4337,11 @@ int RunTestingAddCommand(const std::vector<std::string> &InArgs,
     const std::string Target =
         MakePhaseTarget(Options.mPhaseIndex) + ".testing";
 
+    const size_t NewTestingIndex = Phase.mTesting.size() - 1;
     AppendAutoChangelog(Bundle, Target,
-                        "Testing record added to phase " +
-                            std::to_string(Options.mPhaseIndex));
+                        "testing[" + std::to_string(NewTestingIndex) +
+                            "] added to phases[" +
+                            std::to_string(Options.mPhaseIndex) + "]");
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
@@ -4368,8 +4403,12 @@ int RunManifestAddCommand(const std::vector<std::string> &InArgs,
     const std::string Target =
         MakePhaseTarget(Options.mPhaseIndex) + ".file_manifest";
 
+    const size_t NewManifestIndex = Phase.mFileManifest.size() - 1;
     AppendAutoChangelog(Bundle, Target,
-                        "File manifest entry added: " + Options.mFile);
+                        "file_manifest[" + std::to_string(NewManifestIndex) +
+                            "] added to phases[" +
+                            std::to_string(Options.mPhaseIndex) +
+                            "]: " + Options.mFile);
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
