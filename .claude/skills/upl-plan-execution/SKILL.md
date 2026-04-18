@@ -6,6 +6,8 @@ implicit_invocation: true
 
 # UPL Plan Execution
 
+**HARD RULE — CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. All reads and mutations go through the `uni-plan` CLI; the skill's "direct manual bundle repair" escape hatch refers to hand-editing via an editor when explicitly requested, not programmatic raw JSON access. See `CLAUDE.md` `V4 bundle access — CLI-only` for the full rule.
+
 Use this skill to execute plan phases with proper governance gates and automatic re-auditing.
 
 Treat the bundle itself as the execution source of truth. Use `phases[n]`-style references in bundle text and evidence, and only mention legacy phase keys when quoting a real historical filename. Prefer CLI mutations, but honor explicit user requests for direct manual bundle repair and re-validate immediately after.

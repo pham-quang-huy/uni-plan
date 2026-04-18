@@ -13,6 +13,8 @@ Use this skill to add a new validation check to the uni-plan CLI.
 Before adding a check, read:
 1. `Source/UniPlanValidation.cpp` — existing **28 evaluators** (15 structural + 3 warnings + 13 content-hygiene) and `ValidateAllBundles()`
 2. `Source/UniPlanTypes.h` — `kCliVersion` and `ValidateCheck` struct
+
+Note: inside C++ validator code, reading `FTopicBundle` fields directly is expected — that is the validator's job. The CLI-only rule binds authoring/audit skills that operate against `.Plan.json` externally, not the validator internals.
 3. `Source/UniPlanTopicTypes.h` — `FTopicBundle`, `FPhaseRecord`, `FPhaseLifecycle`, `FPhaseDesignMaterial`
 4. `Source/UniPlanEnums.h` — `EValidationSeverity` (ErrorMajor, ErrorMinor, Warning)
 5. Existing check tiers — pick the right category for your new check:
