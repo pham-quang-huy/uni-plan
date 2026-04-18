@@ -115,6 +115,8 @@ void PrintUsage()
     std::cout << "  uni-plan phase add --topic <T> "
                  "[--scope <t>] [--output <t>] [--status <s>]\n";
     std::cout << "  uni-plan phase remove --topic <T> --phase <N>\n";
+    std::cout << "  uni-plan phase normalize --topic <T> "
+                 "--phase <N> [--dry-run]\n";
     std::cout << "  uni-plan job set --topic <T> "
                  "--phase <N> --job <N> [--status <s>] "
                  "[--scope <t>] ...\n";
