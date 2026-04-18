@@ -318,50 +318,6 @@ ResolvedDocument ReadAndParseDocument(const BaseOptions &InOptions,
 // From DocValidation.cpp
 LintResult BuildLintResult(const std::string &InRepoRoot,
                            const bool InQuiet = false);
-PlanSchemaValidationResult
-EvaluatePlanSchemaConformance(const fs::path &InRepoRoot,
-                              const std::vector<DocumentRecord> &InPlans,
-                              std::vector<std::string> &OutWarnings);
-BlankSectionsResult
-EvaluateBlankSections(const fs::path &InRepoRoot,
-                      const std::vector<DocumentRecord> &InPlans,
-                      std::vector<std::string> &OutWarnings);
-CrossStatusResult
-EvaluateCrossStatus(const fs::path &InRepoRoot,
-                    const std::vector<TopicPairRecord> &InPairs,
-                    std::vector<std::string> &OutWarnings);
-TaxonomyJobCompletenessResult
-EvaluateTaxonomyJobCompleteness(const fs::path &InRepoRoot,
-                                const std::vector<DocumentRecord> &InPlaybooks,
-                                std::vector<std::string> &OutWarnings);
-TaxonomyTaskTraceabilityResult
-EvaluateTaxonomyTaskTraceability(const fs::path &InRepoRoot,
-                                 const std::vector<DocumentRecord> &InPlaybooks,
-                                 std::vector<std::string> &OutWarnings);
-ValidationHeadingOwnershipResult EvaluateValidationHeadingOwnership(
-    const fs::path &InRepoRoot, const std::vector<DocumentRecord> &InPlans,
-    const std::vector<DocumentRecord> &InImplementations,
-    std::vector<std::string> &OutWarnings);
-TestingActorCoverageResult
-EvaluateTestingActorCoverage(const fs::path &InRepoRoot,
-                             const std::vector<DocumentRecord> &InPlaybooks,
-                             std::vector<std::string> &OutWarnings);
-ImplSchemaValidationResult
-EvaluateImplSchemaConformance(const fs::path &InRepoRoot,
-                              const std::vector<DocumentRecord> &InImpls,
-                              std::vector<std::string> &OutWarnings);
-PlaybookOrderResult
-EvaluatePlaybookCanonicalOrder(const fs::path &InRepoRoot,
-                               const std::vector<DocumentRecord> &InPlaybooks,
-                               std::vector<std::string> &OutWarnings);
-PlaybookHeadingNamingResult
-EvaluatePlaybookHeadingNaming(const fs::path &InRepoRoot,
-                              const std::vector<DocumentRecord> &InPlaybooks,
-                              std::vector<std::string> &OutWarnings);
-PlaybookBlankSectionsResult
-EvaluatePlaybookBlankSections(const fs::path &InRepoRoot,
-                              const std::vector<DocumentRecord> &InPlaybooks,
-                              std::vector<std::string> &OutWarnings);
 std::vector<ValidateCheck>
 ValidateAllBundles(const std::vector<FTopicBundle> &InBundles);
 
@@ -386,29 +342,10 @@ void AppendSidecarIntegrityWarnings(
 CacheConfigResult WriteCacheConfig(const std::string &InRepoRoot,
                                    const CacheConfigOptions &InOptions,
                                    const DocConfig &InCurrentConfig);
-bool IsSupportedSchemaType(const std::string &InType);
 std::vector<RuleEntry> BuildRules(const fs::path &InRepoRoot,
                                   std::vector<std::string> &OutWarnings);
 bool HasIndexedHeadingPrefix(const std::string &InHeadingText);
 std::string ExtractPhaseKeyFromCell(const std::string &InCellValue);
-PhaseEntryGateResult
-EvaluatePhaseEntryGate(const fs::path &InRepoRoot,
-                       const std::vector<DocumentRecord> &InPlans,
-                       const std::vector<DocumentRecord> &InPlaybooks,
-                       std::vector<std::string> &OutWarnings);
-ArtifactRoleBoundaryResult EvaluateArtifactRoleBoundaries(
-    const fs::path &InRepoRoot, const std::vector<DocumentRecord> &InPlaybooks,
-    const std::vector<DocumentRecord> &InImplementations,
-    std::vector<std::string> &OutWarnings);
-PlaybookSchemaResult
-EvaluatePlaybookSchema(const fs::path &InRepoRoot,
-                       const std::vector<DocumentRecord> &InPlaybooks,
-                       std::vector<std::string> &OutWarnings);
-std::vector<SectionSchemaEntry>
-BuildSectionSchemaEntries(const std::string &InType,
-                          const fs::path &InRepoRoot = fs::path());
-fs::path ResolveSchemaFilePath(const std::string &InType,
-                               const fs::path &InRepoRoot);
 
 // From UniPlanCommandBundle.cpp
 bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
@@ -509,8 +446,5 @@ int RunLaneAddCommand(const std::vector<std::string> &InArgs,
 int RunChangelogSetCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot);
 
-// From UniPlanParsing.cpp
-std::vector<SectionSchemaEntry>
-TryParseSectionSchemaFromFile(const fs::path &InSchemaPath);
 
 } // namespace UniPlan
