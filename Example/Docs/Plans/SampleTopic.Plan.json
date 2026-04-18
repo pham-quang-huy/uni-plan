@@ -20,7 +20,7 @@
   "execution_strategy": "Phase 0 is completed (reference data). Phase 1 is in_progress with partial job completion. Phase 2 is not_started (ready for phase start gate testing).",
   "locked_decisions": "",
   "source_references": "",
-  "dependencies": "",
+  "dependencies": [],
   "next_actions": "Continue phase 1 execution, then start phase 2.",
   "phases": [
     {

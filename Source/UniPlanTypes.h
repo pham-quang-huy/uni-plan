@@ -19,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.53.0";
+static constexpr const char *kCliVersion = "0.63.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -397,7 +397,11 @@ struct FTopicSetOptions : BaseOptions
     std::string mExecutionStrategy;
     std::string mLockedDecisions;
     std::string mSourceReferences;
-    std::string mDependencies;
+    // Typed dependencies mutation (replaces the former string form).
+    // --dependency-clear empties the existing vector before --dependency-add
+    // entries are appended.
+    bool mbDependencyClear = false;
+    std::vector<FBundleReference> mDependencyAdd;
 };
 
 struct FPhaseSetOptions : BaseOptions
@@ -423,7 +427,9 @@ struct FPhaseSetOptions : BaseOptions
     // Typed validation_commands mutation (see FTopicSetOptions above).
     bool mbValidationClear = false;
     std::vector<FValidationCommand> mValidationAdd;
-    std::string mPhaseDependencies;
+    // Typed dependencies mutation (see FTopicSetOptions above).
+    bool mbDependencyClear = false;
+    std::vector<FBundleReference> mDependencyAdd;
 };
 
 struct FJobSetOptions : BaseOptions

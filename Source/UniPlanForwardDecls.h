@@ -427,6 +427,8 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
                        const std::string &InRepoRoot);
 int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
                        const std::string &InRepoRoot);
+int RunPhaseRemoveCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
 int RunJobSetCommand(const std::vector<std::string> &InArgs,
                      const std::string &InRepoRoot);
 int RunTaskSetCommand(const std::vector<std::string> &InArgs,

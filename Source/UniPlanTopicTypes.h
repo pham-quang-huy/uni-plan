@@ -82,7 +82,7 @@ struct FPhaseDesignMaterial
 {
     std::string mInvestigation;
     std::string mCodeSnippets;
-    std::string mDependencies;
+    std::vector<FBundleReference> mDependencies;
     std::string mReadinessGate;
     std::string mHandoff;
     std::string mCodeEntityContract;
@@ -127,7 +127,7 @@ struct FPlanMetadata
     std::string mExecutionStrategy;
     std::string mLockedDecisions;
     std::string mSourceReferences;
-    std::string mDependencies;
+    std::vector<FBundleReference> mDependencies;
 };
 
 // ---------------------------------------------------------------------------

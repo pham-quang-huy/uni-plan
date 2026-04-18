@@ -1,6 +1,7 @@
 #include "UniPlanTestFixture.h"
 
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJsonIO.h"
 #include "UniPlanTypes.h"
 
 #include <gtest/gtest.h>
@@ -84,7 +85,8 @@ TEST_F(FBundleTestFixture, TopicSetMetadataMultipleFields)
     StartCapture();
     const int Code = UniPlan::RunTopicSetCommand(
         {"--topic", "SampleTopic", "--goals", "G1\nG2", "--risks", "R1",
-         "--dependencies", "Dep1", "--repo-root", mRepoRoot.string()},
+         "--dependency-add", "bundle|ClientServer|||needs client API",
+         "--repo-root", mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
@@ -93,7 +95,11 @@ TEST_F(FBundleTestFixture, TopicSetMetadataMultipleFields)
     ASSERT_TRUE(ReloadBundle("SampleTopic", After));
     EXPECT_EQ(After.mMetadata.mGoals, "G1\nG2");
     EXPECT_EQ(After.mMetadata.mRisks, "R1");
-    EXPECT_EQ(After.mMetadata.mDependencies, "Dep1");
+    ASSERT_EQ(After.mMetadata.mDependencies.size(), 1u);
+    EXPECT_EQ(After.mMetadata.mDependencies[0].mKind,
+              UniPlan::EDependencyKind::Bundle);
+    EXPECT_EQ(After.mMetadata.mDependencies[0].mTopic, "ClientServer");
+    EXPECT_EQ(After.mMetadata.mDependencies[0].mNote, "needs client API");
 }
 
 TEST_F(FBundleTestFixture, TopicSetNoFieldsFails)
@@ -150,6 +156,88 @@ TEST_F(FBundleTestFixture, PhaseSetOutOfRangeFails)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, PhaseRemoveTrailingNotStartedPhase)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 3,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseRemoveCommand(
+        {"--topic", "T", "--phase", "2", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases.size(), 2u);
+    EXPECT_GT(After.mChangeLogs.size(), 0u);
+    // Removal changelog is filed topic-scoped (mPhase=-1, mAffected="plan")
+    // because the phase it references no longer exists — leaving it
+    // phase-scoped would dangle and trip changelog_phase_ref.
+    EXPECT_EQ(After.mChangeLogs.back().mPhase, -1);
+    EXPECT_NE(After.mChangeLogs.back().mChange.find("Removed phases[2]"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseRemoveRefusesNonTrailingPhase)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 3,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseRemoveCommand(
+        {"--topic", "T", "--phase", "1", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("trailing phase"), std::string::npos);
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases.size(), 3u);
+}
+
+TEST_F(FBundleTestFixture, PhaseRemoveRefusesInProgressPhase)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseRemoveCommand(
+        {"--topic", "T", "--phase", "1", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("not_started"), std::string::npos);
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases.size(), 2u);
+}
+
+TEST_F(FBundleTestFixture, PhaseRemoveRefusesWhenChangelogReferences)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FChangeLogEntry C;
+    C.mDate = "2026-04-18";
+    C.mChange = "Note referencing the trailing phase";
+    C.mPhase = 1;
+    Bundle.mChangeLogs.push_back(C);
+    const fs::path BundlePath = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string WriteError;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, BundlePath, WriteError))
+        << WriteError;
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseRemoveCommand(
+        {"--topic", "T", "--phase", "1", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("changelogs[]"), std::string::npos);
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases.size(), 2u);
 }
 
 TEST_F(FBundleTestFixture, PhaseSetDesignMaterial)
@@ -396,9 +484,9 @@ TEST_F(FBundleTestFixture, ChangelogSetUpdatesEntry)
 
     StartCapture();
     const int Code = UniPlan::RunChangelogSetCommand(
-        {"--topic", "SampleTopic", "--index", "0", "--phase", "2",
-         "--change", "Retargeted entry", "--type", "fix", "--affected",
-         "phases[2].jobs[0]", "--repo-root", mRepoRoot.string()},
+        {"--topic", "SampleTopic", "--index", "0", "--phase", "2", "--change",
+         "Retargeted entry", "--type", "fix", "--affected", "phases[2].jobs[0]",
+         "--repo-root", mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);

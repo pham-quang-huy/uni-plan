@@ -83,6 +83,25 @@ struct FValidationCommand
 };
 
 // ---------------------------------------------------------------------------
+// FBundleReference — one row in a bundle's dependencies table.
+// Replaces the former `std::string mDependencies` markdown-table field with
+// a typed record so dependency integrity (topic resolves, phase index valid)
+// can be enforced at parse time rather than by regex-scanning prose.
+//
+// mTopic is the only required field for Kind=Bundle/Phase. For Governance
+// or External refs, mPath points at the doc; mTopic may be empty.
+// ---------------------------------------------------------------------------
+
+struct FBundleReference
+{
+    EDependencyKind mKind = EDependencyKind::Bundle;
+    std::string mTopic; // topic key, e.g. "ClientServer"
+    int mPhase = -1;    // phases[N] if mKind==Phase, -1 otherwise
+    std::string mPath;  // file path (Governance/External)
+    std::string mNote;  // freeform description
+};
+
+// ---------------------------------------------------------------------------
 // FPhaseTaxonomy — display-oriented taxonomy for watch mode panels.
 // Tasks are flat here for display convenience (flattened from
 // nested FJobRecord.mTasks).

@@ -247,28 +247,42 @@ Required fields, index references, enum values, timestamp format, and referentia
 | `testing_actor_coverage` | phase has human + ai records |
 | `canonical_entity_ref` | `changelogs[*].affected` path format |
 
-### Content-hygiene checks (ErrorMinor + Warning) — 15 checks
+### Content-hygiene checks (ErrorMinor + Warning) — 11 checks
 
-Detect V3→V4 drift, agent-safety hazards, format inconsistencies, and reference integrity in prose fields. All flip `valid=false` under `--strict`. Completed topics and completed phases are exempt from most active-governance content checks — their prose is a historical log, not prescriptive instructions.
+Detect agent-safety hazards, format inconsistencies, and reference integrity in prose fields. All flip `valid=false` under `--strict`.
+
+Per-phase scan scope is structurally partitioned into three field classes, each independently status-filtered via `EPhaseEvidenceScope { AllPhases, NotCompleted, CompletedOnly }`:
+
+| Field class | Fields | Rationale |
+|---|---|---|
+| Prescriptive | `scope`, `output`, all `design.*`, `dependencies[].*`, `validation_commands[].*`, `lanes[].*`, `jobs[].{scope, output, exit_criteria}`, `jobs[].tasks[].description`, `testing[].{step, action, expected}` | Forward-looking contract — format hygiene applies always. |
+| Evidence (inside design) | `jobs[].tasks[].{evidence, notes}`, `testing[].evidence` | Execution proof. |
+| Lifecycle | `lifecycle.{done, remaining, blockers}` | Historical on completed phases. |
+
+Per-check scope:
+
+| Check | Prescriptive | Evidence | Lifecycle |
+|---|---|---|---|
+| `no_dev_absolute_path`, `no_hardcoded_endpoint`, `no_smart_quotes`, `no_html_in_prose` | All phases | AllPhases | — |
+| `no_unresolved_marker` | All phases | CompletedOnly | CompletedOnly |
+| `no_empty_placeholder_literal` | — | — | AllPhases |
+
+V3-era vocabulary/filename/CLI drift checks (`v3_terminology_free`, `legacy_cli_free`, `stale_plan_md_reference`, `canonical_phase_ref_prose`) were removed in v0.62.0. Pattern-enumeration against free-text prose is an open-ended treadmill that can never be complete; once V3 artifacts are gone from the corpus, drift prevention belongs in `AGENTS.md` / `CLAUDE.md` authoring discipline and human review, not in validator regex.
 
 | Check ID | Severity | What it catches |
 |---|---|---|
 | `no_dev_absolute_path` | ErrorMinor | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` in prose |
 | `topic_ref_integrity` | ErrorMinor | `<X>.Plan.json` references where X is not a real topic |
-| `shell_syntax_sane` | ErrorMinor | Mangled shell syntax in `validation_commands` (e.g. `call /"`, `/"C:/`, `/\|` — signatures of `\ → /` rewrite corruption) |
 | `path_resolves` | ErrorMinor | Impossible path refs (`Docs/Implementation/X.Plan.json` — V4 bundles live at `Docs/Plans/`, not `Docs/Implementation/` or `Docs/Playbooks/`) |
-| `legacy_cli_free` | Warning | V3 `doc.exe`/`doc lint`/`doc phase`/`doc artifacts`/`FIE_Doc/doc` (exempts completed phases/topics) |
-| `v3_terminology_free` | Warning | V3 plan-triad vocabulary: `playbook and detached sidecars`, `Sidecar evidence channels`, `plan/implementation/playbook`, `.Impl.md`, `.Playbook.md`, `canonical pairing`, `Active-phase playbook`, `phase-scoped playbook`, `implementation tracker(s)`, `tracker contract`, `Plan contract`, `Paired plan/tracker`, `playbook pairing`, `playbook/sidecar discoverability`, `plan/tracker/playbook` triad, `plan/implementation pairing`, `Docs/Implementation/`…`.Plan.json`, `Docs/Playbooks/`…`.Plan.json` |
-| `canonical_phase_ref_prose` | Warning | Legacy `phase key (P5)` / `P6 → P7` / `MP-19a` aliases **AND** standalone `P<N>` (bare or backtick-quoted `` `P5` ``) in prescriptive fields. Cap of 3 digits excludes C++ proposal numbers (`P2996`) and other non-phase P-codes. Skips historical markers (`Plan.md task P`, `original P`, `legacy P`, `- P<N> `) and statistical percentiles (`P50/P95/P99`). |
 | `no_hardcoded_endpoint` | Warning | `localhost:N`, `127.0.0.1`, `192.168.*.*`, `10.*.*.*` in prose |
-| `validation_command_fields` | ErrorMinor / Warning | Each `FValidationCommand` record must have a non-empty `command` (ErrorMinor) and a non-empty `description` (Warning). Replaces the former stringly-typed `mValidationCommands` field with `std::vector<FValidationCommand>` where each record has `{platform, command, description}`. |
-| `validation_command_platform_consistency` | Warning | A validation command with Windows-specific backslash path segments (`\Windows-x64\`, `\Debug\`, `\Tools\`) must set `platform: windows`. Flags commands whose `platform` is `any`/`macos`/`linux` but whose `command` text contains Windows-only path syntax — a mis-tagged platform scope. Replaces the deleted `platform_path_sep_free` workaround (which line-sniffed `Windows \|` prefixes). |
+| `validation_command_fields` | ErrorMinor / Warning | Each `FValidationCommand` record must have a non-empty `command` (ErrorMinor) and a non-empty `description` (Warning). |
+| `validation_command_platform_consistency` | Warning | A validation command with Windows-specific backslash path segments (`\Windows-x64\`, `\Debug\`, `\Tools\`) must set `platform: windows`. |
 | `no_smart_quotes` | Warning | Unicode curly quotes `" " ' '` and en/em-dashes |
 | `no_html_in_prose` | Warning | `<br>`, `<div>`, `<span>`, `<p>`, `<hN>` tags |
 | `no_empty_placeholder_literal` | Warning | `"None"`/`"N/A"`/`"TBD"`/`"-"` literal strings (use empty) |
-| `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in governance prose or completed phases |
-| `stale_plan_md_reference` | Warning | `.Plan.md` filenames (V4 uses `.Plan.json`) |
+| `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in prescriptive prose and completed-phase evidence/lifecycle |
 | `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
+| `no_duplicate_phase_field` | Warning | Two phases of the same bundle share byte-identical non-empty content (≥20 chars) in a prescriptive field (`scope`, `output`, `handoff`, `readiness_gate`, `investigation`, `code_entity_contract`, `code_snippets`, `best_practices`) — signature of a migration script that stamped the same template across many phases |
 
 ### `--strict` flag
 
@@ -341,6 +355,7 @@ Low-level field setters. Use semantic commands above when possible.
 ```bash
 uni-plan topic set --topic <T> [--status <s>] [--next-actions <text>] [--summary <t>] [--goals <t>] [--non-goals <t>] [--risks <t>] [--acceptance-criteria <t>] [--problem-statement <t>] [--validation-commands <t>] [--baseline-audit <t>] [--execution-strategy <t>] [--locked-decisions <t>] [--source-references <t>] [--dependencies <t>]
 uni-plan phase set --topic <T> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>] [--scope <t>] [--output <t>] [--investigation <t>] [--code-entity-contract <t>] [--code-snippets <t>] [--best-practices <t>] [--multi-platforming <t>] [--readiness-gate <t>] [--handoff <t>] [--validation-commands <t>] [--phase-dependencies <t>]
+uni-plan phase remove --topic <T> --phase <N>  # trailing-only; requires not_started + no changelog/verification refs
 uni-plan job set --topic <T> --phase <N> --job <N> [--status <s>] [--scope <t>] [--output <t>] [--exit-criteria <t>] [--lane <N>] [--wave <N>]
 uni-plan task set --topic <T> --phase <N> --job <N> --task <N> [--status <s>] [--evidence <t>] [--notes <t>]
 uni-plan changelog add --topic <T> [--phase <N>] --change <text> [--type <feat|fix|refactor|chore>] [--affected <t>]

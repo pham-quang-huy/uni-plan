@@ -73,141 +73,6 @@ MakeVC(const std::string &InCommand, const std::string &InDescription = "test",
 } // namespace
 
 // -------------------------------------------------------------------
-// legacy_cli_free — V3 `doc` CLI references
-// -------------------------------------------------------------------
-
-TEST_F(FBundleTestFixture, LegacyCliFreeFlagsDocExe)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mMetadata.mValidationCommands = {
-        MakeVC("`FIE_Doc/doc lint` is the old way")};
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    const int Code = UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    EXPECT_EQ(Code, 0);
-    const auto Json = ParseCapturedJSON();
-    const auto Issue = FirstIssueWithId(Json, "legacy_cli_free");
-    ASSERT_FALSE(Issue.empty());
-    EXPECT_EQ(Issue["severity"], "warning");
-    EXPECT_EQ(Issue["topic"], "T");
-    EXPECT_EQ(Issue["path"], "validation_commands[0].command");
-}
-
-TEST_F(FBundleTestFixture, LegacyCliFreeCleanBundlePasses)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mMetadata.mValidationCommands = {
-        MakeVC("`uni-plan validate --strict`")};
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(CountIssuesWithId(Json, "legacy_cli_free"), 0);
-}
-
-// -------------------------------------------------------------------
-// v3_terminology_free — plan/impl/playbook vocabulary
-// -------------------------------------------------------------------
-
-TEST_F(FBundleTestFixture, V3TerminologyFreeFlagsPlaybookSidecars)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mPhases[0].mDesign.mReadinessGate =
-        "This playbook and detached sidecars must be created first.";
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    const auto Json = ParseCapturedJSON();
-    const auto Issue = FirstIssueWithId(Json, "v3_terminology_free");
-    ASSERT_FALSE(Issue.empty());
-    EXPECT_EQ(Issue["severity"], "warning");
-}
-
-TEST_F(FBundleTestFixture, V3TerminologyFreeCleanBundlePasses)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mPhases[0].mDesign.mReadinessGate =
-        "Bundle entry `phases[0]` is fully populated.";
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(CountIssuesWithId(Json, "v3_terminology_free"), 0);
-}
-
-// -------------------------------------------------------------------
-// canonical_phase_ref_prose — legacy P5/P6→P7/MP-19a aliases
-// -------------------------------------------------------------------
-
-TEST_F(FBundleTestFixture, CanonicalPhaseRefProseFlagsPhaseKeyAlias)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mPhases[0].mDesign.mReadinessGate =
-        "Binds exact phase key (`P5`) before start.";
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    const auto Json = ParseCapturedJSON();
-    const auto Issue = FirstIssueWithId(Json, "canonical_phase_ref_prose");
-    ASSERT_FALSE(Issue.empty());
-    EXPECT_EQ(Issue["severity"], "warning");
-}
-
-TEST_F(FBundleTestFixture, CanonicalPhaseRefProseCleanBundlePasses)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mPhases[0].mDesign.mReadinessGate =
-        "Entry `phases[5]` must be fully populated.";
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(CountIssuesWithId(Json, "canonical_phase_ref_prose"), 0);
-}
-
-// -------------------------------------------------------------------
 // no_dev_absolute_path — dev-machine paths
 // -------------------------------------------------------------------
 
@@ -519,6 +384,77 @@ TEST_F(FBundleTestFixture, NoUnresolvedMarkerCleanBundlePasses)
 }
 
 // -------------------------------------------------------------------
+// no_duplicate_phase_field — byte-identical prescriptive field across phases
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, NoDuplicatePhaseFieldFlagsIdenticalHandoff)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    const std::string Stamp =
+        "L0 | L1 | Phase-key binding proof.\nL1 | L2 | Synchronized bundle "
+        "state across dependent phases with current status wording.";
+    Bundle.mPhases[0].mDesign.mHandoff = Stamp;
+    Bundle.mPhases[1].mDesign.mHandoff = Stamp;
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "no_duplicate_phase_field");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+    EXPECT_EQ(Issue["path"], "phases[1].handoff");
+    EXPECT_NE(Issue["detail"].get<std::string>().find("phases[0].handoff"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, NoDuplicatePhaseFieldIgnoresShortStubs)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mDesign.mHandoff = "N/A";
+    Bundle.mPhases[1].mDesign.mHandoff = "N/A";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_duplicate_phase_field"), 0);
+}
+
+TEST_F(FBundleTestFixture, NoDuplicatePhaseFieldCleanBundlePasses)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mDesign.mHandoff =
+        "Lane-by-lane handoff for phase zero baseline work and owners.";
+    Bundle.mPhases[1].mDesign.mHandoff =
+        "Lane-by-lane handoff for phase one execution and follow-up owners.";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_duplicate_phase_field"), 0);
+}
+
+// -------------------------------------------------------------------
 // topic_ref_integrity — `<X>.Plan.json` must resolve
 // -------------------------------------------------------------------
 
@@ -528,7 +464,10 @@ TEST_F(FBundleTestFixture, TopicRefIntegrityFlagsUnknownTopic)
                          UniPlan::EExecutionStatus::NotStarted, false);
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mMetadata.mDependencies = "See `SomeMissingTopic.Plan.json`";
+    UniPlan::FBundleReference R;
+    R.mKind = UniPlan::EDependencyKind::Bundle;
+    R.mTopic = "SomeMissingTopic";
+    Bundle.mMetadata.mDependencies = {R};
     WriteBundle(mRepoRoot, "T", Bundle);
 
     StartCapture();
@@ -550,7 +489,10 @@ TEST_F(FBundleTestFixture, TopicRefIntegritySelfReferencePasses)
                          UniPlan::EExecutionStatus::NotStarted, false);
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mMetadata.mDependencies = "See `T.Plan.json`";
+    UniPlan::FBundleReference R;
+    R.mKind = UniPlan::EDependencyKind::Bundle;
+    R.mTopic = "T";
+    Bundle.mMetadata.mDependencies = {R};
     WriteBundle(mRepoRoot, "T", Bundle);
 
     StartCapture();
@@ -560,48 +502,6 @@ TEST_F(FBundleTestFixture, TopicRefIntegritySelfReferencePasses)
     StopCapture();
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(CountIssuesWithId(Json, "topic_ref_integrity"), 0);
-}
-
-// -------------------------------------------------------------------
-// stale_plan_md_reference — `.Plan.md` references
-// -------------------------------------------------------------------
-
-TEST_F(FBundleTestFixture, StalePlanMdReferenceFlagsMdFilename)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mMetadata.mSourceReferences = "See MyTopic.Plan.md";
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    const auto Json = ParseCapturedJSON();
-    const auto Issue = FirstIssueWithId(Json, "stale_plan_md_reference");
-    ASSERT_FALSE(Issue.empty());
-    EXPECT_EQ(Issue["severity"], "warning");
-}
-
-TEST_F(FBundleTestFixture, StalePlanMdReferenceCleanBundlePasses)
-{
-    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
-    UniPlan::FTopicBundle Bundle;
-    ASSERT_TRUE(ReloadBundle("T", Bundle));
-    Bundle.mMetadata.mSourceReferences = "See MyTopic.Plan.json";
-    WriteBundle(mRepoRoot, "T", Bundle);
-
-    StartCapture();
-    UniPlan::RunBundleValidateCommand(
-        {"--topic", "T", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(CountIssuesWithId(Json, "stale_plan_md_reference"), 0);
 }
 
 // -------------------------------------------------------------------

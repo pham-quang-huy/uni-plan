@@ -58,6 +58,36 @@ static std::string RenderValidationCommandsAsMarkdown(
 }
 
 // ---------------------------------------------------------------------------
+// Synthesize helper — render a typed dependencies vector as a markdown
+// table string. Mirrors RenderValidationCommandsAsMarkdown.
+// ---------------------------------------------------------------------------
+
+static std::string
+RenderDependenciesAsMarkdown(const std::vector<FBundleReference> &InDeps)
+{
+    if (InDeps.empty())
+        return "";
+    std::string Out = "| Kind | Topic | Phase | Path | Note |\n"
+                      "| --- | --- | --- | --- | --- |\n";
+    for (const FBundleReference &R : InDeps)
+    {
+        std::string PhaseCell = R.mPhase < 0 ? "" : std::to_string(R.mPhase);
+        Out += "| ";
+        Out += ToString(R.mKind);
+        Out += " | ";
+        Out += R.mTopic;
+        Out += " | ";
+        Out += PhaseCell;
+        Out += " | ";
+        Out += R.mPath;
+        Out += " | ";
+        Out += R.mNote;
+        Out += " |\n";
+    }
+    return Out;
+}
+
+// ---------------------------------------------------------------------------
 // Synthesize helper — add a section from a V4 string field
 // ---------------------------------------------------------------------------
 
@@ -113,7 +143,8 @@ static bool ExtractDocumentFromBundle(const FTopicBundle &InBundle,
                               Meta.mLockedDecisions);
         AddSynthesizedSection(OutDocument, "source_references",
                               Meta.mSourceReferences);
-        AddSynthesizedSection(OutDocument, "dependencies", Meta.mDependencies);
+        AddSynthesizedSection(OutDocument, "dependencies",
+                              RenderDependenciesAsMarkdown(Meta.mDependencies));
         AddSynthesizedSection(OutDocument, "next_actions",
                               InBundle.mNextActions);
         return true;
@@ -179,8 +210,9 @@ static bool ExtractDocumentFromBundle(const FTopicBundle &InBundle,
                               Phase.mDesign.mInvestigation);
         AddSynthesizedSection(OutDocument, "code_snippets",
                               Phase.mDesign.mCodeSnippets);
-        AddSynthesizedSection(OutDocument, "dependencies",
-                              Phase.mDesign.mDependencies);
+        AddSynthesizedSection(
+            OutDocument, "dependencies",
+            RenderDependenciesAsMarkdown(Phase.mDesign.mDependencies));
         AddSynthesizedSection(OutDocument, "readiness_gate",
                               Phase.mDesign.mReadinessGate);
         AddSynthesizedSection(OutDocument, "handoff", Phase.mDesign.mHandoff);

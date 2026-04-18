@@ -132,6 +132,77 @@ DeserializeValidationCommands(const JsonValue &InParent,
     }
 }
 
+// ---------------------------------------------------------------------------
+// FBundleReference serialization — typed dependency records.
+// Same shape as FValidationCommand: serialize as array-of-objects;
+// deserialize accepts canonical array OR legacy string form (string form
+// is preserved as a single External record with mNote=<raw>).
+// ---------------------------------------------------------------------------
+
+static JsonValue SerializeBundleReference(const FBundleReference &InEntry)
+{
+    JsonValue Entry = JsonValue::object();
+    Entry["kind"] = ToString(InEntry.mKind);
+    Entry["topic"] = InEntry.mTopic;
+    if (InEntry.mPhase < 0)
+        Entry["phase"] = nullptr;
+    else
+        Entry["phase"] = InEntry.mPhase;
+    Entry["path"] = InEntry.mPath;
+    Entry["note"] = InEntry.mNote;
+    return Entry;
+}
+
+static JsonValue
+SerializeBundleReferenceArray(const std::vector<FBundleReference> &InArray)
+{
+    JsonValue Arr = JsonValue::array();
+    for (const FBundleReference &R : InArray)
+        Arr.push_back(SerializeBundleReference(R));
+    return Arr;
+}
+
+static void DeserializeBundleReferences(const JsonValue &InParent,
+                                        const std::string &InKey,
+                                        std::vector<FBundleReference> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JsonValue &V = InParent[InKey];
+    if (V.is_array())
+    {
+        for (const JsonValue &E : V)
+        {
+            if (!E.is_object())
+                continue;
+            FBundleReference R;
+            std::string Kind = GetString(E, "kind", "bundle");
+            if (!DependencyKindFromString(Kind, R.mKind))
+                R.mKind = EDependencyKind::Bundle;
+            R.mTopic = GetString(E, "topic");
+            if (E.contains("phase") && E["phase"].is_number())
+                R.mPhase = E["phase"].get<int>();
+            else
+                R.mPhase = -1;
+            R.mPath = GetString(E, "path");
+            R.mNote = GetString(E, "note");
+            OutArray.push_back(std::move(R));
+        }
+        return;
+    }
+    if (V.is_string())
+    {
+        const std::string Raw = V.get<std::string>();
+        if (Raw.empty())
+            return;
+        FBundleReference R;
+        R.mKind = EDependencyKind::External;
+        R.mNote = Raw;
+        OutArray.push_back(std::move(R));
+    }
+}
+
 static JsonValue SerializeLaneRecord(const FLaneRecord &InLane)
 {
     JsonValue Lane = JsonValue::object();
@@ -233,7 +304,7 @@ static JsonValue SerializePhaseRecord(const FPhaseRecord &InPhase)
     const FPhaseDesignMaterial &DM = InPhase.mDesign;
     Phase["investigation"] = DM.mInvestigation;
     Phase["code_snippets"] = DM.mCodeSnippets;
-    Phase["dependencies"] = DM.mDependencies;
+    Phase["dependencies"] = SerializeBundleReferenceArray(DM.mDependencies);
     Phase["readiness_gate"] = DM.mReadinessGate;
     Phase["handoff"] = DM.mHandoff;
     Phase["code_entity_contract"] = DM.mCodeEntityContract;
@@ -267,7 +338,7 @@ static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["execution_strategy"] = Meta.mExecutionStrategy;
     Root["locked_decisions"] = Meta.mLockedDecisions;
     Root["source_references"] = Meta.mSourceReferences;
-    Root["dependencies"] = Meta.mDependencies;
+    Root["dependencies"] = SerializeBundleReferenceArray(Meta.mDependencies);
 
     // Phases (with inline tracking, index-based)
     JsonValue Phases = JsonValue::array();
@@ -508,7 +579,7 @@ static bool DeserializePhaseRecordStrict(const JsonValue &InJson,
     FPhaseDesignMaterial &DM = OutPhase.mDesign;
     OptionalString(InJson, "investigation", DM.mInvestigation);
     OptionalString(InJson, "code_snippets", DM.mCodeSnippets);
-    OptionalString(InJson, "dependencies", DM.mDependencies);
+    DeserializeBundleReferences(InJson, "dependencies", DM.mDependencies);
     OptionalString(InJson, "readiness_gate", DM.mReadinessGate);
     OptionalString(InJson, "handoff", DM.mHandoff);
     OptionalString(InJson, "code_entity_contract", DM.mCodeEntityContract);
@@ -606,6 +677,8 @@ static bool DeserializeTopicBundleV4(const JsonValue &InRoot,
     if (!RequireString(InRoot, "title", OutBundle.mMetadata.mTitle, Ctx,
                        OutError))
         return false;
+    // topic_category (V3-era field) is silently ignored if present in
+    // legacy bundle files; it is no longer interpreted.
 
     // Required arrays
     if (!RequireArray(InRoot, "phases", Ctx, OutError))
@@ -629,7 +702,7 @@ static bool DeserializeTopicBundleV4(const JsonValue &InRoot,
     OptionalString(InRoot, "execution_strategy", Meta.mExecutionStrategy);
     OptionalString(InRoot, "locked_decisions", Meta.mLockedDecisions);
     OptionalString(InRoot, "source_references", Meta.mSourceReferences);
-    OptionalString(InRoot, "dependencies", Meta.mDependencies);
+    DeserializeBundleReferences(InRoot, "dependencies", Meta.mDependencies);
     OptionalString(InRoot, "next_actions", OutBundle.mNextActions);
 
     // Phases — strict validation per record

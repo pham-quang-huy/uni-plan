@@ -112,6 +112,7 @@ void PrintUsage()
     std::cout << "  uni-plan phase set --topic <T> "
                  "--phase <N> [--status <s>] "
                  "[--scope <t>] [--investigation <t>] ...\n";
+    std::cout << "  uni-plan phase remove --topic <T> --phase <N>\n";
     std::cout << "  uni-plan job set --topic <T> "
                  "--phase <N> --job <N> [--status <s>] "
                  "[--scope <t>] ...\n";

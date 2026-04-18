@@ -4,7 +4,9 @@
 #include "UniPlanTypes.h"
 
 #include <algorithm>
+#include <array>
 #include <iostream>
+#include <map>
 #include <regex>
 #include <set>
 #include <string>
@@ -166,20 +168,68 @@ static void ScanTopicProse(const FTopicBundle &InBundle,
     Scan("execution_strategy", M.mExecutionStrategy);
     Scan("locked_decisions", M.mLockedDecisions);
     Scan("source_references", M.mSourceReferences);
-    Scan("dependencies", M.mDependencies);
+    // dependencies is a typed vector — scan each record's prose fields.
+    for (size_t I = 0; I < M.mDependencies.size(); ++I)
+    {
+        const FBundleReference &R = M.mDependencies[I];
+        const std::string Base = "dependencies[" + std::to_string(I) + "]";
+        Scan(Base + ".path", R.mPath);
+        Scan(Base + ".note", R.mNote);
+    }
     Scan("next_actions", InBundle.mNextActions);
 }
 
 // ---------------------------------------------------------------------------
-// Content-hygiene helper: scan every per-phase prose field
-// (scope/output + all 9 design material fields + lifecycle prose).
+// Phase-field classification for content-hygiene scans.
+//
+// Phase prose is a mix of prescriptive contract (what the phase will do) and
+// evidence (what ran / what proved it). The two classes carry different
+// hygiene contracts:
+//
+//   - Prescriptive fields describe forward-looking intent. They must be
+//     V4-clean and agent-parseable regardless of whether the phase has run
+//     yet. Scanning is status-agnostic.
+//
+//   - Evidence fields capture historical execution. V3 vocabulary or legacy
+//     CLI references in completed-phase evidence are legitimate records of
+//     what actually happened at that time. Scanning evidence on completed
+//     phases for drift produces perpetual false positives. Scanning evidence
+//     on not-started / in-progress phases is still useful — the author is
+//     still drafting that prose, so drift is still correctable.
+//
+//   - Unresolved-marker semantics invert: TODO markers in evidence on a
+//     completed phase signal premature closure, so that check scans evidence
+//     only on completed phases.
+//
+// EPhaseEvidenceScope lets each check declare which phase-status slice of
+// evidence prose it cares about. ScanPhaseLifecycleProse keeps its own
+// InOnlyCompleted flag for historical reasons; evidence sub-fields that
+// live inside the design section flow through ScanPhaseDesignEvidenceProse
+// with an explicit scope.
 // ---------------------------------------------------------------------------
 
-static void ScanPhaseProse(
+enum class EPhaseEvidenceScope
+{
+    AllPhases,     // format checks: scan evidence regardless of status
+    NotCompleted,  // drift checks: skip completed phases (historical log)
+    CompletedOnly, // no_unresolved_marker: only flag post-closure residue
+};
+
+// ---------------------------------------------------------------------------
+// ScanPhaseDesignPrescriptiveProse — scans the forward-looking contract
+// fields of every phase. Always scans every phase regardless of status;
+// prescriptive contracts must stay V4-clean whether the phase has executed
+// or not.
+//
+// Evidence sub-fields (tasks[].evidence, tasks[].notes, testing[].evidence)
+// are handled separately by ScanPhaseDesignEvidenceProse; lifecycle fields
+// (done/remaining/blockers) by ScanPhaseLifecycleProse.
+// ---------------------------------------------------------------------------
+
+static void ScanPhaseDesignPrescriptiveProse(
     const FTopicBundle &InBundle, const std::regex &InPattern,
     const std::string &InCheckID, EValidationSeverity InSeverity,
-    const std::string &InDetailPrefix, std::vector<ValidateCheck> &OutChecks,
-    const bool InIncludeLifecycle = true, const bool InIncludeChildren = true)
+    const std::string &InDetailPrefix, std::vector<ValidateCheck> &OutChecks)
 {
     const std::string &Key = InBundle.mTopicKey;
     for (size_t PI = 0; PI < InBundle.mPhases.size(); ++PI)
@@ -196,7 +246,14 @@ static void ScanPhaseProse(
         Scan("output", P.mOutput);
         Scan("investigation", P.mDesign.mInvestigation);
         Scan("code_snippets", P.mDesign.mCodeSnippets);
-        Scan("dependencies", P.mDesign.mDependencies);
+        for (size_t DI = 0; DI < P.mDesign.mDependencies.size(); ++DI)
+        {
+            const FBundleReference &R = P.mDesign.mDependencies[DI];
+            const std::string DBase =
+                "dependencies[" + std::to_string(DI) + "]";
+            Scan(DBase + ".path", R.mPath);
+            Scan(DBase + ".note", R.mNote);
+        }
         Scan("readiness_gate", P.mDesign.mReadinessGate);
         Scan("handoff", P.mDesign.mHandoff);
         Scan("code_entity_contract", P.mDesign.mCodeEntityContract);
@@ -210,43 +267,171 @@ static void ScanPhaseProse(
             Scan(VCBase + ".description", C.mDescription);
         }
         Scan("multi_platforming", P.mDesign.mMultiPlatforming);
-        if (InIncludeLifecycle)
+        for (size_t LI = 0; LI < P.mLanes.size(); ++LI)
         {
-            Scan("done", P.mLifecycle.mDone);
-            Scan("remaining", P.mLifecycle.mRemaining);
-            Scan("blockers", P.mLifecycle.mBlockers);
-            Scan("agent_context", P.mLifecycle.mAgentContext);
+            const FLaneRecord &L = P.mLanes[LI];
+            const std::string LBase =
+                Base + ".lanes[" + std::to_string(LI) + "]";
+            ScanProseField(Key, LBase + ".scope", L.mScope, InPattern,
+                           InCheckID, InSeverity, InDetailPrefix, OutChecks);
+            ScanProseField(Key, LBase + ".exit_criteria", L.mExitCriteria,
+                           InPattern, InCheckID, InSeverity, InDetailPrefix,
+                           OutChecks);
         }
-        if (InIncludeChildren)
+        for (size_t JI = 0; JI < P.mJobs.size(); ++JI)
         {
-            for (size_t LI = 0; LI < P.mLanes.size(); ++LI)
+            const FJobRecord &J = P.mJobs[JI];
+            const std::string JBase =
+                Base + ".jobs[" + std::to_string(JI) + "]";
+            ScanProseField(Key, JBase + ".scope", J.mScope, InPattern,
+                           InCheckID, InSeverity, InDetailPrefix, OutChecks);
+            ScanProseField(Key, JBase + ".output", J.mOutput, InPattern,
+                           InCheckID, InSeverity, InDetailPrefix, OutChecks);
+            ScanProseField(Key, JBase + ".exit_criteria", J.mExitCriteria,
+                           InPattern, InCheckID, InSeverity, InDetailPrefix,
+                           OutChecks);
+            for (size_t TI = 0; TI < J.mTasks.size(); ++TI)
             {
-                const FLaneRecord &L = P.mLanes[LI];
-                const std::string LBase =
-                    Base + ".lanes[" + std::to_string(LI) + "]";
-                ScanProseField(Key, LBase + ".scope", L.mScope, InPattern,
-                               InCheckID, InSeverity, InDetailPrefix,
-                               OutChecks);
-                ScanProseField(Key, LBase + ".exit_criteria", L.mExitCriteria,
-                               InPattern, InCheckID, InSeverity, InDetailPrefix,
-                               OutChecks);
-            }
-            for (size_t JI = 0; JI < P.mJobs.size(); ++JI)
-            {
-                const FJobRecord &J = P.mJobs[JI];
-                const std::string JBase =
-                    Base + ".jobs[" + std::to_string(JI) + "]";
-                ScanProseField(Key, JBase + ".scope", J.mScope, InPattern,
-                               InCheckID, InSeverity, InDetailPrefix,
-                               OutChecks);
-                ScanProseField(Key, JBase + ".output", J.mOutput, InPattern,
-                               InCheckID, InSeverity, InDetailPrefix,
-                               OutChecks);
-                ScanProseField(Key, JBase + ".exit_criteria", J.mExitCriteria,
+                const FTaskRecord &T = J.mTasks[TI];
+                const std::string TBase =
+                    JBase + ".tasks[" + std::to_string(TI) + "]";
+                ScanProseField(Key, TBase + ".description", T.mDescription,
                                InPattern, InCheckID, InSeverity, InDetailPrefix,
                                OutChecks);
             }
         }
+        for (size_t TI = 0; TI < P.mTesting.size(); ++TI)
+        {
+            const FTestingRecord &TR = P.mTesting[TI];
+            const std::string TBase =
+                Base + ".testing[" + std::to_string(TI) + "]";
+            ScanProseField(Key, TBase + ".step", TR.mStep, InPattern, InCheckID,
+                           InSeverity, InDetailPrefix, OutChecks);
+            ScanProseField(Key, TBase + ".action", TR.mAction, InPattern,
+                           InCheckID, InSeverity, InDetailPrefix, OutChecks);
+            ScanProseField(Key, TBase + ".expected", TR.mExpected, InPattern,
+                           InCheckID, InSeverity, InDetailPrefix, OutChecks);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ScanPhaseDesignEvidenceProse — scans the evidence sub-fields embedded in
+// the design section: tasks[].evidence, tasks[].notes, testing[].evidence.
+// These fields record execution rather than contract, so drift checks should
+// treat completed-phase content as historical log.
+//
+// Callers declare the slice they care about via EPhaseEvidenceScope.
+// ---------------------------------------------------------------------------
+
+static void ScanPhaseDesignEvidenceProse(const FTopicBundle &InBundle,
+                                         const std::regex &InPattern,
+                                         const std::string &InCheckID,
+                                         EValidationSeverity InSeverity,
+                                         const std::string &InDetailPrefix,
+                                         std::vector<ValidateCheck> &OutChecks,
+                                         EPhaseEvidenceScope InScope)
+{
+    const std::string &Key = InBundle.mTopicKey;
+    for (size_t PI = 0; PI < InBundle.mPhases.size(); ++PI)
+    {
+        const FPhaseRecord &P = InBundle.mPhases[PI];
+        const bool bCompleted =
+            P.mLifecycle.mStatus == EExecutionStatus::Completed;
+        switch (InScope)
+        {
+        case EPhaseEvidenceScope::AllPhases:
+            break;
+        case EPhaseEvidenceScope::NotCompleted:
+            if (bCompleted)
+                continue;
+            break;
+        case EPhaseEvidenceScope::CompletedOnly:
+            if (!bCompleted)
+                continue;
+            break;
+        }
+        const std::string Base = "phases[" + std::to_string(PI) + "]";
+        for (size_t JI = 0; JI < P.mJobs.size(); ++JI)
+        {
+            const FJobRecord &J = P.mJobs[JI];
+            const std::string JBase =
+                Base + ".jobs[" + std::to_string(JI) + "]";
+            for (size_t TI = 0; TI < J.mTasks.size(); ++TI)
+            {
+                const FTaskRecord &T = J.mTasks[TI];
+                const std::string TBase =
+                    JBase + ".tasks[" + std::to_string(TI) + "]";
+                ScanProseField(Key, TBase + ".evidence", T.mEvidence, InPattern,
+                               InCheckID, InSeverity, InDetailPrefix,
+                               OutChecks);
+                ScanProseField(Key, TBase + ".notes", T.mNotes, InPattern,
+                               InCheckID, InSeverity, InDetailPrefix,
+                               OutChecks);
+            }
+        }
+        for (size_t TI = 0; TI < P.mTesting.size(); ++TI)
+        {
+            const FTestingRecord &TR = P.mTesting[TI];
+            const std::string TBase =
+                Base + ".testing[" + std::to_string(TI) + "]";
+            ScanProseField(Key, TBase + ".evidence", TR.mEvidence, InPattern,
+                           InCheckID, InSeverity, InDetailPrefix, OutChecks);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Content-hygiene helper: scan per-phase *lifecycle* (historical evidence)
+// prose — done/remaining/blockers only. agent_context is intentionally
+// excluded (it's scratch context, not plan data).
+//
+// Uses EPhaseEvidenceScope to express status filtering uniformly with
+// ScanPhaseDesignEvidenceProse:
+//   - AllPhases      — format checks that apply regardless of status.
+//   - NotCompleted   — drift checks; completed-phase lifecycle is a
+//                      historical log and legitimate V3 vocabulary there
+//                      records what actually happened.
+//   - CompletedOnly  — no_unresolved_marker; TODO markers in a closed
+//                      phase's lifecycle signal premature closure.
+// ---------------------------------------------------------------------------
+
+static void ScanPhaseLifecycleProse(const FTopicBundle &InBundle,
+                                    const std::regex &InPattern,
+                                    const std::string &InCheckID,
+                                    EValidationSeverity InSeverity,
+                                    const std::string &InDetailPrefix,
+                                    std::vector<ValidateCheck> &OutChecks,
+                                    EPhaseEvidenceScope InScope)
+{
+    const std::string &Key = InBundle.mTopicKey;
+    for (size_t PI = 0; PI < InBundle.mPhases.size(); ++PI)
+    {
+        const FPhaseRecord &P = InBundle.mPhases[PI];
+        const bool bCompleted =
+            P.mLifecycle.mStatus == EExecutionStatus::Completed;
+        switch (InScope)
+        {
+        case EPhaseEvidenceScope::AllPhases:
+            break;
+        case EPhaseEvidenceScope::NotCompleted:
+            if (bCompleted)
+                continue;
+            break;
+        case EPhaseEvidenceScope::CompletedOnly:
+            if (!bCompleted)
+                continue;
+            break;
+        }
+        const std::string Base = "phases[" + std::to_string(PI) + "]";
+        ScanProseField(Key, Base + ".done", P.mLifecycle.mDone, InPattern,
+                       InCheckID, InSeverity, InDetailPrefix, OutChecks);
+        ScanProseField(Key, Base + ".remaining", P.mLifecycle.mRemaining,
+                       InPattern, InCheckID, InSeverity, InDetailPrefix,
+                       OutChecks);
+        ScanProseField(Key, Base + ".blockers", P.mLifecycle.mBlockers,
+                       InPattern, InCheckID, InSeverity, InDetailPrefix,
+                       OutChecks);
     }
 }
 
@@ -754,218 +939,6 @@ static void EvalCanonicalEntityRef(const std::vector<FTopicBundle> &InBundles,
 // ScanPhaseProse helpers above to emit one issue per offending field.
 // ---------------------------------------------------------------------------
 
-// 19. legacy_cli_free (Warning) — V3 `doc` CLI references.
-static void EvalLegacyCliFree(const std::vector<FTopicBundle> &InBundles,
-                              std::vector<ValidateCheck> &OutChecks)
-{
-    static const std::regex Pattern(
-        R"(\bdoc\.exe\b|\bdoc\s+(?:lint|phase|artifacts)\b|FIE_Doc[\\/]doc\b)",
-        std::regex_constants::icase);
-    for (const FTopicBundle &B : InBundles)
-    {
-        // Scan every topic, regardless of completion status — governance
-        // prose carrying V3 CLI references misleads agents who read the
-        // bundle, even if the phase that recorded the reference is closed.
-        // (Historical accuracy of audit trails is preserved by keeping
-        // the backtick quoting, not by skipping the check.)
-        ScanTopicProse(B, Pattern, "legacy_cli_free",
-                       EValidationSeverity::Warning,
-                       "legacy CLI reference: ", OutChecks);
-        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
-        {
-            const FPhaseRecord &P = B.mPhases[PI];
-            const std::string Base = "phases[" + std::to_string(PI) + "]";
-            const auto Scan =
-                [&](const std::string &InField, const std::string &InVal)
-            {
-                ScanProseField(B.mTopicKey, Base + "." + InField, InVal,
-                               Pattern, "legacy_cli_free",
-                               EValidationSeverity::Warning,
-                               "legacy CLI reference: ", OutChecks);
-            };
-            Scan("scope", P.mScope);
-            Scan("output", P.mOutput);
-            Scan("investigation", P.mDesign.mInvestigation);
-            Scan("dependencies", P.mDesign.mDependencies);
-            Scan("readiness_gate", P.mDesign.mReadinessGate);
-            Scan("handoff", P.mDesign.mHandoff);
-            Scan("best_practices", P.mDesign.mBestPractices);
-            Scan("code_entity_contract", P.mDesign.mCodeEntityContract);
-            for (size_t CI = 0; CI < P.mDesign.mValidationCommands.size(); ++CI)
-            {
-                const FValidationCommand &C = P.mDesign.mValidationCommands[CI];
-                const std::string VCBase =
-                    "validation_commands[" + std::to_string(CI) + "]";
-                Scan(VCBase + ".command", C.mCommand);
-                Scan(VCBase + ".description", C.mDescription);
-            }
-            Scan("done", P.mLifecycle.mDone);
-            Scan("remaining", P.mLifecycle.mRemaining);
-            Scan("blockers", P.mLifecycle.mBlockers);
-        }
-    }
-}
-
-// 20. v3_terminology_free (Warning) — V3 plan/impl/playbook vocabulary,
-// including plain equivalent phrases that don't use the original slash
-// syntax (e.g., "implementation tracker", "tracker contract", "paired
-// plan"). All forms presuppose the retired V3 plan-triad model.
-static void EvalV3TerminologyFree(const std::vector<FTopicBundle> &InBundles,
-                                  std::vector<ValidateCheck> &OutChecks)
-{
-    static const std::regex Pattern(
-        R"((?:playbook and detached sidecars|Sidecar evidence channels|)"
-        R"(plan/implementation/playbook|\.(?:Impl|Playbook)\.md|)"
-        R"(canonical pairing|Active-phase playbook|phase-scoped playbook|)"
-        R"(implementation tracker|tracker contract|Tracker contract|)"
-        R"(Plan contract|plan\s*\+\s*implementation tracker|)"
-        R"(Paired plan/tracker|Paired plan\+tracker|paired plan/tracker|)"
-        R"([Pp]aired\s+plan\b|)"
-        R"(playbook pairing|playbook discoverab\w+|sidecar discoverab\w+|)"
-        R"(plan/playbook/tracker|plan/tracker/playbook|)"
-        R"(plan/implementation pairing|pairing semantics|)"
-        R"(Docs/Implementation/[\w.-]+\.Plan\.json|)"
-        R"(Docs/Playbooks/[\w.-]+\.Plan\.json|)"
-        R"(Docs/Playbooks/`[\w.-]+|)"
-        R"(Docs/Implementation/`[\w.-]+|)"
-        R"(plan/playbook/implementation triad|plan/tracker/playbook triad))",
-        std::regex_constants::icase);
-    for (const FTopicBundle &B : InBundles)
-    {
-        ScanTopicProse(B, Pattern, "v3_terminology_free",
-                       EValidationSeverity::Warning,
-                       "V3 terminology: ", OutChecks);
-        ScanPhaseProse(B, Pattern, "v3_terminology_free",
-                       EValidationSeverity::Warning,
-                       "V3 terminology: ", OutChecks);
-    }
-}
-
-// 21. canonical_phase_ref_prose (Warning) — legacy P<N>/MP-<N> aliases
-// in governance prose where canonical `phases[N]` is required.
-//
-// Catches three forms:
-//   (a) Specific legacy references: `phase key (`P5`)`, `P6 → P7`,
-//       `MP-19a/b/c`.
-//   (b) Standalone `P<N>` in prescriptive fields — the common live form.
-//       Skips lines that declare themselves historical ("Plan.md task P",
-//       "original P1-P4", "legacy P", "historical P") and lines that
-//       contain statistical percentiles (P50/P95/P99).
-//   (c) Bare-text variants (`Px → Py`, `Px -> Py`, `PX phase`).
-//
-// Scope limited to prescriptive fields (not historical narrative fields
-// like execution_strategy, changelog.change, verification.result).
-static void
-EvalCanonicalPhaseRefProse(const std::vector<FTopicBundle> &InBundles,
-                           std::vector<ValidateCheck> &OutChecks)
-{
-    static const std::regex SpecificPattern(
-        R"(phase key \(`?P\d+`?\)|`?P\d+`?\s*(?:->|\xE2\x86\x92)\s*`?P\d+`?|\bMP-\d+[abc]\b)");
-    // Standalone P<N>, covering both bare `P5` and backtick-quoted `` `P5` ``
-    // forms. Backtick is INCLUDED as a valid token boundary — `` `P5` `` is
-    // the most common live phase-alias form. Excluded boundaries: word
-    // characters (avoids matching inside `phases5`), `[` (avoids matching
-    // the P in `phases[5]`), and `/` / `:` (avoids path segments).
-    // N is capped at 3 digits to skip C++ proposal numbers (`P2996`),
-    // feature-tag IDs, and other 4+ digit P-codes that are not phases.
-    static const std::regex StandalonePattern(
-        R"((?:^|[^\w\[])(P\d{1,3})(?:[^\]\w/:]|$))");
-    static const std::regex HistoricalMarker(
-        R"(Plan\.md task P|legacy Plan\.md|historical Plan\.md|original P\d|\(legacy P|legacy P\d+ playbook|historical P\d+|- P\d+ [A-Z])");
-    static const std::regex PercentileMarker(R"(\bP(?:50|95|99|99\.9)\b)");
-
-    const auto ScanPrescriptive = [&](const std::string &InTopic,
-                                      const std::string &InPath,
-                                      const std::string &InContent)
-    {
-        if (InContent.empty())
-            return;
-        // Pass 1 — specific forms (always fire).
-        std::smatch Match;
-        if (std::regex_search(InContent, Match, SpecificPattern))
-        {
-            Fail(OutChecks, "canonical_phase_ref_prose",
-                 EValidationSeverity::Warning, InTopic, InPath,
-                 "legacy phase alias: " + Match.str());
-            return;
-        }
-        // Pass 2 — standalone P<N> line-by-line with historical filter.
-        std::string Line;
-        for (size_t I = 0; I <= InContent.size(); ++I)
-        {
-            const char C = (I < InContent.size()) ? InContent[I] : '\n';
-            if (C != '\n')
-            {
-                Line += C;
-                continue;
-            }
-            if (!Line.empty())
-            {
-                const bool bHistorical =
-                    std::regex_search(Line, HistoricalMarker);
-                const bool bPercentile =
-                    std::regex_search(Line, PercentileMarker);
-                if (!bHistorical && !bPercentile &&
-                    std::regex_search(Line, Match, StandalonePattern))
-                {
-                    Fail(OutChecks, "canonical_phase_ref_prose",
-                         EValidationSeverity::Warning, InTopic, InPath,
-                         "legacy phase alias: " + Match[1].str());
-                    Line.clear();
-                    return;
-                }
-            }
-            Line.clear();
-        }
-    };
-
-    for (const FTopicBundle &B : InBundles)
-    {
-        // Topic-level prescriptive fields.
-        ScanPrescriptive(B.mTopicKey, "dependencies",
-                         B.mMetadata.mDependencies);
-        ScanPrescriptive(B.mTopicKey, "next_actions", B.mNextActions);
-        ScanPrescriptive(B.mTopicKey, "acceptance_criteria",
-                         B.mMetadata.mAcceptanceCriteria);
-        // Per-phase prescriptive fields.
-        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
-        {
-            const FPhaseRecord &P = B.mPhases[PI];
-            const std::string Base = "phases[" + std::to_string(PI) + "]";
-            ScanPrescriptive(B.mTopicKey, Base + ".readiness_gate",
-                             P.mDesign.mReadinessGate);
-            ScanPrescriptive(B.mTopicKey, Base + ".handoff",
-                             P.mDesign.mHandoff);
-            ScanPrescriptive(B.mTopicKey, Base + ".dependencies",
-                             P.mDesign.mDependencies);
-            ScanPrescriptive(B.mTopicKey, Base + ".best_practices",
-                             P.mDesign.mBestPractices);
-            ScanPrescriptive(B.mTopicKey, Base + ".code_entity_contract",
-                             P.mDesign.mCodeEntityContract);
-            ScanPrescriptive(B.mTopicKey, Base + ".output", P.mOutput);
-            ScanPrescriptive(B.mTopicKey, Base + ".done", P.mLifecycle.mDone);
-            ScanPrescriptive(B.mTopicKey, Base + ".remaining",
-                             P.mLifecycle.mRemaining);
-            ScanPrescriptive(B.mTopicKey, Base + ".blockers",
-                             P.mLifecycle.mBlockers);
-            for (size_t LI = 0; LI < P.mLanes.size(); ++LI)
-            {
-                ScanPrescriptive(B.mTopicKey,
-                                 Base + ".lanes[" + std::to_string(LI) +
-                                     "].exit_criteria",
-                                 P.mLanes[LI].mExitCriteria);
-            }
-            for (size_t JI = 0; JI < P.mJobs.size(); ++JI)
-            {
-                ScanPrescriptive(B.mTopicKey,
-                                 Base + ".jobs[" + std::to_string(JI) +
-                                     "].exit_criteria",
-                                 P.mJobs[JI].mExitCriteria);
-            }
-        }
-    }
-}
-
 // validation_command_fields (ErrorMinor) — structural check that each
 // FValidationCommand record has a non-empty mCommand. mDescription is
 // advisory (Warning if empty) since a description aids humans but is not
@@ -1037,10 +1010,22 @@ static void EvalPathResolves(const std::vector<FTopicBundle> &InBundles,
         }
     };
 
+    const auto ScanDeps = [&](const std::string &InTopic,
+                              const std::string &InBase,
+                              const std::vector<FBundleReference> &InDeps)
+    {
+        for (size_t I = 0; I < InDeps.size(); ++I)
+        {
+            const FBundleReference &R = InDeps[I];
+            const std::string B = InBase + "[" + std::to_string(I) + "]";
+            Scan(InTopic, B + ".path", R.mPath);
+            Scan(InTopic, B + ".note", R.mNote);
+        }
+    };
     for (const FTopicBundle &B : InBundles)
     {
         const FPlanMetadata &M = B.mMetadata;
-        Scan(B.mTopicKey, "dependencies", M.mDependencies);
+        ScanDeps(B.mTopicKey, "dependencies", M.mDependencies);
         Scan(B.mTopicKey, "source_references", M.mSourceReferences);
         Scan(B.mTopicKey, "execution_strategy", M.mExecutionStrategy);
         Scan(B.mTopicKey, "locked_decisions", M.mLockedDecisions);
@@ -1048,7 +1033,8 @@ static void EvalPathResolves(const std::vector<FTopicBundle> &InBundles,
         {
             const FPhaseRecord &P = B.mPhases[PI];
             const std::string Base = "phases[" + std::to_string(PI) + "]";
-            Scan(B.mTopicKey, Base + ".dependencies", P.mDesign.mDependencies);
+            ScanDeps(B.mTopicKey, Base + ".dependencies",
+                     P.mDesign.mDependencies);
             Scan(B.mTopicKey, Base + ".investigation",
                  P.mDesign.mInvestigation);
             Scan(B.mTopicKey, Base + ".readiness_gate",
@@ -1072,9 +1058,13 @@ static void EvalNoDevAbsolutePath(const std::vector<FTopicBundle> &InBundles,
         ScanTopicProse(B, Pattern, "no_dev_absolute_path",
                        EValidationSeverity::ErrorMinor,
                        "dev-machine absolute path: ", OutChecks);
-        ScanPhaseProse(B, Pattern, "no_dev_absolute_path",
-                       EValidationSeverity::ErrorMinor,
-                       "dev-machine absolute path: ", OutChecks);
+        ScanPhaseDesignPrescriptiveProse(
+            B, Pattern, "no_dev_absolute_path", EValidationSeverity::ErrorMinor,
+            "dev-machine absolute path: ", OutChecks);
+        ScanPhaseDesignEvidenceProse(B, Pattern, "no_dev_absolute_path",
+                                     EValidationSeverity::ErrorMinor,
+                                     "dev-machine absolute path: ", OutChecks,
+                                     EPhaseEvidenceScope::AllPhases);
     }
 }
 
@@ -1092,13 +1082,16 @@ static void EvalNoHardcodedEndpoint(const std::vector<FTopicBundle> &InBundles,
         ScanTopicProse(B, Pattern, "no_hardcoded_endpoint",
                        EValidationSeverity::Warning,
                        "hardcoded endpoint: ", OutChecks);
-        // Per-phase: design material (forward-looking) only — lifecycle prose
-        // may contain historical run output.
-        ScanPhaseProse(B, Pattern, "no_hardcoded_endpoint",
-                       EValidationSeverity::Warning,
-                       "hardcoded endpoint: ", OutChecks,
-                       /*InIncludeLifecycle=*/false,
-                       /*InIncludeChildren=*/false);
+        // Per-phase: design material + evidence on all phases. Lifecycle is
+        // historical and remains unscanned for this format check; a
+        // hardcoded endpoint in lifecycle text is a historical record of a
+        // dev-only endpoint that was used, not governance drift.
+        ScanPhaseDesignPrescriptiveProse(B, Pattern, "no_hardcoded_endpoint",
+                                         EValidationSeverity::Warning,
+                                         "hardcoded endpoint: ", OutChecks);
+        ScanPhaseDesignEvidenceProse(
+            B, Pattern, "no_hardcoded_endpoint", EValidationSeverity::Warning,
+            "hardcoded endpoint: ", OutChecks, EPhaseEvidenceScope::AllPhases);
     }
 }
 
@@ -1165,9 +1158,12 @@ static void EvalNoSmartQuotes(const std::vector<FTopicBundle> &InBundles,
         ScanTopicProse(B, Pattern, "no_smart_quotes",
                        EValidationSeverity::Warning,
                        "unicode smart char: ", OutChecks);
-        ScanPhaseProse(B, Pattern, "no_smart_quotes",
-                       EValidationSeverity::Warning,
-                       "unicode smart char: ", OutChecks);
+        ScanPhaseDesignPrescriptiveProse(B, Pattern, "no_smart_quotes",
+                                         EValidationSeverity::Warning,
+                                         "unicode smart char: ", OutChecks);
+        ScanPhaseDesignEvidenceProse(
+            B, Pattern, "no_smart_quotes", EValidationSeverity::Warning,
+            "unicode smart char: ", OutChecks, EPhaseEvidenceScope::AllPhases);
     }
 }
 
@@ -1183,9 +1179,12 @@ static void EvalNoHtmlInProse(const std::vector<FTopicBundle> &InBundles,
         ScanTopicProse(B, Pattern, "no_html_in_prose",
                        EValidationSeverity::Warning,
                        "HTML tag in prose: ", OutChecks);
-        ScanPhaseProse(B, Pattern, "no_html_in_prose",
-                       EValidationSeverity::Warning,
-                       "HTML tag in prose: ", OutChecks);
+        ScanPhaseDesignPrescriptiveProse(B, Pattern, "no_html_in_prose",
+                                         EValidationSeverity::Warning,
+                                         "HTML tag in prose: ", OutChecks);
+        ScanPhaseDesignEvidenceProse(
+            B, Pattern, "no_html_in_prose", EValidationSeverity::Warning,
+            "HTML tag in prose: ", OutChecks, EPhaseEvidenceScope::AllPhases);
     }
 }
 
@@ -1214,13 +1213,26 @@ EvalNoEmptyPlaceholderLiteral(const std::vector<FTopicBundle> &InBundles,
             Scan("blockers", P.mLifecycle.mBlockers);
             Scan("remaining", P.mLifecycle.mRemaining);
             Scan("done", P.mLifecycle.mDone);
-            Scan("dependencies", P.mDesign.mDependencies);
+            // dependencies is a typed vector — an empty vector means "no
+            // dependencies" (structural), not a placeholder literal.
         }
     }
 }
 
 // 28. no_unresolved_marker (Warning) — TODO/FIXME/TBD/unresolved markers
-// in governance prose or completed-phase fields signal fidelity drift.
+// in prescriptive governance prose signal design drift (the plan itself
+// still has open questions). Completed-phase evidence and lifecycle fields
+// are also checked: if a phase claims done but its evidence log still
+// contains TODO, the historical record is self-contradictory.
+//
+// Scope structurally split:
+//   topic prose                    — always scanned (prescriptive)
+//   phase design prescriptive      — always scanned (prescriptive)
+//   phase design evidence fields   — only when phase is completed
+//   phase lifecycle prose          — only when phase is completed
+//
+// No status-based skip workaround — each scope scans the fields that
+// semantically belong to it, not "scan everything and filter by status".
 static void EvalNoUnresolvedMarker(const std::vector<FTopicBundle> &InBundles,
                                    std::vector<ValidateCheck> &OutChecks)
 {
@@ -1232,27 +1244,17 @@ static void EvalNoUnresolvedMarker(const std::vector<FTopicBundle> &InBundles,
         ScanTopicProse(B, Pattern, "no_unresolved_marker",
                        EValidationSeverity::Warning,
                        "unresolved marker: ", OutChecks);
-        // Per-phase: only scan phases that claim to be completed.
-        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
-        {
-            const FPhaseRecord &P = B.mPhases[PI];
-            if (P.mLifecycle.mStatus != EExecutionStatus::Completed)
-                continue;
-            const std::string Base = "phases[" + std::to_string(PI) + "]";
-            const auto Scan =
-                [&](const std::string &InField, const std::string &InVal)
-            {
-                ScanProseField(
-                    B.mTopicKey, Base + "." + InField, InVal, Pattern,
-                    "no_unresolved_marker", EValidationSeverity::Warning,
-                    "unresolved marker in completed phase: ", OutChecks);
-            };
-            Scan("scope", P.mScope);
-            Scan("output", P.mOutput);
-            Scan("done", P.mLifecycle.mDone);
-            Scan("remaining", P.mLifecycle.mRemaining);
-            Scan("blockers", P.mLifecycle.mBlockers);
-        }
+        ScanPhaseDesignPrescriptiveProse(B, Pattern, "no_unresolved_marker",
+                                         EValidationSeverity::Warning,
+                                         "unresolved marker: ", OutChecks);
+        ScanPhaseDesignEvidenceProse(
+            B, Pattern, "no_unresolved_marker", EValidationSeverity::Warning,
+            "unresolved marker in completed phase evidence: ", OutChecks,
+            EPhaseEvidenceScope::CompletedOnly);
+        ScanPhaseLifecycleProse(
+            B, Pattern, "no_unresolved_marker", EValidationSeverity::Warning,
+            "unresolved marker in completed phase: ", OutChecks,
+            EPhaseEvidenceScope::CompletedOnly);
     }
 }
 
@@ -1291,11 +1293,35 @@ static void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
         }
     };
 
+    // Structural check: typed FBundleReference.mTopic must resolve.
+    // Scans mNote/mPath for stray references using the legacy regex walk.
+    const auto CheckDeps = [&](const FTopicBundle &InB,
+                               const std::string &InBase,
+                               const std::vector<FBundleReference> &InDeps)
+    {
+        for (size_t I = 0; I < InDeps.size(); ++I)
+        {
+            const FBundleReference &R = InDeps[I];
+            const std::string B = InBase + "[" + std::to_string(I) + "]";
+            if ((R.mKind == EDependencyKind::Bundle ||
+                 R.mKind == EDependencyKind::Phase) &&
+                !R.mTopic.empty() && R.mTopic != InB.mTopicKey &&
+                KnownKeys.count(R.mTopic) == 0)
+            {
+                Fail(OutChecks, "topic_ref_integrity",
+                     EValidationSeverity::ErrorMinor, InB.mTopicKey,
+                     B + ".topic",
+                     "unknown topic reference: '" + R.mTopic + "'");
+            }
+            Walk(InB.mTopicKey, B + ".path", R.mPath);
+            Walk(InB.mTopicKey, B + ".note", R.mNote);
+        }
+    };
     for (const FTopicBundle &B : InBundles)
     {
         const FPlanMetadata &M = B.mMetadata;
         Walk(B.mTopicKey, "summary", M.mSummary);
-        Walk(B.mTopicKey, "dependencies", M.mDependencies);
+        CheckDeps(B, "dependencies", M.mDependencies);
         Walk(B.mTopicKey, "source_references", M.mSourceReferences);
         Walk(B.mTopicKey, "execution_strategy", M.mExecutionStrategy);
         Walk(B.mTopicKey, "locked_decisions", M.mLockedDecisions);
@@ -1303,27 +1329,10 @@ static void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
         {
             const FPhaseRecord &P = B.mPhases[PI];
             const std::string Base = "phases[" + std::to_string(PI) + "]";
-            Walk(B.mTopicKey, Base + ".dependencies", P.mDesign.mDependencies);
+            CheckDeps(B, Base + ".dependencies", P.mDesign.mDependencies);
             Walk(B.mTopicKey, Base + ".scope", P.mScope);
             Walk(B.mTopicKey, Base + ".output", P.mOutput);
         }
-    }
-}
-
-// 30. stale_plan_md_reference (Warning) — `.Plan.md` references are V3
-// filename residue; V4 uses `.Plan.json`.
-static void EvalStalePlanMdReference(const std::vector<FTopicBundle> &InBundles,
-                                     std::vector<ValidateCheck> &OutChecks)
-{
-    static const std::regex Pattern(R"(\b[A-Z][A-Za-z0-9]+\.Plan\.md\b)");
-    for (const FTopicBundle &B : InBundles)
-    {
-        ScanTopicProse(B, Pattern, "stale_plan_md_reference",
-                       EValidationSeverity::Warning,
-                       "stale .Plan.md ref: ", OutChecks);
-        ScanPhaseProse(B, Pattern, "stale_plan_md_reference",
-                       EValidationSeverity::Warning,
-                       "stale .Plan.md ref: ", OutChecks);
     }
 }
 
@@ -1355,6 +1364,66 @@ static void EvalNoDuplicateChangelog(const std::vector<FTopicBundle> &InBundles,
                  "changelogs[" + std::to_string(I) + "].change",
                  "duplicate of changelogs[" + std::to_string(Found->second) +
                      "]: '" + Preview + "'");
+        }
+    }
+}
+
+// no_duplicate_phase_field (Warning) — two or more phases in the same
+// bundle share byte-identical non-empty content in a prescriptive field
+// that should vary per phase (`scope`, `output`, `handoff`,
+// `readiness_gate`, `investigation`, `code_entity_contract`,
+// `code_snippets`, `best_practices`).
+//
+// Catches migration-stamp artifacts where a template string was copied
+// unchanged into many phases (the signature pattern of a broken V3→V4
+// extractor). Short stubs (<20 chars) are ignored because they tend to
+// be legitimately-terse labels like `N/A`.
+static void
+EvalNoDuplicatePhaseField(const std::vector<FTopicBundle> &InBundles,
+                          std::vector<ValidateCheck> &OutChecks)
+{
+    static const std::array<
+        std::pair<const char *, std::string (*)(const FPhaseRecord &)>, 8>
+        Fields = {{{"scope", [](const FPhaseRecord &P) { return P.mScope; }},
+                   {"output", [](const FPhaseRecord &P) { return P.mOutput; }},
+                   {"handoff",
+                    [](const FPhaseRecord &P) { return P.mDesign.mHandoff; }},
+                   {"readiness_gate", [](const FPhaseRecord &P)
+                    { return P.mDesign.mReadinessGate; }},
+                   {"investigation", [](const FPhaseRecord &P)
+                    { return P.mDesign.mInvestigation; }},
+                   {"code_entity_contract", [](const FPhaseRecord &P)
+                    { return P.mDesign.mCodeEntityContract; }},
+                   {"code_snippets", [](const FPhaseRecord &P)
+                    { return P.mDesign.mCodeSnippets; }},
+                   {"best_practices", [](const FPhaseRecord &P)
+                    { return P.mDesign.mBestPractices; }}}};
+
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (const auto &Field : Fields)
+        {
+            std::map<std::string, size_t> FirstSeen;
+            for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+            {
+                const std::string Value = Field.second(B.mPhases[PI]);
+                if (Value.size() < 20)
+                    continue;
+                auto Found = FirstSeen.find(Value);
+                if (Found == FirstSeen.end())
+                {
+                    FirstSeen.emplace(Value, PI);
+                    continue;
+                }
+                std::string Preview = Value;
+                if (Preview.size() > 60)
+                    Preview = Preview.substr(0, 57) + "...";
+                Fail(OutChecks, "no_duplicate_phase_field",
+                     EValidationSeverity::Warning, B.mTopicKey,
+                     "phases[" + std::to_string(PI) + "]." + Field.first,
+                     "identical to phases[" + std::to_string(Found->second) +
+                         "]." + Field.first + ": '" + Preview + "'");
+            }
         }
     }
 }
@@ -1396,21 +1465,16 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     // Content-hygiene (ErrorMinor + Warning)
     EvalNoDevAbsolutePath(InBundles, Checks);
     EvalTopicRefIntegrity(InBundles, Checks);
-    EvalLegacyCliFree(InBundles, Checks);
-    EvalV3TerminologyFree(InBundles, Checks);
-    EvalCanonicalPhaseRefProse(InBundles, Checks);
     EvalNoHardcodedEndpoint(InBundles, Checks);
     // Structural checks on typed FValidationCommand records (Phase A).
-    // Replace the former string-scanning workarounds
-    // (`platform_path_sep_free`, `shell_syntax_sane`).
     EvalValidationCommandFields(InBundles, Checks);
     EvalValidationCommandPlatformConsistency(InBundles, Checks);
     EvalNoSmartQuotes(InBundles, Checks);
     EvalNoHtmlInProse(InBundles, Checks);
     EvalNoEmptyPlaceholderLiteral(InBundles, Checks);
     EvalNoUnresolvedMarker(InBundles, Checks);
-    EvalStalePlanMdReference(InBundles, Checks);
     EvalNoDuplicateChangelog(InBundles, Checks);
+    EvalNoDuplicatePhaseField(InBundles, Checks);
     EvalPathResolves(InBundles, Checks);
 
     return Checks;

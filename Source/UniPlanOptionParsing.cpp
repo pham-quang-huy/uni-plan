@@ -794,10 +794,69 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
                 ConsumeValuedOption(Remaining, Index, "--source-references");
             continue;
         }
-        if (Token == "--dependencies")
+        if (Token == "--dependency-clear")
         {
-            Options.mDependencies =
-                ConsumeValuedOption(Remaining, Index, "--dependencies");
+            Options.mbDependencyClear = true;
+            continue;
+        }
+        if (Token == "--dependency-add")
+        {
+            // Parse "<kind>|<topic>|<phase>|<path>|<note>" (pipe-delimited).
+            // All fields optional except topic (Bundle/Phase) or path
+            // (Governance/External). Kind defaults to bundle.
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--dependency-add");
+            FBundleReference R;
+            std::vector<std::string> Segments;
+            std::string Current;
+            for (char C : Raw)
+            {
+                if (C == '|')
+                {
+                    Segments.push_back(std::move(Current));
+                    Current.clear();
+                }
+                else
+                {
+                    Current += C;
+                }
+            }
+            Segments.push_back(std::move(Current));
+            const std::string Kind = Segments.size() > 0 ? Segments[0] : "";
+            if (!DependencyKindFromString(Kind, R.mKind))
+                throw UsageError(
+                    "--dependency-add: invalid kind '" + Kind +
+                    "' (expected bundle|phase|governance|external)");
+            if (Segments.size() > 1)
+                R.mTopic = Segments[1];
+            if (Segments.size() > 2 && !Segments[2].empty())
+            {
+                try
+                {
+                    R.mPhase = std::stoi(Segments[2]);
+                }
+                catch (const std::exception &)
+                {
+                    throw UsageError(
+                        "--dependency-add: phase segment must be an integer");
+                }
+            }
+            if (Segments.size() > 3)
+                R.mPath = Segments[3];
+            if (Segments.size() > 4)
+            {
+                R.mNote = Segments[4];
+                for (size_t I = 5; I < Segments.size(); ++I)
+                    R.mNote += "|" + Segments[I];
+            }
+            if ((R.mKind == EDependencyKind::Bundle ||
+                 R.mKind == EDependencyKind::Phase) &&
+                R.mTopic.empty())
+                throw UsageError(
+                    "--dependency-add: kind=bundle|phase requires non-empty "
+                    "<topic> segment; format: "
+                    "'<kind>|<topic>|<phase>|<path>|<note>'");
+            Options.mDependencyAdd.push_back(std::move(R));
             continue;
         }
         throw UsageError("Unknown option for topic set: " + Token);
@@ -946,10 +1005,65 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             Options.mValidationAdd.push_back(std::move(C));
             continue;
         }
-        if (Token == "--phase-dependencies")
+        if (Token == "--dependency-clear")
         {
-            Options.mPhaseDependencies =
-                ConsumeValuedOption(Remaining, Index, "--phase-dependencies");
+            Options.mbDependencyClear = true;
+            continue;
+        }
+        if (Token == "--dependency-add")
+        {
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--dependency-add");
+            FBundleReference R;
+            std::vector<std::string> Segments;
+            std::string Current;
+            for (char C : Raw)
+            {
+                if (C == '|')
+                {
+                    Segments.push_back(std::move(Current));
+                    Current.clear();
+                }
+                else
+                {
+                    Current += C;
+                }
+            }
+            Segments.push_back(std::move(Current));
+            const std::string Kind = Segments.size() > 0 ? Segments[0] : "";
+            if (!DependencyKindFromString(Kind, R.mKind))
+                throw UsageError(
+                    "--dependency-add: invalid kind '" + Kind +
+                    "' (expected bundle|phase|governance|external)");
+            if (Segments.size() > 1)
+                R.mTopic = Segments[1];
+            if (Segments.size() > 2 && !Segments[2].empty())
+            {
+                try
+                {
+                    R.mPhase = std::stoi(Segments[2]);
+                }
+                catch (const std::exception &)
+                {
+                    throw UsageError(
+                        "--dependency-add: phase segment must be an integer");
+                }
+            }
+            if (Segments.size() > 3)
+                R.mPath = Segments[3];
+            if (Segments.size() > 4)
+            {
+                R.mNote = Segments[4];
+                for (size_t I = 5; I < Segments.size(); ++I)
+                    R.mNote += "|" + Segments[I];
+            }
+            if ((R.mKind == EDependencyKind::Bundle ||
+                 R.mKind == EDependencyKind::Phase) &&
+                R.mTopic.empty())
+                throw UsageError(
+                    "--dependency-add: kind=bundle|phase requires non-empty "
+                    "<topic> segment");
+            Options.mDependencyAdd.push_back(std::move(R));
             continue;
         }
         throw UsageError("Unknown option for phase set: " + Token);

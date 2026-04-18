@@ -1,65 +1,25 @@
 # verification_schema
 
-Quick summary: This schema defines the required sections for any verification sidecar document (`*.Verification.md`). It is the generic verification contract shared across plan, implementation, and playbook verifications.
+> **DEPRECATED — V3 legacy markdown schema.**
+>
+> This document describes a retired markdown artifact format used by
+> `uni-plan lint` for backward-compatibility filename checking only.
+> **It is NOT canonical authoring guidance.** The canonical V4 contract
+> is the `.Plan.json` topic bundle (`$schema: plan-v4`) under
+> `Docs/Plans/`, which carries all phases, changelogs, and verifications
+> inline — there are no separate plan/implementation/playbook/sidecar
+> files in V4. See the V4 bundle model in the owning repository's
+> `AGENTS.md`/`CLAUDE.md`.
 
-## doc_type
-| Property | Value |
+## lint_scope
+
+`uni-plan lint` consumes only these two rules from this schema:
+
+| Rule | Value |
 | --- | --- |
-| Type | `enum` |
-| Required | `yes` |
-| Allowed | `verification` |
-| Rule | Fixed value for this schema. |
+| Allowed filename pattern | `<TopicPascalCase>.<Slot>.Verification.md` |
+| First non-empty line | Must be an H1 (`# ...`) |
 
-## file_name
-| Property | Value |
-| --- | --- |
-| Type | `string` |
-| Required | `yes` |
-| Pattern | `*.Verification.md` |
-| Rule | Canonical verification sidecar filename. Must be co-located with the owning document. |
-
-## section_menu
-| Property | Value |
-| --- | --- |
-| Type | `table` |
-| Required | `yes` |
-| Columns | `Section`, `Description` |
-| Rule | Must be immediately after H1. |
-
-## linked_document
-| Property | Value |
-| --- | --- |
-| Type | `table` |
-| Required | `yes` |
-| Columns | `Item`, `Path` |
-| Rule | Must reference the owning document path (repo-relative). |
-
-## entries
-| Property | Value |
-| --- | --- |
-| Type | `table` |
-| Required | `yes` |
-| Columns | `Date`, `Update`, `Evidence` |
-| Rule | Append-only chronological change history. Each row records one document edit or scope change. |
-| Rule | `Date` uses ISO 8601 format (`YYYY-MM-DD`). |
-| Rule | `Evidence` contains repo-relative file paths or artifact references. |
-
-## verification_entries
-| Property | Value |
-| --- | --- |
-| Type | `table` |
-| Required | `yes` |
-| Columns | `Date`, `Command`, `Result` |
-| Rule | Append-only verification evidence. Each row records one validation command and its outcome. |
-| Rule | `Date` uses ISO 8601 format (`YYYY-MM-DD`). |
-| Rule | `Command` contains the actual shell command or check description. |
-| Rule | `Result` contains pass/fail outcome with narrative evidence. |
-
-## canonical_section_order
-
-| Order | Section ID | Requirement |
-| --- | --- | --- |
-| 1 | `section_menu` | required |
-| 2 | `linked_document` | required |
-| 3 | `entries` | required |
-| 4 | `verification_entries` | required |
+No other field-level schema content is consumed by any runtime tool. All
+V3 section/table/lifecycle content previously documented here has been
+retired; do not author new documents against the retired structure.

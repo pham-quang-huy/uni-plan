@@ -50,6 +50,38 @@ EmitValidationCommandsJson(const char *InName,
 }
 
 // ---------------------------------------------------------------------------
+// EmitDependenciesJson — write a typed dependencies array as JSON:
+//   [{"kind":"bundle","topic":"X","phase":null,"path":"","note":"..."}, ...]
+// Emits an empty array when the input vector is empty (never null).
+// ---------------------------------------------------------------------------
+
+static void EmitDependenciesJson(const char *InName,
+                                 const std::vector<FBundleReference> &InDeps,
+                                 bool InTrailingComma = true)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InDeps.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FBundleReference &R = InDeps[I];
+        std::cout << "{";
+        EmitJsonField("kind", ToString(R.mKind));
+        EmitJsonField("topic", R.mTopic);
+        if (R.mPhase < 0)
+            std::cout << "\"phase\":null,";
+        else
+            std::cout << "\"phase\":" << R.mPhase << ",";
+        EmitJsonField("path", R.mPath);
+        EmitJsonField("note", R.mNote, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
+
+// ---------------------------------------------------------------------------
 // TryLoadBundleByTopic — recursive search for <TopicKey>.Plan.json
 // ---------------------------------------------------------------------------
 
@@ -244,7 +276,7 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
     EmitJsonFieldNullable("execution_strategy", Meta.mExecutionStrategy);
     EmitJsonFieldNullable("locked_decisions", Meta.mLockedDecisions);
     EmitJsonFieldNullable("source_references", Meta.mSourceReferences);
-    EmitJsonFieldNullable("dependencies", Meta.mDependencies);
+    EmitDependenciesJson("dependencies", Meta.mDependencies);
     EmitJsonFieldNullable("next_actions", Bundle.mNextActions);
     EmitJsonFieldSizeT("phase_count", Bundle.mPhases.size());
 
@@ -614,7 +646,7 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
     {
         EmitJsonFieldNullable("readiness_gate", Phase.mDesign.mReadinessGate);
         EmitJsonFieldNullable("investigation", Phase.mDesign.mInvestigation);
-        EmitJsonFieldNullable("dependencies", Phase.mDesign.mDependencies);
+        EmitDependenciesJson("dependencies", Phase.mDesign.mDependencies);
         EmitJsonFieldNullable("code_entity_contract",
                               Phase.mDesign.mCodeEntityContract);
         EmitJsonFieldNullable("code_snippets", Phase.mDesign.mCodeSnippets);
@@ -643,7 +675,7 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         // Full mode includes reference fields
         EmitJsonFieldNullable("readiness_gate", Phase.mDesign.mReadinessGate);
         EmitJsonFieldNullable("investigation", Phase.mDesign.mInvestigation);
-        EmitJsonFieldNullable("dependencies", Phase.mDesign.mDependencies);
+        EmitDependenciesJson("dependencies", Phase.mDesign.mDependencies);
         EmitJsonFieldNullable("handoff", Phase.mDesign.mHandoff);
         EmitValidationCommandsJson("validation_commands",
                                    Phase.mDesign.mValidationCommands);
@@ -790,8 +822,24 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
     PrintField("Remaining", Phase.mLifecycle.mRemaining);
     PrintField("Blockers", Phase.mLifecycle.mBlockers);
     PrintField("Readiness Gate", Phase.mDesign.mReadinessGate);
-    PrintField("Dependencies", Phase.mDesign.mDependencies);
     PrintField("Handoff", Phase.mDesign.mHandoff);
+
+    // Dependencies table — typed vector of FBundleReference.
+    if (!Phase.mDesign.mDependencies.empty())
+    {
+        std::cout << kColorBold << "Dependencies" << kColorReset << "\n";
+        HumanTable DepTable;
+        DepTable.mHeaders = {"Kind", "Topic", "Phase", "Path", "Note"};
+        for (const FBundleReference &R : Phase.mDesign.mDependencies)
+        {
+            const std::string PhaseCell =
+                R.mPhase < 0 ? "" : std::to_string(R.mPhase);
+            DepTable.AddRow(
+                {ToString(R.mKind), R.mTopic, PhaseCell, R.mPath, R.mNote});
+        }
+        DepTable.Print();
+        std::cout << "\n";
+    }
 
     // Validation commands table — typed vector of FValidationCommand.
     if (!Phase.mDesign.mValidationCommands.empty())
@@ -905,6 +953,11 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
     if (Sub == "set")
     {
         return RunPhaseSetCommand(SubArgs, InRepoRoot);
+    }
+
+    if (Sub == "remove")
+    {
+        return RunPhaseRemoveCommand(SubArgs, InRepoRoot);
     }
 
     // Semantic phase commands
@@ -2054,8 +2107,22 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
               Options.mLockedDecisions);
     ApplyMeta("source_references", Bundle.mMetadata.mSourceReferences,
               Options.mSourceReferences);
-    ApplyMeta("dependencies", Bundle.mMetadata.mDependencies,
-              Options.mDependencies);
+
+    // dependencies (typed vector) — mirrors validation_commands semantics.
+    if (Options.mbDependencyClear || !Options.mDependencyAdd.empty())
+    {
+        const std::string OldDesc =
+            std::to_string(Bundle.mMetadata.mDependencies.size()) + " entries";
+        if (Options.mbDependencyClear)
+            Bundle.mMetadata.mDependencies.clear();
+        for (const FBundleReference &R : Options.mDependencyAdd)
+            Bundle.mMetadata.mDependencies.push_back(R);
+        const std::string NewDesc =
+            std::to_string(Bundle.mMetadata.mDependencies.size()) + " entries";
+        Changes.push_back({"dependencies", {OldDesc, NewDesc}});
+        if (Desc.empty())
+            Desc = "Updated dependencies";
+    }
 
     if (Changes.empty())
     {
@@ -2208,8 +2275,21 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
         if (Desc.empty())
             Desc = "Updated validation_commands";
     }
-    ApplyPhase("dependencies", Phase.mDesign.mDependencies,
-               Options.mPhaseDependencies);
+    // dependencies (typed vector) — see FTopicSetCommand above for semantics.
+    if (Options.mbDependencyClear || !Options.mDependencyAdd.empty())
+    {
+        const std::string OldDesc =
+            std::to_string(Phase.mDesign.mDependencies.size()) + " entries";
+        if (Options.mbDependencyClear)
+            Phase.mDesign.mDependencies.clear();
+        for (const FBundleReference &R : Options.mDependencyAdd)
+            Phase.mDesign.mDependencies.push_back(R);
+        const std::string NewDesc =
+            std::to_string(Phase.mDesign.mDependencies.size()) + " entries";
+        Changes.push_back({"dependencies", {OldDesc, NewDesc}});
+        if (Desc.empty())
+            Desc = Target + " updated dependencies";
+    }
 
     if (Changes.empty())
     {
@@ -2219,6 +2299,108 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
 
     AppendAutoChangelog(Bundle, Target,
                         Desc.empty() ? Target + " updated" : Desc);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase remove — delete the trailing phase of a topic
+//
+// Safety gates:
+//   - phase index must refer to the last phase of the topic (no index-shift
+//     semantics; callers who want to remove an intermediate phase must
+//     reorder first)
+//   - phase.status must be not_started (refuse in_progress / completed /
+//     blocked — removing executed work would falsify history)
+//   - no changelog or verification entry may reference the phase (those
+//     entries would otherwise be orphaned)
+//
+// Emits an auto-changelog entry describing the removal. Does not cascade
+// into jobs/lanes/tasks — those are embedded in the phase record being
+// erased and disappear with it.
+// ---------------------------------------------------------------------------
+
+int RunPhaseRemoveCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot)
+{
+    const FPhaseGetOptions Options = ParsePhaseGetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (Options.mPhaseIndex < 0 ||
+        static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    const size_t Idx = static_cast<size_t>(Options.mPhaseIndex);
+    const size_t Last = Bundle.mPhases.size() - 1;
+    if (Idx != Last)
+    {
+        std::cerr << "phase remove only supports the trailing phase ("
+                  << "phases[" << Last << "]); got phases[" << Idx << "]\n";
+        return 1;
+    }
+
+    const FPhaseRecord &Phase = Bundle.mPhases[Idx];
+    if (Phase.mLifecycle.mStatus != EExecutionStatus::NotStarted)
+    {
+        std::cerr << "phase remove refuses status="
+                  << ToString(Phase.mLifecycle.mStatus)
+                  << "; only not_started phases may be removed\n";
+        return 1;
+    }
+
+    for (const FChangeLogEntry &C : Bundle.mChangeLogs)
+    {
+        if (C.mPhase == static_cast<int>(Idx))
+        {
+            std::cerr << "phase remove refused: changelogs[] references "
+                      << "phases[" << Idx << "]\n";
+            return 1;
+        }
+    }
+    for (const FVerificationEntry &V : Bundle.mVerifications)
+    {
+        if (V.mPhase == static_cast<int>(Idx))
+        {
+            std::cerr << "phase remove refused: verifications[] references "
+                      << "phases[" << Idx << "]\n";
+            return 1;
+        }
+    }
+
+    const std::string OldScope = Phase.mScope;
+    Bundle.mPhases.pop_back();
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back(
+        {"phases[" + std::to_string(Idx) + "]", {OldScope, "(removed)"}});
+
+    const std::string Target = MakePhaseTarget(static_cast<int>(Idx));
+    const std::string Desc =
+        "Removed " + Target + (OldScope.empty() ? "" : ": " + OldScope);
+    // File removal changelog against the topic, not the now-gone phase
+    // index — otherwise AppendAutoChangelog sets mPhase to Idx and leaves
+    // a dangling changelogs[*].phase reference flagged by
+    // changelog_phase_ref.
+    AppendAutoChangelog(Bundle, kTargetPlan, Desc);
+
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";

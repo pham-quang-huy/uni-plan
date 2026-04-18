@@ -650,4 +650,62 @@ inline bool PlatformScopeFromString(const std::string &InValue,
     return false;
 }
 
+// ---------------------------------------------------------------------------
+// EDependencyKind — kind of dependency reference in FBundleReference.
+//   Bundle     — another topic's `.Plan.json` (resolves against loaded bundles)
+//   Phase      — a specific phase in this or another topic
+//   Governance — non-bundle governance doc (CLAUDE.md, AGENTS.md, …)
+//   External   — third-party / docs outside this repo
+// ---------------------------------------------------------------------------
+
+enum class EDependencyKind : uint8_t
+{
+    Bundle,
+    Phase,
+    Governance,
+    External
+};
+
+inline const char *ToString(EDependencyKind InValue)
+{
+    switch (InValue)
+    {
+    case EDependencyKind::Bundle:
+        return "bundle";
+    case EDependencyKind::Phase:
+        return "phase";
+    case EDependencyKind::Governance:
+        return "governance";
+    case EDependencyKind::External:
+        return "external";
+    }
+    return "bundle";
+}
+
+inline bool DependencyKindFromString(const std::string &InValue,
+                                     EDependencyKind &OutValue)
+{
+    if (InValue == "bundle" || InValue.empty())
+    {
+        OutValue = EDependencyKind::Bundle;
+        return true;
+    }
+    if (InValue == "phase")
+    {
+        OutValue = EDependencyKind::Phase;
+        return true;
+    }
+    if (InValue == "governance")
+    {
+        OutValue = EDependencyKind::Governance;
+        return true;
+    }
+    if (InValue == "external")
+    {
+        OutValue = EDependencyKind::External;
+        return true;
+    }
+    return false;
+}
+
 } // namespace UniPlan
