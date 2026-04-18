@@ -84,6 +84,21 @@ uni-plan validate --human
 uni-plan blockers --human
 ```
 
+### Cross-topic aggregate queries (v0.71.0+)
+
+Use `uni-plan validate` (default JSON) to answer aggregate questions in one call — never `json.load` against `.Plan.json`. The `summary` section carries per-topic `phase_count` / `status_distribution` and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of 7 design fields), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`.
+
+```bash
+# Topic count
+uni-plan validate --strict | jq '.summary.topic_count'
+
+# Thin-but-completed phases (design_chars < 500 AND status=completed)
+uni-plan validate --strict | jq '[.summary.topics[].phases[] | select(.design_chars < 500 and .status == "completed")] | length'
+
+# All manifest paths that don't resolve on disk
+uni-plan manifest list --missing-only | jq '.entries[] | {topic, phase_index, file_path}'
+```
+
 ## Verdict
 
 - **PASS**: No critical or major findings
