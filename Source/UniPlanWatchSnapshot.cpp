@@ -39,8 +39,8 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
         const FPhaseRecord &Phase = InBundle.mPhases[I];
         PhaseItem Item;
         Item.mPhaseKey = std::to_string(I);
-        Item.mStatus = ToString(Phase.mLifecycle.mStatus);
-        Item.mStatusRaw = Item.mStatus;
+        Item.mStatus = Phase.mLifecycle.mStatus;
+        Item.mStatusRaw = ToString(Phase.mLifecycle.mStatus);
         Item.mDescription = Phase.mScope;
         Summary.mPhases.push_back(Item);
 
@@ -97,8 +97,10 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
     for (const FPhaseRecord &Phase : InBundle.mPhases)
     {
         if (Phase.mLifecycle.mStatus == EExecutionStatus::Blocked ||
-            (!Phase.mLifecycle.mBlockers.empty() && Phase.mLifecycle.mBlockers != "None" &&
-             Phase.mLifecycle.mBlockers != "none." && Phase.mLifecycle.mBlockers != "N/A" &&
+            (!Phase.mLifecycle.mBlockers.empty() &&
+             Phase.mLifecycle.mBlockers != "None" &&
+             Phase.mLifecycle.mBlockers != "none." &&
+             Phase.mLifecycle.mBlockers != "N/A" &&
              Phase.mLifecycle.mBlockers != "-"))
         {
             Summary.mBlockerCount++;

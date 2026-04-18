@@ -1,7 +1,8 @@
 #include "UniPlanTypes.h"
 #include "UniPlanDocumentStore.h"
-#include "UniPlanHelpers.h"
 #include "UniPlanForwardDecls.h"
+#include "UniPlanHelpers.h"
+#include "UniPlanSchemaValidation.h"
 
 #include <algorithm>
 #include <fstream>
@@ -409,7 +410,8 @@ std::vector<PhaseItem> CollectPhaseItemsFromPlan(
                 PhaseItem Item;
                 Item.mPhaseKey = PhaseKey;
                 Item.mStatusRaw = Status;
-                Item.mStatus = Status;
+                if (!ExecutionStatusFromString(Status, Item.mStatus))
+                    Item.mStatus = ParseExecutionStatusLenient(Status);
                 Item.mTableID = Table.mTableID;
                 Item.mRowIndex = static_cast<int>(RowIndex) + 1;
                 Item.mPlaybookPath = PlaybookPath;

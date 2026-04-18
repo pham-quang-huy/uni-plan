@@ -125,7 +125,7 @@ int DocWatchApp::Run()
                      ++PhIdx)
                 {
                     if (SelectedPlan.mPhases[static_cast<size_t>(PhIdx)]
-                            .mStatus == "in_progress")
+                            .mStatus == EExecutionStatus::InProgress)
                     {
                         mSelectedPhaseIndex = PhIdx;
                         break;

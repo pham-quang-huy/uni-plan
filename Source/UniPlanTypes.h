@@ -19,7 +19,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.71.4";
+static constexpr const char *kCliVersion = "0.71.5";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -841,7 +841,7 @@ struct PhaseItem
 {
     std::string mPhaseKey;
     std::string mStatusRaw;
-    std::string mStatus;
+    EExecutionStatus mStatus = EExecutionStatus::NotStarted;
     std::string mPlaybookPath;
     std::string mDescription;
     std::string mNextAction;

@@ -298,7 +298,7 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
         std::string ActivePhase;
         for (const PhaseItem &Phase : Plan.mPhases)
         {
-            if (Phase.mStatus == "in_progress")
+            if (Phase.mStatus == EExecutionStatus::InProgress)
             {
                 ActivePhase = Phase.mPhaseKey;
                 break;
@@ -529,7 +529,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
 
         Elements RowCells = PadGridRow({
             text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 14),
-            ColorStatus(Phase.mStatus) | size(WIDTH, EQUAL, 14),
+            ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 14),
             text(PlaybookMarker) | PlaybookColor | size(WIDTH, EQUAL, 4),
             PBLinesBar(PBLinesInt) | size(WIDTH, EQUAL, 16),
             text(TaxSummary) | dim | size(WIDTH, EQUAL, 30),
