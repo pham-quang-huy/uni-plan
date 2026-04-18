@@ -1,5 +1,9 @@
 # uni-plan
 
+## hard_rule_cli_only
+
+**`.Plan.json` files MUST be accessed through the `uni-plan` CLI — never `json.load` / raw JSON parsing.** The CLI is the authoritative interface to the V4 bundle schema; raw reads bypass the typed domain model, validation, and schema-evolution guarantees. If a needed query isn't expressible via existing CLI commands, that is a CLI gap — report it and stop, do not work around with raw file reads. The `uni-plan validate` `summary` section and `uni-plan manifest list` command (both added in v0.71.0) cover the aggregate-query cases that previously tempted circumvention.
+
 ## project_overview
 
 uni-plan is a standalone C++17 CLI tool for plan governance — managing, validating, and monitoring `.Plan.json` topic bundles across repositories. Each topic is a single JSON file containing phases, changelogs, verifications, and plan metadata.
@@ -181,10 +185,6 @@ Before committing any `Source/` changes, verify `kCliVersion` was bumped
 appropriately for the kind of change introduced.
 
 ## documentation_rules
-
-### V4 bundle access — CLI-only
-
-**`.Plan.json` files MUST be accessed through the `uni-plan` CLI — never `json.load` / raw JSON parsing.** The CLI is the authoritative interface to the V4 bundle schema; raw reads bypass the typed domain model, validation, and schema-evolution guarantees. If a needed query isn't expressible via existing CLI commands, that is a CLI gap — report it and stop, do not work around with raw file reads. The `uni-plan validate` `summary` section and `uni-plan manifest list` command (both added in v0.71.0) cover the aggregate-query cases that previously tempted circumvention.
 
 ### V4 bundle model
 

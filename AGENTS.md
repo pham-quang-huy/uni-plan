@@ -2,7 +2,7 @@
 
 ## hard_rule_cli_only
 
-**`.Plan.json` files MUST be read through the `uni-plan` CLI — never `json.load` / raw JSON parsing.** The CLI is the authoritative interface; raw reads bypass the typed domain model, validation, and schema guarantees. If a needed query isn't expressible via existing CLI commands, that is a CLI gap — report it and stop, do not work around with raw reads. `uni-plan validate` (with its `summary` section) and `uni-plan manifest list [--missing-only]` cover the aggregate-query cases.
+**`.Plan.json` files MUST be accessed through the `uni-plan` CLI — never `json.load` / raw JSON parsing.** The CLI is the authoritative interface to the V4 bundle schema; raw reads bypass the typed domain model, validation, and schema-evolution guarantees. If a needed query isn't expressible via existing CLI commands, that is a CLI gap — report it and stop, do not work around with raw file reads. The `uni-plan validate` `summary` section and `uni-plan manifest list` command (both added in v0.71.0) cover the aggregate-query cases that previously tempted circumvention.
 
 ## project_overview
 
@@ -80,7 +80,7 @@ type: Subject in Title Case
 - Bullet point describing key change
 - Another bullet point
 
-Co-Authored-By: Codex Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 ```
 
 **Types**: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`
@@ -119,7 +119,7 @@ uni-plan/
 │   └── Playbooks/             # Legacy markdown fixtures / historical references
 ├── ThirdParty/                # FTXUI (terminal UI library)
 ├── Build/                     # CMake output directory
-├── .Codex/                   # Codex system
+├── .claude/                   # Claude Code system
 │   ├── settings.json          # Hook configuration
 │   ├── hooks/                 # 3 hook scripts
 │   ├── rules/                 # 2 auto-loaded rule files
@@ -138,45 +138,51 @@ uni-plan/
 
 | Component | Count | Location |
 |-----------|-------|----------|
-| Rules | 2 | `.Codex/rules/` — auto-loaded coding and naming enforcement |
-| Hooks | 3 | `.Codex/hooks/` — using-namespace guard, pragma-once guard, auto-format |
-| Skills | 12 | `.Codex/skills/upl-*/` — see skill table below |
-| Agents | 1 | `.Codex/agents/upl-agent-senior-tester.md` — test coverage auditor |
+| Rules | 2 | `.claude/rules/` — auto-loaded coding and naming enforcement |
+| Hooks | 3 | `.claude/hooks/` — using-namespace guard, pragma-once guard, auto-format |
+| Skills | 12 | `.claude/skills/upl-*/` — see skill table below |
+| Agents | 1 | `.claude/agents/upl-agent-senior-tester.md` — test coverage auditor |
 
 ## project_skills
 
 | Skill | Path | When to use |
 |-------|------|-------------|
-| `upl-commit` | `.Codex/skills/upl-commit/SKILL.md` | User requests a commit — validates format, SemVer gate |
-| `upl-code-fix` | `.Codex/skills/upl-code-fix/SKILL.md` | Fixing bugs — workaround gate, SOLID assessment |
-| `upl-code-refactor` | `.Codex/skills/upl-code-refactor/SKILL.md` | Structural cleanup — SOLID enforcement, detection patterns |
-| `upl-schema-audit` | `.Codex/skills/upl-schema-audit/SKILL.md` | Audit Schemas/*.Schema.md for consistency |
-| `upl-validation-creation` | `.Codex/skills/upl-validation-creation/SKILL.md` | Scaffold a new validation check — scaffold + wire |
-| `upl-watch-panel` | `.Codex/skills/upl-watch-panel/SKILL.md` | Add/modify watch mode TUI panels |
-| `upl-Codex-audit` | `.Codex/skills/upl-Codex-audit/SKILL.md` | Audit .Codex/ system integrity |
-| `upl-Codex-learn` | `.Codex/skills/upl-Codex-learn/SKILL.md` | Learn from sessions, propose .Codex/ updates |
-| `upl-plan-creation` | `.Codex/skills/upl-plan-creation/SKILL.md` | Create governed plan bundles |
-| `upl-plan-execution` | `.Codex/skills/upl-plan-execution/SKILL.md` | Execute plan phases with governance gates |
-| `upl-plan-audit` | `.Codex/skills/upl-plan-audit/SKILL.md` | Audit plan topics via uni-plan CLI |
-| `upl-unit-test` | `.Codex/skills/upl-unit-test/SKILL.md` | Build and run unit tests for all CLI commands |
+| `upl-commit` | `.claude/skills/upl-commit/SKILL.md` | User requests a commit — validates format, SemVer gate |
+| `upl-code-fix` | `.claude/skills/upl-code-fix/SKILL.md` | Fixing bugs — workaround gate, SOLID assessment |
+| `upl-code-refactor` | `.claude/skills/upl-code-refactor/SKILL.md` | Structural cleanup — SOLID enforcement, detection patterns |
+| `upl-schema-audit` | `.claude/skills/upl-schema-audit/SKILL.md` | Audit Schemas/*.Schema.md for consistency |
+| `upl-validation-creation` | `.claude/skills/upl-validation-creation/SKILL.md` | Scaffold a new validation check — scaffold + wire |
+| `upl-watch-panel` | `.claude/skills/upl-watch-panel/SKILL.md` | Add/modify watch mode TUI panels |
+| `upl-claude-audit` | `.claude/skills/upl-claude-audit/SKILL.md` | Audit .claude/ system integrity |
+| `upl-claude-learn` | `.claude/skills/upl-claude-learn/SKILL.md` | Learn from sessions, propose .claude/ updates |
+| `upl-plan-creation` | `.claude/skills/upl-plan-creation/SKILL.md` | Create governed plan bundles |
+| `upl-plan-execution` | `.claude/skills/upl-plan-execution/SKILL.md` | Execute plan phases with governance gates |
+| `upl-plan-audit` | `.claude/skills/upl-plan-audit/SKILL.md` | Audit plan topics via uni-plan CLI |
+| `upl-unit-test` | `.claude/skills/upl-unit-test/SKILL.md` | Build and run unit tests for all CLI commands |
 
 ## cli_semver_discipline
 
-uni-plan is still **pre-1.0** (currently `0.50.0`) and under active development. CLI surface, mutation paths, validator output, and auto-changelog contract are all subject to change. No stability commitment until v1.0 ships.
+uni-plan is still **pre-1.0** (currently `0.50.0`) and under active
+development. The command surface, mutation target path format,
+validator output schema, and auto-changelog `affected` contract are all
+subject to change. There is no stability commitment until we explicitly
+ship v1.0.
 
 While in the 0.x range:
 
 | Bump | When |
 |------|------|
-| MINOR (0.x.0 → 0.(x+1).0) | New features **or** breaking changes: new commands, new flags, new validation checks, new output fields, command renames, removed options, schema format changes |
-| PATCH (0.x.y → 0.x.(y+1)) | Bug fixes, documentation, internal refactoring with no observable output change |
+| MINOR (0.x.0 → 0.(x+1).0) | New features or **any** breaking change: new commands, new flags, new validation checks, new output fields, command renames, removed options, schema format changes. All breaking + new-feature work shares MINOR while pre-1.0. |
+| PATCH (0.x.y → 0.x.(y+1)) | Bug fixes, documentation, internal refactoring, performance improvements that do not change observable output |
 
-**MAJOR is reserved for v1.0 and later.** Do not bump MAJOR while pre-1.0.
+**MAJOR will be reserved for v1.0 and later** once the CLI surface is
+locked. Do not bump MAJOR while in the 0.x range.
 
 **Version source**: `Source/UniPlanTypes.h` → `kCliVersion`
 **Trigger files**: All files in `Source/`
 
-Before committing any `Source/` changes, verify `kCliVersion` was bumped appropriately.
+Before committing any `Source/` changes, verify `kCliVersion` was bumped
+appropriately for the kind of change introduced.
 
 ## documentation_rules
 
@@ -205,7 +211,7 @@ Bundle entity references should use `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n
 
 ## schema_files
 
-The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 28 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
+The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 30 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
 
 | Schema | Purpose (lint only) |
 |--------|---------------------|
@@ -218,41 +224,90 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 
 ## validation_checks
 
-`uni-plan validate [--topic <T>] [--strict] [--human]` runs evaluators across three tiers. V3-era vocabulary/filename/CLI drift checks were removed in v0.63.0 — pattern enumeration against free-text prose is intrinsically incomplete; drift prevention now belongs in authoring discipline, not validator regex.
+`uni-plan validate [--topic <T>] [--strict] [--human]` runs 28 evaluator functions against every `.Plan.json` bundle. Checks are split into three tiers:
 
-### Structural — 15 checks (ErrorMajor + ErrorMinor)
+### Structural checks (ErrorMajor + ErrorMinor) — 15 checks
 
-`required_fields`, `phases_present`, `phase_scope`, `job_required_fields`, `job_lane_ref`, `task_required_fields`, `lane_required_fields`, `changelog_phase_ref`, `changelog_required_fields`, `verification_phase_ref`, `verification_required_fields`, `testing_record_fields`, `file_manifest_fields`, `timestamp_format`.
+Required fields, index references, enum values, timestamp format, and referential integrity. `ErrorMajor` always flips `valid=false`; `ErrorMinor` only does so under `--strict`.
 
-### Structural warnings — 3 checks
-
-`phase_tracking`, `testing_actor_coverage`, `canonical_entity_ref`.
-
-### Content-hygiene — 11 checks (ErrorMinor + Warning)
-
-| Check ID | Severity | Catches |
+| Check ID | Severity | Scope |
 |---|---|---|
-| `no_dev_absolute_path` | ErrorMinor | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` |
-| `topic_ref_integrity` | ErrorMinor | `<X>.Plan.json` references to unknown topics |
-| `path_resolves` | ErrorMinor | Impossible path refs (`Docs/Implementation/X.Plan.json` — V4 bundles live at `Docs/Plans/`) |
-| `validation_command_fields` | ErrorMinor / Warning | Typed `FValidationCommand` records require non-empty `command` (ErrorMinor) and `description` (Warning) |
-| `validation_command_platform_consistency` | Warning | A command with Windows backslash paths must set `platform: windows` |
-| `no_hardcoded_endpoint` | Warning | `localhost:N`, `127.0.0.1`, `192.168.*`, `10.*` in prose |
-| `no_smart_quotes` | Warning | Unicode curly quotes and en/em-dashes |
-| `no_html_in_prose` | Warning | `<br>`, `<div>`, `<span>`, `<p>`, `<hN>` |
+| `required_fields` | ErrorMajor | topic key + title |
+| `phases_present` | ErrorMajor | ≥1 phase |
+| `phase_scope` | ErrorMinor | per-phase scope non-empty |
+| `job_required_fields` / `task_required_fields` / `lane_required_fields` | ErrorMinor | required child fields |
+| `job_lane_ref` | ErrorMinor | job→lane index valid |
+| `changelog_phase_ref` / `verification_phase_ref` | ErrorMinor | phase index valid |
+| `changelog_required_fields` / `verification_required_fields` | ErrorMinor | required sidecar fields |
+| `testing_record_fields` / `file_manifest_fields` | ErrorMinor | array entry fields |
+| `timestamp_format` | ErrorMinor | ISO 8601 format |
+
+### Structural warnings (Warning) — 3 checks
+
+| Check ID | Scope |
+|---|---|
+| `phase_tracking` | phase has populated `done`/`remaining` |
+| `testing_actor_coverage` | phase has human + ai records |
+| `canonical_entity_ref` | `changelogs[*].affected` path format |
+
+### Content-hygiene checks (ErrorMinor + Warning) — 11 checks
+
+Detect agent-safety hazards, format inconsistencies, and reference integrity in prose fields. All flip `valid=false` under `--strict`.
+
+Per-phase scan scope is structurally partitioned into three field classes, each independently status-filtered via `EPhaseEvidenceScope { AllPhases, NotCompleted, CompletedOnly }`:
+
+| Field class | Fields | Rationale |
+|---|---|---|
+| Prescriptive | `scope`, `output`, all `design.*`, `dependencies[].*`, `validation_commands[].*`, `lanes[].*`, `jobs[].{scope, output, exit_criteria}`, `jobs[].tasks[].description`, `testing[].{step, action, expected}` | Forward-looking contract — format hygiene applies always. |
+| Evidence (inside design) | `jobs[].tasks[].{evidence, notes}`, `testing[].evidence` | Execution proof. |
+| Lifecycle | `lifecycle.{done, remaining, blockers}` | Historical on completed phases. |
+
+Per-check scope:
+
+| Check | Prescriptive | Evidence | Lifecycle |
+|---|---|---|---|
+| `no_dev_absolute_path`, `no_hardcoded_endpoint`, `no_smart_quotes`, `no_html_in_prose` | All phases | AllPhases | — |
+| `no_unresolved_marker` | All phases | CompletedOnly | CompletedOnly |
+| `no_empty_placeholder_literal` | — | — | AllPhases |
+
+V3-era vocabulary/filename/CLI drift checks (`v3_terminology_free`, `legacy_cli_free`, `stale_plan_md_reference`, `canonical_phase_ref_prose`) were removed in v0.63.0. Pattern-enumeration against free-text prose is an open-ended treadmill that can never be complete; once V3 artifacts are gone from the corpus, drift prevention belongs in `AGENTS.md` / `CLAUDE.md` authoring discipline and human review, not in validator regex.
+
+| Check ID | Severity | What it catches |
+|---|---|---|
+| `no_dev_absolute_path` | ErrorMinor | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` in prose |
+| `topic_ref_integrity` | ErrorMinor | `<X>.Plan.json` references where X is not a real topic |
+| `path_resolves` | ErrorMinor | Impossible path refs (`Docs/Implementation/X.Plan.json` — V4 bundles live at `Docs/Plans/`, not `Docs/Implementation/` or `Docs/Playbooks/`) |
+| `no_hardcoded_endpoint` | Warning | `localhost:N`, `127.0.0.1`, `192.168.*.*`, `10.*.*.*` in prose |
+| `validation_command_fields` | ErrorMinor / Warning | Each `FValidationCommand` record must have a non-empty `command` (ErrorMinor) and a non-empty `description` (Warning). |
+| `validation_command_platform_consistency` | Warning | A validation command with Windows-specific backslash path segments (`\Windows-x64\`, `\Debug\`, `\Tools\`) must set `platform: windows`. |
+| `no_smart_quotes` | Warning | Unicode curly quotes `" " ' '` and en/em-dashes |
+| `no_html_in_prose` | Warning | `<br>`, `<div>`, `<span>`, `<p>`, `<hN>` tags |
 | `no_empty_placeholder_literal` | Warning | `"None"`/`"N/A"`/`"TBD"`/`"-"` literal strings (use empty) |
 | `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in prescriptive prose and completed-phase evidence/lifecycle |
 | `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
-| `no_duplicate_phase_field` | Warning | Two phases share byte-identical non-empty content (≥20 chars) in `scope`/`output`/`done`/`remaining`/`handoff`/`readiness_gate`/`investigation`/`code_entity_contract`/`code_snippets`/`best_practices` — structural detection of migration-stamp artifacts |
-| `no_hollow_completed_phase` | Warning | A phase with `status=completed` but no execution evidence: empty `jobs[]`, empty `testing[]`, empty `file_manifest[]`, and both `code_snippets` and `investigation` empty |
+| `no_duplicate_phase_field` | Warning | Two phases of the same bundle share byte-identical non-empty content (≥20 chars) in a prescriptive or lifecycle field (`scope`, `output`, `done`, `remaining`, `handoff`, `readiness_gate`, `investigation`, `code_entity_contract`, `code_snippets`, `best_practices`) — signature of a migration script that stamped the same template across many phases |
+| `no_hollow_completed_phase` | Warning | A phase with `status=completed` but no execution evidence: empty `jobs[]`, empty `testing[]`, empty `file_manifest[]`, and both `code_snippets` and `investigation` empty. Catches governance lies where `completed` is claimed without substance. |
 
 ### `--strict` flag
 
-Without `--strict`, only `ErrorMajor` flips `valid=false`. With `--strict`, `ErrorMinor` and `Warning` also flip `valid=false` and the CLI exits 1. Use `--strict` in CI gates and governance audits.
+Without `--strict`, only `ErrorMajor` flips `valid=false` (and exit code). With `--strict`, any `ErrorMinor` or `Warning` also flips `valid=false`. Use `--strict` in CI gates and governance audits.
 
 ### `line` field on each issue
 
-Every issue in `issues[]` carries a `line` field (1-based, or `null` if unresolvable) pointing to the JSON line of the offending path. Human output renders a `Line` column between `Topic` and `Path`.
+Every issue in `issues[]` carries a `line` field (1-based, or `null` when unresolvable) pointing to the JSON line of the offending path. Human output renders a `Line` column. Resolved via a one-pass scanner over each bundle's raw text, built once per topic.
+
+Example JSON issue:
+
+```json
+{
+  "id": "no_smart_quotes",
+  "severity": "warning",
+  "topic": "AudioSFXSystem",
+  "path": "changelogs[4].change",
+  "line": 892,
+  "detail": "unicode smart char: \u201C"
+}
+```
 
 ## cli_commands
 
@@ -273,6 +328,10 @@ uni-plan timeline --topic <T> [--phase <N>] [--since <date>] [--human]
 uni-plan blockers [--topic <T>] [--human]
 uni-plan validate [--topic <T>] [--strict] [--human]
 ```
+
+The default (non-`--human`) output is JSON with two top-level sections:
+- `issues[]` — one entry per failing check (id, severity, topic, path, line, detail)
+- `summary` — aggregate stats for cross-topic queries without raw JSON reads: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing` (count of `file_manifest[*].file_path` entries that don't resolve on disk). Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation.
 
 ### Semantic lifecycle commands
 
