@@ -632,12 +632,22 @@ int DocWatchApp::Run()
                 }
 
                 // Post the fresh snapshot back to the UI thread.
+                //
+                // Pair the state-updating Closure with a follow-up
+                // Event::Custom. FTXUI's ScreenInteractive::HandleTask
+                // only marks the frame invalid for Event tasks — Closure
+                // tasks run and return without touching `frame_valid_`,
+                // so a bare Post() leaves the screen frozen on its
+                // prior render. Posting Event::Custom after the Closure
+                // forces the next Draw() pass to re-render against the
+                // just-updated mSnapshot.
                 screen.Post(
                     [this, Snap = std::move(Fresh)]() mutable
                     {
                         mSnapshot = std::move(Snap);
                         mTickCount++;
                     });
+                screen.PostEvent(ftxui::Event::Custom);
 
                 if (!WaitForNextPoll())
                 {
