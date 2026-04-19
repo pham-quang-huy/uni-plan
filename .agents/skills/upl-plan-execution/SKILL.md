@@ -6,6 +6,8 @@ implicit_invocation: true
 
 # UPL Plan Execution
 
+**`--help` is the authoritative per-command reference (v0.85.0+).** Run `uni-plan <cmd> [<sub>] --help` for usage, required/optional flags, mutually exclusive modes, output schema, exit codes, and examples. Examples below use the most common modes; when a flag in this skill disagrees with what `--help` emits, trust `--help`.
+
 Use this skill to execute plan phases with proper governance gates and automatic re-auditing.
 
 ## Required Context

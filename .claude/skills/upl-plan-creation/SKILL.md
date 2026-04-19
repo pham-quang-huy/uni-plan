@@ -8,6 +8,8 @@ implicit_invocation: true
 
 **HARD RULE — CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. All reads and writes go through the `uni-plan` CLI. See `CLAUDE.md` `V4 bundle access — CLI-only` or `~/.claude/skills/uni-plan/SKILL.md` for the full rule.
 
+**`--help` is the authoritative per-command reference (v0.85.0+).** Run `uni-plan <cmd> [<sub>] --help` for usage, required/optional flags, output schema, exit codes, and examples. Use it to discover the full flag surface for every command referenced below.
+
 Use this skill to create governed V4 topic bundles for uni-plan's own development.
 
 Use index-based entity references inside the bundle (`phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n]`, `tasks[n]`). Legacy keys like `P0` belong only in quoted archival filenames or historical notes.
