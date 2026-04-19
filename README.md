@@ -28,7 +28,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.75.0`) |
+| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.76.0`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |
@@ -267,22 +267,25 @@ Both flags validate ISO-8601 at parse time (`YYYY-MM-DD` or `YYYY-MM-DDThh:mm:ss
 
 ### patch_one_word_of_a_long_prose_field
 
-> Target: change a single word (or insert a paragraph) in a long `investigation` / `scope` / `code_snippets` / `handoff` field. **The CLI does not support partial-field patching** — every mutation is a whole-field replace.
+> Target: change a single word (or insert a paragraph) in a long `investigation` / `scope` / `code_snippets` / `handoff` field. **The CLI does not support partial-field patching** — every mutation is a whole-field replace. Use the file-based input path (`v0.76.0+`) to avoid shell-escape landmines on any field that may contain `$VAR`, backticks, or double quotes.
 
-Read → edit in memory → write back:
+Read → edit in memory → write back via `--<field>-file`:
 
 ```bash
 # 1) Read the current field via a query command (JSON output by default)
 uni-plan phase get --topic A --phase N > /tmp/phase.json
 # Extract the field: use jq, your agent's JSON parser, or any tool
 
-# 2) Edit the extracted string locally (sed, agent buffer, editor)
+# 2) Edit the extracted string locally (sed, agent buffer, editor), save
+#    the full corrected value to a plain file.
 
-# 3) Write the whole new string back
-uni-plan phase set --topic A --phase N --investigation "$(cat /tmp/new_investigation.txt)"
+# 3) Write the whole new string back via the file-based input path.
+#    The CLI reads the file as raw bytes — no shell expansion, so `$VAR`,
+#    backticks, and "quoted" content round-trip byte-identically.
+uni-plan phase set --topic A --phase N --investigation-file /tmp/new_investigation.txt
 ```
 
-This pattern applies to every long text field (`scope`, `output`, `investigation`, `code_snippets`, `code_entity_contract`, `best_practices`, `handoff`, `readiness_gate`, `multi_platforming`, `done`, `remaining`). Never edit the `.Plan.json` file directly — raw writes bypass validation, timestamp updates, auto-changelog emission, and the typed domain model (violates R1).
+Every prose-setter flag has a `--<field>-file <path>` sibling (v0.76.0+): `--summary-file`, `--goals-file`, `--scope-file`, `--output-file`, `--investigation-file`, `--code-snippets-file`, `--handoff-file`, `--done-file`, etc. The inline `--investigation "<string>"` form still works for short, shell-safe values, but prefer the file form for anything non-trivial. Never edit the `.Plan.json` file directly — raw writes bypass validation, timestamp updates, auto-changelog emission, and the typed domain model (violates R1).
 
 ### reference_governance_or_external_docs
 

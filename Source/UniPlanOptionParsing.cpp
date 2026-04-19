@@ -1127,11 +1127,9 @@ ParseChangelogAddOptions(const std::vector<std::string> &InTokens)
             Options.mScope = ConsumeValuedOption(Remaining, Index, Token);
             continue;
         }
-        if (Token == "--change")
-        {
-            Options.mChange = ConsumeValuedOption(Remaining, Index, "--change");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--change",
+                                         "--change-file", Options.mChange))
             continue;
-        }
         if (Token == "--type")
         {
             const std::string Raw =
@@ -1145,12 +1143,9 @@ ParseChangelogAddOptions(const std::vector<std::string> &InTokens)
             Options.mType = Value;
             continue;
         }
-        if (Token == "--affected")
-        {
-            Options.mAffected =
-                ConsumeValuedOption(Remaining, Index, "--affected");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--affected",
+                                         "--affected-file", Options.mAffected))
             continue;
-        }
         throw UsageError("Unknown option for changelog add: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1178,21 +1173,15 @@ ParseVerificationAddOptions(const std::vector<std::string> &InTokens)
             Options.mScope = ConsumeValuedOption(Remaining, Index, Token);
             continue;
         }
-        if (Token == "--check")
-        {
-            Options.mCheck = ConsumeValuedOption(Remaining, Index, "--check");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--check",
+                                         "--check-file", Options.mCheck))
             continue;
-        }
-        if (Token == "--result")
-        {
-            Options.mResult = ConsumeValuedOption(Remaining, Index, "--result");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--result",
+                                         "--result-file", Options.mResult))
             continue;
-        }
-        if (Token == "--detail")
-        {
-            Options.mDetail = ConsumeValuedOption(Remaining, Index, "--detail");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--detail",
+                                         "--detail-file", Options.mDetail))
             continue;
-        }
         throw UsageError("Unknown option for verification add: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1226,12 +1215,9 @@ ParsePhaseStartOptions(const std::vector<std::string> &InTokens)
             ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
             continue;
         }
-        if (Token == "--context")
-        {
-            Options.mContext =
-                ConsumeValuedOption(Remaining, Index, "--context");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--context",
+                                         "--context-file", Options.mContext))
             continue;
-        }
         throw UsageError("Unknown option for phase start: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1259,17 +1245,13 @@ ParsePhaseCompleteOptions(const std::vector<std::string> &InTokens)
             ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
             continue;
         }
-        if (Token == "--done")
-        {
-            Options.mDone = ConsumeValuedOption(Remaining, Index, "--done");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--done",
+                                         "--done-file", Options.mDone))
             continue;
-        }
-        if (Token == "--verification")
-        {
-            Options.mVerification =
-                ConsumeValuedOption(Remaining, Index, "--verification");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--verification",
+                                         "--verification-file",
+                                         Options.mVerification))
             continue;
-        }
         throw UsageError("Unknown option for phase complete: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1299,11 +1281,9 @@ ParsePhaseBlockOptions(const std::vector<std::string> &InTokens)
             ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
             continue;
         }
-        if (Token == "--reason")
-        {
-            Options.mReason = ConsumeValuedOption(Remaining, Index, "--reason");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--reason",
+                                         "--reason-file", Options.mReason))
             continue;
-        }
         throw UsageError("Unknown option for phase block: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1360,17 +1340,13 @@ ParsePhaseProgressOptions(const std::vector<std::string> &InTokens)
             ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
             continue;
         }
-        if (Token == "--done")
-        {
-            Options.mDone = ConsumeValuedOption(Remaining, Index, "--done");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--done",
+                                         "--done-file", Options.mDone))
             continue;
-        }
-        if (Token == "--remaining")
-        {
-            Options.mRemaining =
-                ConsumeValuedOption(Remaining, Index, "--remaining");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--remaining",
+                                         "--remaining-file",
+                                         Options.mRemaining))
             continue;
-        }
         throw UsageError("Unknown option for phase progress: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1446,12 +1422,10 @@ ParseTopicCompleteOptions(const std::vector<std::string> &InTokens)
             ParseRequiredTopic(Remaining, Index, Options.mTopic);
             continue;
         }
-        if (Token == "--verification")
-        {
-            Options.mVerification =
-                ConsumeValuedOption(Remaining, Index, "--verification");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--verification",
+                                         "--verification-file",
+                                         Options.mVerification))
             continue;
-        }
         throw UsageError("Unknown option for topic complete: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1472,11 +1446,9 @@ ParseTopicBlockOptions(const std::vector<std::string> &InTokens)
             ParseRequiredTopic(Remaining, Index, Options.mTopic);
             continue;
         }
-        if (Token == "--reason")
-        {
-            Options.mReason = ConsumeValuedOption(Remaining, Index, "--reason");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--reason",
+                                         "--reason-file", Options.mReason))
             continue;
-        }
         throw UsageError("Unknown option for topic block: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1507,10 +1479,9 @@ ParsePhaseLogOptions(const std::vector<std::string> &InTokens)
             continue;
         }
         if (Token == "--change")
-        {
-            Options.mChange = ConsumeValuedOption(Remaining, Index, "--change");
-            continue;
-        }
+            if (TryConsumeStringOrFileOption(Remaining, Index, "--change",
+                                             "--change-file", Options.mChange))
+                continue;
         if (Token == "--type")
         {
             const std::string Raw =
@@ -1524,12 +1495,9 @@ ParsePhaseLogOptions(const std::vector<std::string> &InTokens)
             Options.mType = Value;
             continue;
         }
-        if (Token == "--affected")
-        {
-            Options.mAffected =
-                ConsumeValuedOption(Remaining, Index, "--affected");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--affected",
+                                         "--affected-file", Options.mAffected))
             continue;
-        }
         throw UsageError("Unknown option for phase log: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1559,21 +1527,15 @@ ParsePhaseVerifyOptions(const std::vector<std::string> &InTokens)
             Options.mScope = ConsumeValuedOption(Remaining, Index, "--phase");
             continue;
         }
-        if (Token == "--check")
-        {
-            Options.mCheck = ConsumeValuedOption(Remaining, Index, "--check");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--check",
+                                         "--check-file", Options.mCheck))
             continue;
-        }
-        if (Token == "--result")
-        {
-            Options.mResult = ConsumeValuedOption(Remaining, Index, "--result");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--result",
+                                         "--result-file", Options.mResult))
             continue;
-        }
-        if (Token == "--detail")
-        {
-            Options.mDetail = ConsumeValuedOption(Remaining, Index, "--detail");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--detail",
+                                         "--detail-file", Options.mDetail))
             continue;
-        }
         throw UsageError("Unknown option for phase verify: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1654,17 +1616,13 @@ FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens)
             Options.opStatus = Value;
             continue;
         }
-        if (Token == "--scope")
-        {
-            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--scope",
+                                         "--scope-file", Options.mScope))
             continue;
-        }
-        if (Token == "--exit-criteria")
-        {
-            Options.mExitCriteria =
-                ConsumeValuedOption(Remaining, Index, "--exit-criteria");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--exit-criteria",
+                                         "--exit-criteria-file",
+                                         Options.mExitCriteria))
             continue;
-        }
         throw UsageError("Unknown option for lane set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1713,28 +1671,18 @@ ParseTestingAddOptions(const std::vector<std::string> &InTokens)
             Options.opActor = Value;
             continue;
         }
-        if (Token == "--step")
-        {
-            Options.mStep = ConsumeValuedOption(Remaining, Index, "--step");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--step",
+                                         "--step-file", Options.mStep))
             continue;
-        }
-        if (Token == "--action")
-        {
-            Options.mAction = ConsumeValuedOption(Remaining, Index, "--action");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--action",
+                                         "--action-file", Options.mAction))
             continue;
-        }
-        if (Token == "--expected")
-        {
-            Options.mExpected =
-                ConsumeValuedOption(Remaining, Index, "--expected");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--expected",
+                                         "--expected-file", Options.mExpected))
             continue;
-        }
-        if (Token == "--evidence")
-        {
-            Options.mEvidence =
-                ConsumeValuedOption(Remaining, Index, "--evidence");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--evidence",
+                                         "--evidence-file", Options.mEvidence))
             continue;
-        }
         throw UsageError("Unknown option for testing add: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1788,12 +1736,10 @@ ParseManifestAddOptions(const std::vector<std::string> &InTokens)
             Options.opAction = Value;
             continue;
         }
-        if (Token == "--description")
-        {
-            Options.mDescription =
-                ConsumeValuedOption(Remaining, Index, "--description");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--description",
+                                         "--description-file",
+                                         Options.mDescription))
             continue;
-        }
         throw UsageError("Unknown option for manifest add: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1855,28 +1801,18 @@ ParseTestingSetOptions(const std::vector<std::string> &InTokens)
             Options.opActor = Value;
             continue;
         }
-        if (Token == "--step")
-        {
-            Options.mStep = ConsumeValuedOption(Remaining, Index, "--step");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--step",
+                                         "--step-file", Options.mStep))
             continue;
-        }
-        if (Token == "--action")
-        {
-            Options.mAction = ConsumeValuedOption(Remaining, Index, "--action");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--action",
+                                         "--action-file", Options.mAction))
             continue;
-        }
-        if (Token == "--expected")
-        {
-            Options.mExpected =
-                ConsumeValuedOption(Remaining, Index, "--expected");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--expected",
+                                         "--expected-file", Options.mExpected))
             continue;
-        }
-        if (Token == "--evidence")
-        {
-            Options.mEvidence =
-                ConsumeValuedOption(Remaining, Index, "--evidence");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--evidence",
+                                         "--evidence-file", Options.mEvidence))
             continue;
-        }
         throw UsageError("Unknown option for testing set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -1906,21 +1842,15 @@ ParseVerificationSetOptions(const std::vector<std::string> &InTokens)
             ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
             continue;
         }
-        if (Token == "--check")
-        {
-            Options.mCheck = ConsumeValuedOption(Remaining, Index, "--check");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--check",
+                                         "--check-file", Options.mCheck))
             continue;
-        }
-        if (Token == "--result")
-        {
-            Options.mResult = ConsumeValuedOption(Remaining, Index, "--result");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--result",
+                                         "--result-file", Options.mResult))
             continue;
-        }
-        if (Token == "--detail")
-        {
-            Options.mDetail = ConsumeValuedOption(Remaining, Index, "--detail");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--detail",
+                                         "--detail-file", Options.mDetail))
             continue;
-        }
         throw UsageError("Unknown option for verification set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -2034,12 +1964,10 @@ ParseManifestSetOptions(const std::vector<std::string> &InTokens)
             Options.opAction = Value;
             continue;
         }
-        if (Token == "--description")
-        {
-            Options.mDescription =
-                ConsumeValuedOption(Remaining, Index, "--description");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--description",
+                                         "--description-file",
+                                         Options.mDescription))
             continue;
-        }
         throw UsageError("Unknown option for manifest set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -2084,11 +2012,9 @@ ParseChangelogSetOptions(const std::vector<std::string> &InTokens)
             Options.mDate = ConsumeValuedOption(Remaining, Index, "--date");
             continue;
         }
-        if (Token == "--change")
-        {
-            Options.mChange = ConsumeValuedOption(Remaining, Index, "--change");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--change",
+                                         "--change-file", Options.mChange))
             continue;
-        }
         if (Token == "--type")
         {
             const std::string Raw =
@@ -2102,12 +2028,9 @@ ParseChangelogSetOptions(const std::vector<std::string> &InTokens)
             Options.opType = Value;
             continue;
         }
-        if (Token == "--affected")
-        {
-            Options.mAffected =
-                ConsumeValuedOption(Remaining, Index, "--affected");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--affected",
+                                         "--affected-file", Options.mAffected))
             continue;
-        }
         throw UsageError("Unknown option for changelog set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -2176,17 +2099,13 @@ FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens)
             Options.opStatus = Value;
             continue;
         }
-        if (Token == "--scope")
-        {
-            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--scope",
+                                         "--scope-file", Options.mScope))
             continue;
-        }
-        if (Token == "--exit-criteria")
-        {
-            Options.mExitCriteria =
-                ConsumeValuedOption(Remaining, Index, "--exit-criteria");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--exit-criteria",
+                                         "--exit-criteria-file",
+                                         Options.mExitCriteria))
             continue;
-        }
         throw UsageError("Unknown option for lane add: " + Token);
     }
     if (Options.mTopic.empty())
@@ -2208,16 +2127,12 @@ FPhaseAddOptions ParsePhaseAddOptions(const std::vector<std::string> &InTokens)
             ParseRequiredTopic(Remaining, Index, Options.mTopic);
             continue;
         }
-        if (Token == "--scope")
-        {
-            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--scope",
+                                         "--scope-file", Options.mScope))
             continue;
-        }
-        if (Token == "--output")
-        {
-            Options.mOutput = ConsumeValuedOption(Remaining, Index, "--output");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--output",
+                                         "--output-file", Options.mOutput))
             continue;
-        }
         if (Token == "--status")
         {
             const std::string Raw =

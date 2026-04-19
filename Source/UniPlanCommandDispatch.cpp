@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -227,6 +228,21 @@ void PrintUsage(std::ostream &Out)
 
 // FCommandHelpEntry + kHuman* constants moved to DocTypes.h
 
+// Shared footer text — appended to the options block of every command that
+// accepts prose-setter flags. Documents the `--<field>-file <path>` sibling
+// shape introduced in v0.75.1 that bypasses the shell-double-quote expansion
+// hazard for prose containing $VAR / backticks / double quotes.
+static constexpr const char *kFileFlagFooter =
+    "\n"
+    "File-based prose input (v0.76.0+):\n"
+    "  Every --<field> <text> flag above also accepts "
+    "--<field>-file <path>.\n"
+    "  The CLI reads the file as raw bytes — no shell expansion, so "
+    "`$VAR`,\n"
+    "  backticks, and double quotes round-trip safely. Prefer the file "
+    "form\n"
+    "  for long content or anything containing shell metachars.\n";
+
 static const FCommandHelpEntry kCommandHelp[] = {
     {"topic",
      "Usage:\n"
@@ -267,7 +283,9 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  uni-plan topic list --status in_progress\n"
      "  uni-plan topic start --topic MultiPlatforming\n"
      "  uni-plan topic complete --topic X\n"
-     "  uni-plan topic status --human\n"},
+     "  uni-plan topic status --human\n"
+     "  uni-plan topic set --topic X "
+     "--summary-file summary.txt\n"},
     {"phase",
      "Usage:\n"
      "  uni-plan phase list --topic <T> [--status <filter>]\n"
@@ -346,7 +364,9 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "--done \"Implemented\"\n"
      "  uni-plan phase next --topic X --human\n"
      "  uni-plan phase readiness --topic X --phase 6\n"
-     "  uni-plan phase set --topic X --phase 0 --origin v3_migration\n"},
+     "  uni-plan phase set --topic X --phase 0 --origin v3_migration\n"
+     "  uni-plan phase set --topic X --phase 6 "
+     "--investigation-file inv.txt\n"},
     {"job",
      "Usage:\n"
      "  uni-plan job set --topic <topic> --phase <N> --job "
@@ -545,6 +565,21 @@ void PrintCommandUsage(std::ostream &Out, const std::string &InCommand)
         if (Entry.mSpecificOptions != nullptr)
         {
             Out << Entry.mSpecificOptions;
+        }
+        // Append the shared --<field>-file footer for commands that
+        // expose prose-setter flags. Single source of truth via
+        // kFileFlagFooter so the note stays consistent across every
+        // mutation-bearing help block.
+        // Names that match a kCommandHelp entry AND expose any
+        // prose-setter flag. lane / testing / manifest route through
+        // per-subcommand dispatchers rather than kCommandHelp, so they
+        // don't appear here — their `-file` flags still work, the note
+        // just lives in the repo-level docs rather than in --help output.
+        static const std::set<std::string> kProseCommands = {
+            "topic", "phase", "job", "task", "changelog", "verification"};
+        if (kProseCommands.count(Entry.mName) > 0)
+        {
+            Out << kFileFlagFooter;
         }
         Out << Entry.mHumanLabel
             << "  --repo-root <path>      Override repository root\n\n"

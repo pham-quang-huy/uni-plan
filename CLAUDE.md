@@ -168,7 +168,7 @@ uni-plan/
 
 ## cli_semver_discipline
 
-uni-plan is still **pre-1.0** (currently `0.73.3`) and under active
+uni-plan is still **pre-1.0** (currently `0.76.0`) and under active
 development. The command surface, mutation target path format,
 validator output schema, and auto-changelog `affected` contract are all
 subject to change. There is no stability commitment until we explicitly
@@ -202,6 +202,69 @@ Two new flags on `phase set`, intended for migration/repair passes that need to 
 - `--completed-at <iso>` — explicit `mCompletedAt` override (same parse-time validation).
 
 Transitioning a phase to `status=completed` when `started_at` is empty now **requires** `--started-at <iso>` to be supplied explicitly; otherwise the command fails with `UsageError` (exit 2). This enforces the Data Fix Gate — the CLI will not fabricate a historical start time from `completed_at` or "now". The normal execution path (`phase start` / `phase set --status in_progress` then `phase complete` / `phase set --status completed`) already stamps `started_at` at the in_progress transition, so this gate only fires when callers skip straight from `not_started` to `completed`. The new `completed_phase_timestamp_required` structural-warning flags any persisted phase that already violates the invariant — `completed` phases need both timestamps, `in_progress`/`blocked` phases need at least `started_at`.
+
+### v0.75.0 behavior note — legacy-gap stateless + `phases[].origin` stamp
+
+The v0.74.0 `legacy_sources[]` schema field (both topic-level and per-phase) has been **removed**. Storing repo-relative paths to transient V3 `.md` files is the wrong durability class: once the legacy markdown corpus is deleted, every stored path becomes dangling. The replacement splits that concern in two:
+
+1. **Semantic provenance — `phases[].origin`** (new optional field):
+   - Enum `EPhaseOrigin { NativeV4, V3Migration }` serialized as `"native_v4"` / `"v3_migration"`.
+   - Durable once stamped; filesystem-independent. Records *whether* the phase was migrated from V3, not *what file* it came from.
+   - Absence on read maps to `NativeV4` for backward compatibility with pre-0.75.0 bundles. Serialization always emits the value so downstream tools see one canonical shape.
+   - Stamp via `uni-plan phase set --topic <T> --phase <N>` once a phase-level `--origin <value>` flag lands; for now, migrations can hand-stamp via bundle mutation during initial creation.
+
+2. **Filesystem-driven parity audit — `uni-plan legacy-gap` is now stateless**:
+   - Discovers V3 `.md` artifacts by filename convention (`<Topic>.Plan.md`, `<Topic>.Impl.md`, `<Topic>.<PhaseKey>.Playbook.md`, and their `.ChangeLog.md` / `.Verification.md` sidecars) **at invoke time**, not from a stored bundle index.
+   - Same per-phase `EPhaseGapCategory` output as before: `legacy_rich | legacy_rich_matched | legacy_thin | legacy_stub | legacy_absent | v4_only | hollow_both | drift`. Thresholds are unchanged (versioned constants in `UniPlanCommandLegacyGap.cpp`):
+     - `legacy_rich`: legacy ≥150 LOC AND V4 design_chars < 500
+     - `legacy_rich_matched`: legacy ≥150 LOC AND V4 design_chars ≥ 2000
+     - `legacy_thin`: legacy 50–149 LOC
+     - `legacy_stub`: legacy <50 LOC
+     - `legacy_absent`: no legacy playbook
+     - `v4_only`: no legacy AND V4 ≥2000 chars AND ≥3 jobs
+     - `hollow_both`: legacy <50 LOC AND completed phase with V4 <500 chars
+     - `drift`: reserved for future semantic-overlap detection
+   - After the legacy corpus is deleted, every row falls into `legacy_absent` / `v4_only` — the correct steady state.
+   - Relies on `LegacyMdContentLineCount` in `UniPlanFileHelpers.h`, which strips the 10-line V3 archival banner (`> **ARCHIVAL — V3 legacy markdown artifact.**`) from each file before counting.
+
+**Removed in 0.75.0**:
+- `uni-plan legacy-scan` subcommand (both the writer and the dry-run variant)
+- `legacy_source_path_resolves` validator
+- Topic-level `legacy_sources[]` and per-phase `phases[N].legacy_sources[]` schema fields
+- `$defs/legacy_md_source` schema definition (the `{kind, path}` record)
+- `ELegacyMdKind` enum and `FLegacyMdSource` type
+- `FLegacyScanOptions` / `FLegacyScanReport` / `FLegacyScanHit`
+- `ParseLegacyScanOptions` parser and `RunLegacyScanCommand` handler
+- `ValidateAllBundles` second parameter (`const fs::path &InRepoRoot`) — signature reverts to `ValidateAllBundles(const std::vector<FTopicBundle>&)`
+
+Breaking for callers: any bundle serialized by 0.74.0 that carries `legacy_sources[]` arrays will have those silently dropped on the next 0.75.0 round-trip (deserializer does not recognize the key). Any CI that depended on `legacy-scan` or `legacy_source_path_resolves` must migrate.
+
+Kept unchanged: `uni-plan legacy-gap`, `EPhaseGapCategory`, `FPhaseGapRow`, `FLegacyGapReport`, `FLegacyGapOptions`, `ParseLegacyGapOptions`, `RunLegacyGapCommand`, `LegacyMdContentLineCount` helper.
+
+### v0.76.0 behavior note — `--<field>-file <path>` input path for every prose setter
+
+Every prose-setting flag on every mutation command now has a `-file` sibling that reads the field value as raw bytes from disk. This closes a real correctness hazard: the `--investigation "$(cat /tmp/inv.txt)"` idiom expands `$VAR`, `$(...)`, and backticks inside the shell's double quotes *before* the CLI sees the content. A field containing legitimate prose like ``use `$PATH`, `$(pwd)`, or "quoted" text`` silently corrupts on that path.
+
+The file-based form sidesteps bash entirely:
+
+```bash
+uni-plan phase set --topic A --phase N --investigation-file /tmp/inv.txt
+uni-plan topic set --topic A --summary-file /tmp/summary.txt
+uni-plan phase log --topic A --phase N --change-file /tmp/change.txt --type feat
+uni-plan verification add --topic A --phase N --check-file /tmp/check.txt
+```
+
+Siblings exist for every prose flag, including (but not limited to): `--summary-file`, `--goals-file`, `--non-goals-file`, `--risks-file`, `--acceptance-criteria-file`, `--problem-statement-file`, `--validation-commands-file`, `--baseline-audit-file`, `--execution-strategy-file`, `--locked-decisions-file`, `--source-references-file`, `--next-actions-file`, `--done-file`, `--remaining-file`, `--blockers-file`, `--context-file`, `--scope-file`, `--output-file`, `--investigation-file`, `--code-entity-contract-file`, `--code-snippets-file`, `--best-practices-file`, `--multi-platforming-file`, `--readiness-gate-file`, `--handoff-file`, `--exit-criteria-file`, `--evidence-file`, `--notes-file`, `--change-file`, `--affected-file`, `--check-file`, `--result-file`, `--detail-file`, `--step-file`, `--action-file`, `--expected-file`, `--description-file`, `--reason-file`, `--verification-file`.
+
+Shared implementation:
+
+- `TryReadFileToString` in `Source/UniPlanFileHelpers.h` — opens in binary mode, slurps byte-identically, no trimming, no line processing. Errors map to `UsageError` (exit 2) at parse time.
+- `TryConsumeStringOrFileOption` in `Source/UniPlanOptionParsing.cpp` — the one call site used by every parser. Each parser dropped its duplicate `if (Token == "--X") { ... }` branches in favor of `if (TryConsumeStringOrFileOption(..., "--X", "--X-file", Options.mX)) continue;`. Keeps per-parser call sites symmetric and the shell-escape hazard cannot re-enter through ad-hoc branches.
+- Help text: `PrintCommandUsage` appends a single shared `kFileFlagFooter` note to commands with prose flags (topic, phase, job, task, changelog, verification). lane / testing / manifest dispatch through per-subcommand handlers rather than `kCommandHelp`; their `-file` flags work but the discoverability note lives in these docs rather than in `--help` output.
+
+Regression tests in `Test/UniPlanTestOptionParsing.cpp` round-trip shell-hostile content (``\`$PATH\` ... $(pwd) ... "quoted"``) through both `--investigation` and `--investigation-file` and assert byte-identical storage. The inline form preserves content only when shell escaping is done correctly by the caller; the file form preserves it unconditionally.
+
+The inline `--<field> <text>` path is unchanged — short, shell-safe values still work via the original form. Both paths are interchangeable when the content is clean; the file form is mandatory only when the content could contain `$`, `` ` ``, `"`, `\`, or newlines.
 
 ## documentation_rules
 
@@ -350,6 +413,9 @@ uni-plan verification --topic <T> [--phase <N>] [--human]
 uni-plan timeline --topic <T> [--phase <N>] [--since <date>] [--human]
 uni-plan blockers [--topic <T>] [--human]
 uni-plan validate [--topic <T>] [--strict] [--human]
+
+# Legacy V3 ↔ V4 parity (v0.75.0: stateless — discovers .md files at invoke time)
+uni-plan legacy-gap  [--topic <T>] [--category <c>] [--human]    # per-phase parity report, 8 categories
 ```
 
 The default (non-`--human`) output is JSON with two top-level sections:

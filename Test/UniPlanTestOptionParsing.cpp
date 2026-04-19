@@ -1,7 +1,10 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanTypes.h"
 
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
+#include <string>
 
 // ===================================================================
 // Topic option parsers
@@ -388,4 +391,74 @@ TEST(PhaseEnums, PhaseGapCategoryFromStringRejectsInvalid)
     UniPlan::EPhaseGapCategory Out = UniPlan::EPhaseGapCategory::LegacyAbsent;
     EXPECT_FALSE(UniPlan::PhaseGapCategoryFromString("not_a_cat", Out));
     EXPECT_FALSE(UniPlan::PhaseGapCategoryFromString("", Out));
+}
+
+// ===================================================================
+// --<field>-file flag family (v0.76.0+) — hazard-closure regression
+// for shell-metachar-bearing prose fields. Verifies that content with
+// `$VAR`, backticks, and double quotes round-trips byte-identically
+// through the file-read path (no shell expansion, no interpretation).
+// ===================================================================
+
+namespace
+{
+std::string WriteTempProseFile(const std::string &InContents)
+{
+    const std::filesystem::path Dir =
+        std::filesystem::temp_directory_path() / "uni-plan-test-prose";
+    std::filesystem::create_directories(Dir);
+    const std::filesystem::path Path =
+        Dir / ("prose-" + std::to_string(std::rand()) + ".txt");
+    std::ofstream Out(Path, std::ios::binary);
+    Out << InContents;
+    Out.close();
+    return Path.string();
+}
+} // namespace
+
+TEST(OptionParsing, PhaseSetInvestigationFilePreservesShellMetachars)
+{
+    // The exact content the hazard would corrupt on the
+    // `--investigation "$(cat file)"` path. `-file` must round-trip it
+    // byte-identically because the CLI reads the file itself — bash
+    // never sees the content inside double quotes.
+    const std::string Hazardous =
+        "Reference `$PATH` variable and use $(pwd) with \"quoted\" text.";
+    const std::string Path = WriteTempProseFile(Hazardous);
+    const auto O = UniPlan::ParsePhaseSetOptions(
+        {"--topic", "X", "--phase", "0", "--investigation-file", Path});
+    EXPECT_EQ(O.mInvestigation, Hazardous);
+}
+
+TEST(OptionParsing, PhaseSetInvestigationFileMissingPathThrows)
+{
+    EXPECT_THROW(UniPlan::ParsePhaseSetOptions({"--topic", "X", "--phase", "0",
+                                                "--investigation-file",
+                                                "/no/such/file-xyz.txt"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, TopicSetSummaryFilePreservesNewlines)
+{
+    // Multi-line prose with a backtick + embedded newline. Round-trip
+    // through the file path must preserve every byte including the
+    // trailing LF.
+    const std::string Multiline = "line one `code` token\nline two ends\n";
+    const std::string Path = WriteTempProseFile(Multiline);
+    const auto O =
+        UniPlan::ParseTopicSetOptions({"--topic", "X", "--summary-file", Path});
+    EXPECT_EQ(O.mSummary, Multiline);
+}
+
+TEST(OptionParsing, PhaseSetInvestigationFlagAndFileAreInterchangeable)
+{
+    // Byte-identical content via --investigation vs --investigation-file
+    // must produce the same stored value.
+    const std::string Content = "plain prose with no metachars.";
+    const std::string Path = WriteTempProseFile(Content);
+    const auto Inline = UniPlan::ParsePhaseSetOptions(
+        {"--topic", "X", "--phase", "0", "--investigation", Content});
+    const auto ViaFile = UniPlan::ParsePhaseSetOptions(
+        {"--topic", "X", "--phase", "0", "--investigation-file", Path});
+    EXPECT_EQ(Inline.mInvestigation, ViaFile.mInvestigation);
 }

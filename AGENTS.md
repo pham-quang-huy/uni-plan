@@ -168,7 +168,7 @@ uni-plan/
 
 ## cli_semver_discipline
 
-uni-plan is still **pre-1.0** (currently `0.75.0`) and under active
+uni-plan is still **pre-1.0** (currently `0.76.0`) and under active
 development. The command surface, mutation target path format,
 validator output schema, and auto-changelog `affected` contract are all
 subject to change. There is no stability commitment until we explicitly
@@ -240,6 +240,31 @@ The v0.74.0 `legacy_sources[]` schema field (both topic-level and per-phase) has
 Breaking for callers: any bundle serialized by 0.74.0 that carries `legacy_sources[]` arrays will have those silently dropped on the next 0.75.0 round-trip (deserializer does not recognize the key). Any CI that depended on `legacy-scan` or `legacy_source_path_resolves` must migrate.
 
 Kept unchanged: `uni-plan legacy-gap`, `EPhaseGapCategory`, `FPhaseGapRow`, `FLegacyGapReport`, `FLegacyGapOptions`, `ParseLegacyGapOptions`, `RunLegacyGapCommand`, `LegacyMdContentLineCount` helper.
+
+### v0.76.0 behavior note — `--<field>-file <path>` input path for every prose setter
+
+Every prose-setting flag on every mutation command now has a `-file` sibling that reads the field value as raw bytes from disk. This closes a real correctness hazard: the `--investigation "$(cat /tmp/inv.txt)"` idiom expands `$VAR`, `$(...)`, and backticks inside the shell's double quotes *before* the CLI sees the content. A field containing legitimate prose like ``use `$PATH`, `$(pwd)`, or "quoted" text`` silently corrupts on that path.
+
+The file-based form sidesteps bash entirely:
+
+```bash
+uni-plan phase set --topic A --phase N --investigation-file /tmp/inv.txt
+uni-plan topic set --topic A --summary-file /tmp/summary.txt
+uni-plan phase log --topic A --phase N --change-file /tmp/change.txt --type feat
+uni-plan verification add --topic A --phase N --check-file /tmp/check.txt
+```
+
+Siblings exist for every prose flag, including (but not limited to): `--summary-file`, `--goals-file`, `--non-goals-file`, `--risks-file`, `--acceptance-criteria-file`, `--problem-statement-file`, `--validation-commands-file`, `--baseline-audit-file`, `--execution-strategy-file`, `--locked-decisions-file`, `--source-references-file`, `--next-actions-file`, `--done-file`, `--remaining-file`, `--blockers-file`, `--context-file`, `--scope-file`, `--output-file`, `--investigation-file`, `--code-entity-contract-file`, `--code-snippets-file`, `--best-practices-file`, `--multi-platforming-file`, `--readiness-gate-file`, `--handoff-file`, `--exit-criteria-file`, `--evidence-file`, `--notes-file`, `--change-file`, `--affected-file`, `--check-file`, `--result-file`, `--detail-file`, `--step-file`, `--action-file`, `--expected-file`, `--description-file`, `--reason-file`, `--verification-file`.
+
+Shared implementation:
+
+- `TryReadFileToString` in `Source/UniPlanFileHelpers.h` — opens in binary mode, slurps byte-identically, no trimming, no line processing. Errors map to `UsageError` (exit 2) at parse time.
+- `TryConsumeStringOrFileOption` in `Source/UniPlanOptionParsing.cpp` — the one call site used by every parser. Each parser dropped its duplicate `if (Token == "--X") { ... }` branches in favor of `if (TryConsumeStringOrFileOption(..., "--X", "--X-file", Options.mX)) continue;`. Keeps per-parser call sites symmetric and the shell-escape hazard cannot re-enter through ad-hoc branches.
+- Help text: `PrintCommandUsage` appends a single shared `kFileFlagFooter` note to commands with prose flags (topic, phase, job, task, changelog, verification). lane / testing / manifest dispatch through per-subcommand handlers rather than `kCommandHelp`; their `-file` flags work but the discoverability note lives in these docs rather than in `--help` output.
+
+Regression tests in `Test/UniPlanTestOptionParsing.cpp` round-trip shell-hostile content (``\`$PATH\` ... $(pwd) ... "quoted"``) through both `--investigation` and `--investigation-file` and assert byte-identical storage. The inline form preserves content only when shell escaping is done correctly by the caller; the file form preserves it unconditionally.
+
+The inline `--<field> <text>` path is unchanged — short, shell-safe values still work via the original form. Both paths are interchangeable when the content is clean; the file form is mandatory only when the content could contain `$`, `` ` ``, `"`, `\`, or newlines.
 
 ## documentation_rules
 
