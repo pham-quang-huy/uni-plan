@@ -595,6 +595,169 @@ TEST_F(FBundleTestFixture, NoHollowCompletedPhasePassesOnRichDesignOnly)
 }
 
 // -------------------------------------------------------------------
+// no_duplicate_lane_scope — clone-and-forget lane detection (v0.84.0)
+// Conservative: exact-normalized match only. Lowercase + whitespace-
+// collapse + edge-punctuation strip. Fires Warning on the later lane;
+// detail names the earlier one.
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, NoDuplicateLaneScopeFlagsIdenticalLanes)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FLaneRecord L0;
+    L0.mScope = "Restructure Main.cpp subcommand dispatch.";
+    L0.mStatus = UniPlan::EExecutionStatus::Completed;
+    UniPlan::FLaneRecord L1;
+    L1.mScope = "Restructure Main.cpp subcommand dispatch.";
+    L1.mStatus = UniPlan::EExecutionStatus::NotStarted;
+    Bundle.mPhases[0].mLanes = {L0, L1};
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "no_duplicate_lane_scope");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+    EXPECT_EQ(Issue["path"].get<std::string>(), "phases[0].lanes[1]");
+    EXPECT_NE(Issue["detail"].get<std::string>().find("phases[0].lanes[0]"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, NoDuplicateLaneScopeNormalizesCaseAndWhitespace)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FLaneRecord L0;
+    L0.mScope = "Implement FeatureQuery.h/.cpp and FeatureQueryOutput.h/.cpp.";
+    UniPlan::FLaneRecord L1;
+    // Same prose; different case, extra whitespace, trailing punct stripped.
+    L1.mScope = "  IMPLEMENT   FeatureQuery.h/.cpp    and "
+                "FeatureQueryOutput.h/.cpp!  ";
+    Bundle.mPhases[0].mLanes = {L0, L1};
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_duplicate_lane_scope"), 1)
+        << "case/whitespace/edge-punct should normalize to same scope";
+}
+
+TEST_F(FBundleTestFixture, NoDuplicateLaneScopePassesOnDistinctLanes)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FLaneRecord L0;
+    L0.mScope = "Restructure Main.cpp subcommand dispatch.";
+    UniPlan::FLaneRecord L1;
+    L1.mScope = "Implement FeatureQuery.h/.cpp and FeatureQueryOutput.h/.cpp.";
+    UniPlan::FLaneRecord L2;
+    L2.mScope = "Rename CMake target to see. Create build_see.sh/.bat.";
+    Bundle.mPhases[0].mLanes = {L0, L1, L2};
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_duplicate_lane_scope"), 0)
+        << "semantically-related-but-textually-distinct lanes must pass";
+}
+
+// -------------------------------------------------------------------
+// phase_status_lane_alignment — drift evaluator (v0.84.0)
+// Mirrors the phase drift command but via validate --strict, so CI can
+// gate on phase status vs lane-evidence disagreement.
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, PhaseStatusLaneAlignmentFlagsStatusLagLane)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FLaneRecord L;
+    L.mStatus = UniPlan::EExecutionStatus::Completed;
+    L.mScope = "Implemented";
+    Bundle.mPhases[0].mLanes.push_back(L);
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "phase_status_lane_alignment");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+    EXPECT_NE(Issue["detail"].get<std::string>().find("status_lag_lane"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseStatusLaneAlignmentPassesOnAlignedStatus)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Phase = in_progress, lane = in_progress → aligned.
+    UniPlan::FLaneRecord L;
+    L.mStatus = UniPlan::EExecutionStatus::InProgress;
+    L.mScope = "WIP";
+    Bundle.mPhases[0].mLanes.push_back(L);
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "phase_status_lane_alignment"), 0);
+}
+
+TEST_F(FBundleTestFixture, NoDuplicateLaneScopeIgnoresEmptyScopes)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Two empty-scope lanes must not flag — EvalLaneRequiredFields owns that.
+    UniPlan::FLaneRecord L0;
+    L0.mScope = "";
+    UniPlan::FLaneRecord L1;
+    L1.mScope = "";
+    Bundle.mPhases[0].mLanes = {L0, L1};
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_duplicate_lane_scope"), 0)
+        << "empty-scope duplicates belong to EvalLaneRequiredFields";
+}
+
+// -------------------------------------------------------------------
 // topic_ref_integrity — `<X>.Plan.json` must resolve
 // -------------------------------------------------------------------
 

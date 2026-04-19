@@ -2,6 +2,7 @@
 #include "UniPlanEnums.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanOutputHelpers.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
@@ -651,6 +652,171 @@ int RunManifestRemoveCommand(const std::vector<std::string> &InArgs,
 // prompted this feature in v0.71.0.
 // ---------------------------------------------------------------------------
 
+// Classify one FFileManifestItem against disk reality. Empty string means
+// the manifest intent and on-disk reality agree. Shared between JSON and
+// human renderers so both emit the same verdict per row. Added v0.84.0.
+static std::string
+ComputeManifestStaleReason(const fs::path &InRepoRoot,
+                           const FFileManifestItem &InItem, bool &OutExists)
+{
+    OutExists = ManifestPathExists(InRepoRoot, InItem.mFilePath);
+    if (InItem.mAction == EFileAction::Create && OutExists)
+        return "stale_create";
+    if (InItem.mAction == EFileAction::Delete && OutExists)
+        return "stale_delete";
+    if (InItem.mAction == EFileAction::Modify && !OutExists)
+        return "dangling_modify";
+    return std::string();
+}
+
+// Decide whether one manifest row should appear in the output given the
+// active filter flags. Returns true when the row is kept. --missing-only
+// and --stale-plan are orthogonal AND predicates: when both are set, a
+// row must satisfy both.
+static bool KeepManifestRow(const FManifestListOptions &InOptions,
+                            bool InbExists, const std::string &InStaleReason)
+{
+    if (InOptions.mbMissingOnly && InbExists)
+        return false;
+    if (InOptions.mbStalePlan && InStaleReason.empty())
+        return false;
+    return true;
+}
+
+// One ANSI-color hint per stale_reason (red for drift, dim "-" when
+// aligned). Separated so the single-word label can change without
+// reshuffling the table column layout. Added v0.84.0 alongside the
+// manifest list --human renderer.
+static std::string ColorizeStaleReason(const std::string &InReason)
+{
+    if (InReason.empty())
+        return Colorize(kColorDim, "-");
+    return Colorize(kColorRed, InReason);
+}
+
+static int RunManifestListJson(const fs::path &InRepoRoot,
+                               const FManifestListOptions &InOptions,
+                               const std::vector<FTopicBundle> &InBundles,
+                               const std::vector<std::string> &InWarnings)
+{
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kListSchema, UTC, InRepoRoot.string());
+    std::cout << "\"entries\":[";
+    bool bFirst = true;
+    size_t TotalEntries = 0;
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            if (InOptions.mPhaseIndex >= 0 &&
+                PI != static_cast<size_t>(InOptions.mPhaseIndex))
+                continue;
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            for (size_t MI = 0; MI < Phase.mFileManifest.size(); ++MI)
+            {
+                const FFileManifestItem &FM = Phase.mFileManifest[MI];
+                bool bExists = false;
+                const std::string StaleReason =
+                    ComputeManifestStaleReason(InRepoRoot, FM, bExists);
+                if (!KeepManifestRow(InOptions, bExists, StaleReason))
+                    continue;
+                if (!bFirst)
+                    std::cout << ",";
+                bFirst = false;
+                ++TotalEntries;
+                std::cout << "{";
+                EmitJsonField("topic", B.mTopicKey);
+                EmitJsonFieldSizeT("phase_index", PI);
+                EmitJsonFieldSizeT("manifest_index", MI);
+                EmitJsonField("file_path", FM.mFilePath);
+                EmitJsonField("action", ToString(FM.mAction));
+                EmitJsonField("description", FM.mDescription);
+                EmitJsonFieldBool("exists_on_disk", bExists);
+                EmitJsonFieldNullable("stale_reason", StaleReason, false);
+                std::cout << "}";
+            }
+        }
+    }
+    std::cout << "],";
+    EmitJsonFieldSizeT("entry_count", TotalEntries);
+    PrintJsonClose(InWarnings);
+    return 0;
+}
+
+// Human-mode renderer (v0.84.0+). Replaces the silent-fallback-to-JSON
+// behavior that `manifest list` had before — `--human` is now a real
+// ANSI-table surface. Columns: Topic, Ph, M, Action, Exists, Stale,
+// File, Description (truncated). Header line summarizes total count +
+// active filters so a human reader sees context at a glance.
+static int RunManifestListHuman(const fs::path &InRepoRoot,
+                                const FManifestListOptions &InOptions,
+                                const std::vector<FTopicBundle> &InBundles,
+                                const std::vector<std::string> &InWarnings)
+{
+    HumanTable Table;
+    Table.mHeaders = {"Topic",  "Ph",    "M",    "Action",
+                      "Exists", "Stale", "File", "Description"};
+    size_t TotalEntries = 0;
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            if (InOptions.mPhaseIndex >= 0 &&
+                PI != static_cast<size_t>(InOptions.mPhaseIndex))
+                continue;
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            for (size_t MI = 0; MI < Phase.mFileManifest.size(); ++MI)
+            {
+                const FFileManifestItem &FM = Phase.mFileManifest[MI];
+                bool bExists = false;
+                const std::string StaleReason =
+                    ComputeManifestStaleReason(InRepoRoot, FM, bExists);
+                if (!KeepManifestRow(InOptions, bExists, StaleReason))
+                    continue;
+                ++TotalEntries;
+                const std::string ExistsCell =
+                    bExists ? Colorize(kColorGreen, "yes")
+                            : Colorize(kColorRed, "no");
+                Table.AddRow(
+                    {B.mTopicKey, std::to_string(PI), std::to_string(MI),
+                     ToString(FM.mAction), ExistsCell,
+                     ColorizeStaleReason(StaleReason), FM.mFilePath,
+                     TruncateForDisplay(FM.mDescription, 60)});
+            }
+        }
+    }
+
+    // Header summary line — mirrors the agent-facing JSON `entry_count`
+    // but adds filter context so a human reader isn't surprised by a
+    // short result.
+    std::cout << kColorBold << "File manifest" << kColorReset << "  count="
+              << kColorOrange << TotalEntries << kColorReset;
+    if (!InOptions.mTopic.empty())
+        std::cout << "  topic=" << kColorOrange << InOptions.mTopic
+                  << kColorReset;
+    if (InOptions.mPhaseIndex >= 0)
+        std::cout << "  phase=" << kColorOrange << InOptions.mPhaseIndex
+                  << kColorReset;
+    if (InOptions.mbMissingOnly)
+        std::cout << "  " << Colorize(kColorDim, "[--missing-only]");
+    if (InOptions.mbStalePlan)
+        std::cout << "  " << Colorize(kColorDim, "[--stale-plan]");
+    std::cout << "\n\n";
+
+    if (TotalEntries == 0)
+    {
+        std::cout << Colorize(kColorDim,
+                              "No manifest entries match the filter.")
+                  << "\n";
+    }
+    else
+    {
+        Table.Print();
+    }
+    PrintHumanWarnings(InWarnings);
+    return 0;
+}
+
 int RunManifestListCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot)
 {
@@ -676,45 +842,10 @@ int RunManifestListCommand(const std::vector<std::string> &InArgs,
         Bundles = LoadAllBundles(RepoRoot, BundleWarnings);
     }
 
-    const std::string UTC = GetUtcNow();
-    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
-    std::cout << "\"entries\":[";
-    bool bFirst = true;
-    size_t TotalEntries = 0;
-    for (const FTopicBundle &B : Bundles)
-    {
-        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
-        {
-            if (Options.mPhaseIndex >= 0 &&
-                PI != static_cast<size_t>(Options.mPhaseIndex))
-                continue;
-            const FPhaseRecord &Phase = B.mPhases[PI];
-            for (size_t MI = 0; MI < Phase.mFileManifest.size(); ++MI)
-            {
-                const FFileManifestItem &FM = Phase.mFileManifest[MI];
-                const bool bExists = ManifestPathExists(RepoRoot, FM.mFilePath);
-                if (Options.mbMissingOnly && bExists)
-                    continue;
-                if (!bFirst)
-                    std::cout << ",";
-                bFirst = false;
-                ++TotalEntries;
-                std::cout << "{";
-                EmitJsonField("topic", B.mTopicKey);
-                EmitJsonFieldSizeT("phase_index", PI);
-                EmitJsonFieldSizeT("manifest_index", MI);
-                EmitJsonField("file_path", FM.mFilePath);
-                EmitJsonField("action", ToString(FM.mAction));
-                EmitJsonField("description", FM.mDescription);
-                EmitJsonFieldBool("exists_on_disk", bExists, false);
-                std::cout << "}";
-            }
-        }
-    }
-    std::cout << "],";
-    EmitJsonFieldSizeT("entry_count", TotalEntries);
-    PrintJsonClose(BundleWarnings);
-    return 0;
+    if (Options.mbHuman)
+        return RunManifestListHuman(RepoRoot, Options, Bundles,
+                                    BundleWarnings);
+    return RunManifestListJson(RepoRoot, Options, Bundles, BundleWarnings);
 }
 
 // ---------------------------------------------------------------------------

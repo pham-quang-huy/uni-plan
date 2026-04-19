@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -169,44 +170,73 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
         return 1;
     }
 
+    // Section filter: if the options carry a non-empty `mSections`, only
+    // the named sections are emitted. Identity fields (topic, status,
+    // title, phase_count) are always emitted. Empty = emit all
+    // (backward-compatible default). Added v0.84.0.
+    const std::set<std::string> Want(InOptions.mSections.begin(),
+                                     InOptions.mSections.end());
+    const bool bAll = Want.empty();
+    const auto Wants = [&](const char *InName) -> bool
+    {
+        return bAll || Want.count(InName) > 0;
+    };
+
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kTopicGetSchema, UTC, InRepoRoot.string());
     EmitJsonField("topic", Bundle.mTopicKey);
     EmitJsonField("status", ToString(Bundle.mStatus));
     const FPlanMetadata &Meta = Bundle.mMetadata;
     EmitJsonField("title", Meta.mTitle);
-    EmitJsonFieldNullable("summary", Meta.mSummary);
-    EmitJsonFieldNullable("goals", Meta.mGoals);
-    EmitJsonFieldNullable("non_goals", Meta.mNonGoals);
-    EmitJsonFieldNullable("risks", Meta.mRisks);
-    EmitJsonFieldNullable("acceptance_criteria", Meta.mAcceptanceCriteria);
-    EmitJsonFieldNullable("problem_statement", Meta.mProblemStatement);
-    EmitValidationCommandsJson("validation_commands", Meta.mValidationCommands);
-    EmitJsonFieldNullable("baseline_audit", Meta.mBaselineAudit);
-    EmitJsonFieldNullable("execution_strategy", Meta.mExecutionStrategy);
-    EmitJsonFieldNullable("locked_decisions", Meta.mLockedDecisions);
-    EmitJsonFieldNullable("source_references", Meta.mSourceReferences);
-    EmitDependenciesJson("dependencies", Meta.mDependencies);
-    EmitJsonFieldNullable("next_actions", Bundle.mNextActions);
+    if (Wants("summary"))
+        EmitJsonFieldNullable("summary", Meta.mSummary);
+    if (Wants("goals"))
+        EmitJsonFieldNullable("goals", Meta.mGoals);
+    if (Wants("non_goals"))
+        EmitJsonFieldNullable("non_goals", Meta.mNonGoals);
+    if (Wants("risks"))
+        EmitJsonFieldNullable("risks", Meta.mRisks);
+    if (Wants("acceptance_criteria"))
+        EmitJsonFieldNullable("acceptance_criteria", Meta.mAcceptanceCriteria);
+    if (Wants("problem_statement"))
+        EmitJsonFieldNullable("problem_statement", Meta.mProblemStatement);
+    if (Wants("validation_commands"))
+        EmitValidationCommandsJson("validation_commands",
+                                   Meta.mValidationCommands);
+    if (Wants("baseline_audit"))
+        EmitJsonFieldNullable("baseline_audit", Meta.mBaselineAudit);
+    if (Wants("execution_strategy"))
+        EmitJsonFieldNullable("execution_strategy", Meta.mExecutionStrategy);
+    if (Wants("locked_decisions"))
+        EmitJsonFieldNullable("locked_decisions", Meta.mLockedDecisions);
+    if (Wants("source_references"))
+        EmitJsonFieldNullable("source_references", Meta.mSourceReferences);
+    if (Wants("dependencies"))
+        EmitDependenciesJson("dependencies", Meta.mDependencies);
+    if (Wants("next_actions"))
+        EmitJsonFieldNullable("next_actions", Bundle.mNextActions);
     EmitJsonFieldSizeT("phase_count", Bundle.mPhases.size());
 
-    // Phase summary — compact index/status/scope
-    std::cout << "\"phase_summary\":[";
-    for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+    if (Wants("phases"))
     {
-        const FPhaseRecord &Phase = Bundle.mPhases[I];
-        PrintJsonSep(I);
-        std::cout << "{";
-        EmitJsonFieldSizeT("index", I);
-        EmitJsonField("status", ToString(Phase.mLifecycle.mStatus));
-        // Truncate scope to 120 chars for compactness
-        std::string Scope = Phase.mScope;
-        if (Scope.size() > 120)
-            Scope = Scope.substr(0, 117) + "...";
-        EmitJsonField("scope", Scope, false);
-        std::cout << "}";
+        // Phase summary — compact index/status/scope
+        std::cout << "\"phase_summary\":[";
+        for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+        {
+            const FPhaseRecord &Phase = Bundle.mPhases[I];
+            PrintJsonSep(I);
+            std::cout << "{";
+            EmitJsonFieldSizeT("index", I);
+            EmitJsonField("status", ToString(Phase.mLifecycle.mStatus));
+            // Truncate scope to 120 chars for compactness
+            std::string Scope = Phase.mScope;
+            if (Scope.size() > 120)
+                Scope = Scope.substr(0, 117) + "...";
+            EmitJsonField("scope", Scope, false);
+            std::cout << "}";
+        }
+        std::cout << "],";
     }
-    std::cout << "],";
 
     std::vector<std::string> Warnings;
     PrintJsonClose(Warnings);
@@ -228,6 +258,17 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
         return 1;
     }
 
+    // v0.84.0: honor --sections filter in human mode too. Identity
+    // header + phase count are always shown; per-section blocks are
+    // gated by the filter set.
+    const std::set<std::string> Want(InOptions.mSections.begin(),
+                                     InOptions.mSections.end());
+    const bool bAll = Want.empty();
+    const auto Wants = [&](const char *InName) -> bool
+    {
+        return bAll || Want.count(InName) > 0;
+    };
+
     std::cout << kColorBold << Bundle.mTopicKey << kColorReset
               << "  status=" << ColorizeStatus(ToString(Bundle.mStatus))
               << "  phases=" << kColorOrange << Bundle.mPhases.size()
@@ -243,20 +284,32 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
         }
     };
 
-    PrintField("Summary", Bundle.mMetadata.mSummary);
-    PrintField("Goals", Bundle.mMetadata.mGoals);
-    PrintField("Non-Goals", Bundle.mMetadata.mNonGoals);
-    PrintField("Risks", Bundle.mMetadata.mRisks);
-    PrintField("Acceptance Criteria", Bundle.mMetadata.mAcceptanceCriteria);
-    PrintField("Problem Statement", Bundle.mMetadata.mProblemStatement);
-    PrintField("Baseline Audit", Bundle.mMetadata.mBaselineAudit);
-    PrintField("Execution Strategy", Bundle.mMetadata.mExecutionStrategy);
-    PrintField("Locked Decisions", Bundle.mMetadata.mLockedDecisions);
-    PrintField("Source References", Bundle.mMetadata.mSourceReferences);
-    PrintField("Next Actions", Bundle.mNextActions);
+    if (Wants("summary"))
+        PrintField("Summary", Bundle.mMetadata.mSummary);
+    if (Wants("goals"))
+        PrintField("Goals", Bundle.mMetadata.mGoals);
+    if (Wants("non_goals"))
+        PrintField("Non-Goals", Bundle.mMetadata.mNonGoals);
+    if (Wants("risks"))
+        PrintField("Risks", Bundle.mMetadata.mRisks);
+    if (Wants("acceptance_criteria"))
+        PrintField("Acceptance Criteria", Bundle.mMetadata.mAcceptanceCriteria);
+    if (Wants("problem_statement"))
+        PrintField("Problem Statement", Bundle.mMetadata.mProblemStatement);
+    if (Wants("baseline_audit"))
+        PrintField("Baseline Audit", Bundle.mMetadata.mBaselineAudit);
+    if (Wants("execution_strategy"))
+        PrintField("Execution Strategy", Bundle.mMetadata.mExecutionStrategy);
+    if (Wants("locked_decisions"))
+        PrintField("Locked Decisions", Bundle.mMetadata.mLockedDecisions);
+    if (Wants("source_references"))
+        PrintField("Source References", Bundle.mMetadata.mSourceReferences);
+    if (Wants("next_actions"))
+        PrintField("Next Actions", Bundle.mNextActions);
 
     // Validation commands table
-    if (!Bundle.mMetadata.mValidationCommands.empty())
+    if (Wants("validation_commands") &&
+        !Bundle.mMetadata.mValidationCommands.empty())
     {
         std::cout << kColorBold << "Validation Commands" << kColorReset << "\n";
         HumanTable VCTable;
@@ -270,7 +323,7 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
     }
 
     // Dependencies table
-    if (!Bundle.mMetadata.mDependencies.empty())
+    if (Wants("dependencies") && !Bundle.mMetadata.mDependencies.empty())
     {
         std::cout << kColorBold << "Dependencies" << kColorReset << "\n";
         HumanTable DepTable;
@@ -287,20 +340,23 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
     }
 
     // Phase table
-    std::cout << kColorBold << "Phases" << kColorReset << "\n";
-    HumanTable Table;
-    Table.mHeaders = {"Index", "Status", "Scope"};
-    for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+    if (Wants("phases"))
     {
-        const FPhaseRecord &Phase = Bundle.mPhases[I];
-        std::string Scope = Phase.mScope;
-        if (Scope.size() > 80)
-            Scope = Scope.substr(0, 77) + "...";
-        Table.AddRow({std::to_string(I),
-                      ColorizeStatus(ToString(Phase.mLifecycle.mStatus)),
-                      kColorDim + Scope + kColorReset});
+        std::cout << kColorBold << "Phases" << kColorReset << "\n";
+        HumanTable Table;
+        Table.mHeaders = {"Index", "Status", "Scope"};
+        for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+        {
+            const FPhaseRecord &Phase = Bundle.mPhases[I];
+            std::string Scope = Phase.mScope;
+            if (Scope.size() > 80)
+                Scope = Scope.substr(0, 77) + "...";
+            Table.AddRow({std::to_string(I),
+                          ColorizeStatus(ToString(Phase.mLifecycle.mStatus)),
+                          kColorDim + Scope + kColorReset});
+        }
+        Table.Print();
     }
-    Table.Print();
     return 0;
 }
 

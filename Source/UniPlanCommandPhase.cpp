@@ -6,8 +6,10 @@
 #include "UniPlanTypes.h"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -192,9 +194,29 @@ static void EmitProgress(const FPhaseRecord &InPhase)
     std::cout << "},";
 }
 
+// Emit the stream of per-phase fields that follow the `topic` field in
+// the v1 single-phase output. Ends with a trailing comma on the last
+// field so the caller can chain additional top-level fields (single
+// phase: "warnings":[] via PrintJsonClose; batch: absorbed + trimmed
+// before the closing `}` of the per-phase object). Extracted v0.84.0
+// to support the `--phases 1,3,5` batch mode without duplicating the
+// four emission branches (--brief / --design / --execution / full).
+static void EmitPhaseGetFieldsJson(const FTopicBundle &InBundle,
+                                   size_t InPhaseIndex,
+                                   const FPhaseGetOptions &InOptions);
+
+static int RunBundlePhaseGetBatchJson(const fs::path &InRepoRoot,
+                                      const FPhaseGetOptions &InOptions);
+
 static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
                                  const FPhaseGetOptions &InOptions)
 {
+    // Batch mode (`--phases 1,3,5`) dispatches to its own renderer with
+    // the v2 wrapped-array schema. Single-phase mode keeps emitting the
+    // v1 flat schema for backward compatibility with pre-v0.84.0 callers.
+    if (!InOptions.mPhaseIndices.empty())
+        return RunBundlePhaseGetBatchJson(InRepoRoot, InOptions);
+
     FTopicBundle Bundle;
     std::string Error;
     if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, Bundle, Error))
@@ -211,12 +233,28 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         return 1;
     }
 
-    const FPhaseRecord &Phase =
-        Bundle.mPhases[static_cast<size_t>(InOptions.mPhaseIndex)];
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kPhaseGetSchema, UTC, InRepoRoot.string());
     EmitJsonField("topic", Bundle.mTopicKey);
-    EmitJsonFieldInt("phase_index", InOptions.mPhaseIndex);
+    EmitPhaseGetFieldsJson(Bundle, static_cast<size_t>(InOptions.mPhaseIndex),
+                           InOptions);
+    std::vector<std::string> Warnings;
+    PrintJsonClose(Warnings);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Extracted per-phase field emission. Called by both the single-phase
+// JSON renderer (above) and the batch renderer (below). Emits fields
+// with trailing commas (the caller appends `"warnings":[]}` or absorbs
+// the trailing comma when wrapping this body in a `{...}` array element).
+// ---------------------------------------------------------------------------
+static void EmitPhaseGetFieldsJson(const FTopicBundle &InBundle,
+                                   size_t InPhaseIndex,
+                                   const FPhaseGetOptions &InOptions)
+{
+    const FPhaseRecord &Phase = InBundle.mPhases[InPhaseIndex];
+    EmitJsonFieldSizeT("phase_index", InPhaseIndex);
     EmitJsonField("status", ToString(Phase.mLifecycle.mStatus));
     // Unified design-depth measure — surfaced at top level of every
     // `phase get` mode (brief / reference / full / execution) so agents
@@ -252,9 +290,8 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         std::cout << "],";
         EmitJsonFieldInt("next_job", ComputeNextJob(Phase));
         EmitProgress(Phase);
-        std::vector<std::string> Warnings;
-        PrintJsonClose(Warnings);
-        return 0;
+        // Caller handles the closing brace + `warnings` field.
+        return;
     }
 
     // --design: exactly the fields that contribute to `design_chars`
@@ -273,9 +310,7 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         EmitJsonFieldNullable("multi_platforming",
                               Phase.mDesign.mMultiPlatforming);
         EmitJsonFieldNullable("handoff", Phase.mDesign.mHandoff);
-        std::vector<std::string> Warnings;
-        PrintJsonClose(Warnings);
-        return 0;
+        return;
     }
 
     // Full or --execution mode
@@ -394,17 +429,21 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         std::cout << "],";
     }
 
-    std::vector<std::string> Warnings;
-    PrintJsonClose(Warnings);
-    return 0;
+    // Full / --execution path exits here; caller closes the envelope.
 }
 
 // ---------------------------------------------------------------------------
-// Phase Get — Human
+// Phase Get — Batch JSON (v0.84.0)
+// Renders N phase objects under a wrapped `phases` array using the v2
+// schema (`uni-plan-phase-get-v2`). Each inner object is the same field
+// shape as the v1 single-phase top-level (minus the envelope fields),
+// captured through a std::cout redirect so every existing mode branch
+// (--brief / --design / --execution / full) reuses the shared emitter.
+// Trailing comma on the last field is trimmed before the per-phase
+// closing `}`.
 // ---------------------------------------------------------------------------
-
-static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
-                                  const FPhaseGetOptions &InOptions)
+static int RunBundlePhaseGetBatchJson(const fs::path &InRepoRoot,
+                                      const FPhaseGetOptions &InOptions)
 {
     FTopicBundle Bundle;
     std::string Error;
@@ -414,24 +453,70 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
         return 1;
     }
 
-    if (InOptions.mPhaseIndex < 0 ||
-        static_cast<size_t>(InOptions.mPhaseIndex) >= Bundle.mPhases.size())
+    // Bounds-check each requested index before emitting anything.
+    for (const int Idx : InOptions.mPhaseIndices)
     {
-        std::cerr << "Phase index " << InOptions.mPhaseIndex
-                  << " out of range (0.." << Bundle.mPhases.size() - 1 << ")\n";
-        return 1;
+        if (Idx < 0 ||
+            static_cast<size_t>(Idx) >= Bundle.mPhases.size())
+        {
+            std::cerr << "Phase index " << Idx << " out of range (0.."
+                      << Bundle.mPhases.size() - 1 << ")\n";
+            return 1;
+        }
     }
 
-    const FPhaseRecord &Phase =
-        Bundle.mPhases[static_cast<size_t>(InOptions.mPhaseIndex)];
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kPhaseGetBatchSchema, UTC, InRepoRoot.string());
+    EmitJsonField("topic", Bundle.mTopicKey);
+    std::cout << "\"phases\":[";
+    for (size_t N = 0; N < InOptions.mPhaseIndices.size(); ++N)
+    {
+        const size_t PI =
+            static_cast<size_t>(InOptions.mPhaseIndices[N]);
+        // Capture the per-phase field stream to trim the trailing comma
+        // left by the shared emitter before wrapping in `{...}`.
+        std::ostringstream Buffer;
+        auto *rpOldStream = std::cout.rdbuf(Buffer.rdbuf());
+        EmitPhaseGetFieldsJson(Bundle, PI, InOptions);
+        std::cout.rdbuf(rpOldStream);
+        std::string Body = Buffer.str();
+        while (!Body.empty() &&
+               (Body.back() == ',' ||
+                std::isspace(static_cast<unsigned char>(Body.back()))))
+            Body.pop_back();
+        PrintJsonSep(N);
+        std::cout << "{" << Body << "}";
+    }
+    std::cout << "],";
+    EmitJsonFieldSizeT("phase_count", InOptions.mPhaseIndices.size());
+    std::vector<std::string> Warnings;
+    PrintJsonClose(Warnings);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Phase Get — Human
+// ---------------------------------------------------------------------------
+
+// Emit per-phase human rendering for a single phase index. Extracted
+// v0.84.0 so the batch path (`--phases 1,3,5`) can reuse the same per-
+// phase output with a visible separator between entries.
+static void EmitPhaseGetHuman(const FTopicBundle &InBundle,
+                              size_t InPhaseIndex,
+                              const FPhaseGetOptions &InOptions)
+{
+    const FPhaseRecord &Phase = InBundle.mPhases[InPhaseIndex];
 
     const size_t DesignChars = ComputePhaseDesignChars(Phase);
-    std::cout << kColorBold << Bundle.mTopicKey << " phases["
-              << InOptions.mPhaseIndex << "]" << kColorReset << "  status="
+    std::cout << kColorBold << InBundle.mTopicKey << " phases["
+              << InPhaseIndex << "]" << kColorReset << "  status="
               << ColorizeStatus(ToString(Phase.mLifecycle.mStatus))
               << "  design=" << ColorizeDesignChars(DesignChars) << " "
               << kColorDim << "(" << GetDesignDepthLabel(DesignChars) << ")"
               << kColorReset << "\n\n";
+    (void)InOptions; // current implementation emits full view; flag-driven
+                     // subsetting in --brief/--design/--execution is only
+                     // applied in the JSON path today.
 
     auto PrintField = [](const char *InLabel, const std::string &InVal)
     {
@@ -573,7 +658,59 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
         TestTable.Print();
         std::cout << "\n";
     }
+}
 
+// Thin dispatcher for the human renderer. Single-phase calls through to
+// the per-phase emitter once; batch mode (--phases) loops and prints a
+// separator line between entries.
+static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
+                                  const FPhaseGetOptions &InOptions)
+{
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (!InOptions.mPhaseIndices.empty())
+    {
+        // Batch mode: bounds-check all indices up front before emitting
+        // any output, then render each with a visible separator.
+        for (const int Idx : InOptions.mPhaseIndices)
+        {
+            if (Idx < 0 ||
+                static_cast<size_t>(Idx) >= Bundle.mPhases.size())
+            {
+                std::cerr << "Phase index " << Idx << " out of range (0.."
+                          << Bundle.mPhases.size() - 1 << ")\n";
+                return 1;
+            }
+        }
+        for (size_t N = 0; N < InOptions.mPhaseIndices.size(); ++N)
+        {
+            if (N > 0)
+                std::cout << kColorDim
+                          << "--------------------------------\n\n"
+                          << kColorReset;
+            EmitPhaseGetHuman(
+                Bundle, static_cast<size_t>(InOptions.mPhaseIndices[N]),
+                InOptions);
+        }
+        return 0;
+    }
+
+    // Single-phase path.
+    if (InOptions.mPhaseIndex < 0 ||
+        static_cast<size_t>(InOptions.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index " << InOptions.mPhaseIndex
+                  << " out of range (0.." << Bundle.mPhases.size() - 1 << ")\n";
+        return 1;
+    }
+    EmitPhaseGetHuman(Bundle,
+                      static_cast<size_t>(InOptions.mPhaseIndex), InOptions);
     return 0;
 }
 
@@ -658,11 +795,13 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseReadinessCommand(SubArgs, InRepoRoot);
     if (Sub == "wave-status")
         return RunPhaseWaveStatusCommand(SubArgs, InRepoRoot);
+    if (Sub == "drift")
+        return RunPhaseDriftCommand(SubArgs, InRepoRoot);
 
     throw UsageError("Unknown phase subcommand: " + Sub +
                      ". Expected: list, get, set, add, remove, start, "
                      "complete, block, unblock, progress, complete-jobs, "
-                     "log, verify, next, readiness, wave-status");
+                     "log, verify, next, readiness, wave-status, drift");
 }
 
 } // namespace UniPlan

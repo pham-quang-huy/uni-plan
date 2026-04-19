@@ -143,6 +143,8 @@ FManifestRemoveOptions
 ParseManifestRemoveOptions(const std::vector<std::string> &InTokens);
 FManifestListOptions
 ParseManifestListOptions(const std::vector<std::string> &InTokens);
+FPhaseDriftOptions
+ParsePhaseDriftOptions(const std::vector<std::string> &InTokens);
 FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens);
 FChangelogSetOptions
 ParseChangelogSetOptions(const std::vector<std::string> &InTokens);
@@ -245,6 +247,8 @@ void EvalNoDuplicatePhaseField(const std::vector<FTopicBundle> &InBundles,
                                std::vector<ValidateCheck> &OutChecks);
 void EvalNoHollowCompletedPhase(const std::vector<FTopicBundle> &InBundles,
                                 std::vector<ValidateCheck> &OutChecks);
+void EvalNoDuplicateLaneScope(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks);
 
 // From UniPlanParsing.cpp
 void AppendSidecarIntegrityWarnings(
@@ -336,6 +340,17 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
                           const std::string &InRepoRoot);
 int RunPhaseWaveStatusCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot);
+
+// Phase-drift query (v0.84.0). Detects phases where declared lifecycle
+// status lags behind evidence stored elsewhere in the bundle. Exposed as
+// both a CLI command (below) and a validate evaluator
+// (EvalPhaseStatusLaneAlignment) that share ComputePhaseDriftEntries().
+std::vector<FPhaseDriftEntry>
+ComputePhaseDriftEntries(const FPhaseRecord &InPhase);
+int RunPhaseDriftCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+void EvalPhaseStatusLaneAlignment(const std::vector<FTopicBundle> &InBundles,
+                                  std::vector<ValidateCheck> &OutChecks);
 
 // Semantic commands — Tier 5: Entity coverage
 int RunLaneSetCommand(const std::vector<std::string> &InArgs,

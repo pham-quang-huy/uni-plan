@@ -127,6 +127,43 @@ inline bool IsValidISOTimestampValue(const std::string &InValue)
     return std::regex_match(InValue, Pattern);
 }
 
+// Parse a comma-separated list of non-negative integers. Each field is
+// Trim()-ed; empty fields, negative values, and non-numeric tokens throw
+// std::invalid_argument. Duplicates are preserved by this helper — the
+// caller is responsible for deduplication (see ParsePhaseGetOptions for
+// the `--phases` flag, where dedupe + sort happens post-parse).
+//
+// Added v0.84.0 for the `phase get --phases 1,3,5` batch mode. Kept
+// free-function + header-inline so additional CSV-flag consumers can
+// reuse it without pulling in heavyweight dependencies.
+inline std::vector<int> SplitCsvInts(const std::string &InValue)
+{
+    std::vector<int> Out;
+    std::string Cur;
+    const auto Emit = [&]()
+    {
+        const std::string Token = Trim(Cur);
+        Cur.clear();
+        if (Token.empty())
+            throw std::invalid_argument("empty field in integer list");
+        for (const char C : Token)
+        {
+            if (!std::isdigit(static_cast<unsigned char>(C)))
+                throw std::invalid_argument("non-numeric token: " + Token);
+        }
+        Out.push_back(std::atoi(Token.c_str()));
+    };
+    for (const char C : InValue)
+    {
+        if (C == ',')
+            Emit();
+        else
+            Cur.push_back(C);
+    }
+    Emit();
+    return Out;
+}
+
 // LegacyMdContentLineCount lives in UniPlanFileHelpers.h — it reads from disk,
 // so it belongs with the other filesystem helpers rather than this
 // pure-string-operations header.

@@ -4,6 +4,7 @@
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
+#include <cctype>
 #include <regex>
 #include <set>
 #include <string>
@@ -1017,6 +1018,88 @@ void EvalNoHollowCompletedPhase(const std::vector<FTopicBundle> &InBundles,
                  "manifest, and design prose totals < " +
                      std::to_string(kPhaseHollowChars) +
                      " chars (hollow threshold)");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// no_duplicate_lane_scope — catch literal clone-and-never-cleaned-up lanes.
+// Flags lanes within the same phase whose `scope` prose normalizes to the
+// same string (lowercase + whitespace-collapsed + edge-punctuation stripped).
+// Conservative: exact-normalized match only. Fires on the later lane; detail
+// points back to the original. Empty scopes are left to EvalLaneRequiredFields.
+// Added v0.84.0 after ISeeThroughYou phase 6/9/15 audit surfaced the
+// clone-and-forget pattern during a manual investigation.
+// ---------------------------------------------------------------------------
+
+static std::string NormalizeLaneScope(const std::string &InScope)
+{
+    std::string Out;
+    Out.reserve(InScope.size());
+    bool bInWhitespace = false;
+    for (char C : InScope)
+    {
+        const unsigned char U = static_cast<unsigned char>(C);
+        if (std::isspace(U))
+        {
+            if (!bInWhitespace && !Out.empty())
+                Out.push_back(' ');
+            bInWhitespace = true;
+        }
+        else
+        {
+            Out.push_back(static_cast<char>(std::tolower(U)));
+            bInWhitespace = false;
+        }
+    }
+    while (!Out.empty() && Out.back() == ' ')
+        Out.pop_back();
+    const auto IsEdgePunct = [](char C)
+    {
+        return C == '.' || C == '!' || C == '?' || C == ',' || C == ';' ||
+               C == ':' || C == '-';
+    };
+    while (!Out.empty() && IsEdgePunct(Out.front()))
+        Out.erase(Out.begin());
+    while (!Out.empty() && IsEdgePunct(Out.back()))
+        Out.pop_back();
+    return Out;
+}
+
+void EvalNoDuplicateLaneScope(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            if (Phase.mLanes.size() < 2)
+                continue;
+            std::vector<std::string> Normalized;
+            Normalized.reserve(Phase.mLanes.size());
+            for (const FLaneRecord &L : Phase.mLanes)
+                Normalized.push_back(NormalizeLaneScope(L.mScope));
+            for (size_t J = 1; J < Normalized.size(); ++J)
+            {
+                if (Normalized[J].empty())
+                    continue;
+                for (size_t I = 0; I < J; ++I)
+                {
+                    if (Normalized[I].empty())
+                        continue;
+                    if (Normalized[I] != Normalized[J])
+                        continue;
+                    Fail(OutChecks, "no_duplicate_lane_scope",
+                         EValidationSeverity::Warning, B.mTopicKey,
+                         "phases[" + std::to_string(PI) + "].lanes[" +
+                             std::to_string(J) + "]",
+                         "duplicate scope (normalized) of phases[" +
+                             std::to_string(PI) + "].lanes[" +
+                             std::to_string(I) + "]");
+                    break;
+                }
+            }
         }
     }
 }

@@ -78,6 +78,77 @@ TEST_F(FBundleTestFixture, TopicGetEmitsAllMetadataKeys)
     }
 }
 
+// v0.84.0: --sections <csv> filters top-level sections. Identity fields
+// (topic/status/title/phase_count + schema envelope) remain; unrequested
+// sections are absent from the output. Unknown names throw UsageError.
+TEST_F(FBundleTestFixture, TopicGetSectionsFiltersJsonOutput)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTopicCommand(
+        {"get", "--topic", "SampleTopic", "--sections", "summary,phases",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    // Requested sections present.
+    EXPECT_TRUE(Json.contains("summary"));
+    EXPECT_TRUE(Json.contains("phase_summary"));
+    // Identity fields always present.
+    EXPECT_TRUE(Json.contains("topic"));
+    EXPECT_TRUE(Json.contains("status"));
+    EXPECT_TRUE(Json.contains("title"));
+    EXPECT_TRUE(Json.contains("phase_count"));
+    // Filtered-out sections absent.
+    for (const char *Absent :
+         {"goals", "non_goals", "risks", "acceptance_criteria",
+          "problem_statement", "validation_commands", "baseline_audit",
+          "execution_strategy", "locked_decisions", "source_references",
+          "dependencies", "next_actions"})
+    {
+        EXPECT_FALSE(Json.contains(Absent))
+            << "section not requested but emitted: " << Absent;
+    }
+}
+
+TEST_F(FBundleTestFixture, TopicGetNoSectionsFlagEmitsAll)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTopicCommand(
+        {"get", "--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    // Backward-compat: absent --sections == emit all (same as
+    // TopicGetEmitsAllMetadataKeys above, doubled up here as a gate).
+    for (const char *Key :
+         {"summary", "goals", "non_goals", "risks", "acceptance_criteria",
+          "problem_statement", "validation_commands", "baseline_audit",
+          "execution_strategy", "locked_decisions", "source_references",
+          "dependencies", "phase_summary"})
+    {
+        EXPECT_TRUE(Json.contains(Key))
+            << "default topic get missing key: " << Key;
+    }
+}
+
+TEST(OptionParsing, TopicGetSectionsRejectsUnknownName)
+{
+    EXPECT_THROW(UniPlan::ParseTopicGetOptions(
+                     {"--topic", "T", "--sections", "summary,bogus"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, TopicGetSectionsRejectsEmptyField)
+{
+    EXPECT_THROW(UniPlan::ParseTopicGetOptions(
+                     {"--topic", "T", "--sections", "summary,,phases"}),
+                 UniPlan::UsageError);
+}
+
 TEST_F(FBundleTestFixture, TopicGetMissingTopicFails)
 {
     StartCapture();
@@ -358,6 +429,288 @@ TEST_F(FBundleTestFixture, PhaseWaveStatusOutOfRangeFails)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
+}
+
+// ===================================================================
+// phase get --phases <csv> batch mode (v0.84.0)
+// ===================================================================
+
+TEST_F(FBundleTestFixture, PhaseGetBatchReturnsV2WrappedArray)
+{
+    CreateMinimalFixture("BatchT", UniPlan::ETopicStatus::InProgress, 4,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "BatchT", "--phases", "0,2,3", "--brief",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"].get<std::string>(), "uni-plan-phase-get-v2");
+    EXPECT_EQ(Json["topic"].get<std::string>(), "BatchT");
+    ASSERT_TRUE(Json.contains("phases"));
+    ASSERT_EQ(Json["phases"].size(), 3u);
+    EXPECT_EQ(Json["phase_count"].get<size_t>(), 3u);
+    EXPECT_EQ(Json["phases"][0]["phase_index"].get<int>(), 0);
+    EXPECT_EQ(Json["phases"][1]["phase_index"].get<int>(), 2);
+    EXPECT_EQ(Json["phases"][2]["phase_index"].get<int>(), 3);
+    for (const auto &P : Json["phases"])
+    {
+        EXPECT_TRUE(P.contains("status"));
+        EXPECT_TRUE(P.contains("design_chars"));
+        EXPECT_TRUE(P.contains("scope"));
+    }
+}
+
+TEST_F(FBundleTestFixture, PhaseGetBatchDedupesAndSortsIndices)
+{
+    CreateMinimalFixture("BatchDedup", UniPlan::ETopicStatus::InProgress, 5,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "BatchDedup", "--phases", "3,1,3,0,1", "--brief",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_EQ(Json["phases"].size(), 3u);
+    EXPECT_EQ(Json["phases"][0]["phase_index"].get<int>(), 0);
+    EXPECT_EQ(Json["phases"][1]["phase_index"].get<int>(), 1);
+    EXPECT_EQ(Json["phases"][2]["phase_index"].get<int>(), 3);
+}
+
+TEST_F(FBundleTestFixture, PhaseGetBatchOutOfRangeFails)
+{
+    CreateMinimalFixture("BatchRange", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "BatchRange", "--phases", "0,99", "--brief",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, PhaseGetSinglePhaseKeepsV1Schema)
+{
+    CreateMinimalFixture("BatchV1", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "BatchV1", "--phase", "0", "--brief", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    // Single-phase mode preserves v1 flat schema for backward compat.
+    EXPECT_EQ(Json["schema"].get<std::string>(), "uni-plan-phase-get-v1");
+    EXPECT_FALSE(Json.contains("phases"));
+    EXPECT_EQ(Json["phase_index"].get<int>(), 0);
+}
+
+TEST(OptionParsing, PhaseGetMutualExclusionPhaseAndPhases)
+{
+    EXPECT_THROW(UniPlan::ParsePhaseGetOptions(
+                     {"--topic", "T", "--phase", "1", "--phases", "1,2"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, PhaseGetRejectsNonNumericPhasesCsv)
+{
+    EXPECT_THROW(
+        UniPlan::ParsePhaseGetOptions({"--topic", "T", "--phases", "1,abc"}),
+        UniPlan::UsageError);
+    EXPECT_THROW(
+        UniPlan::ParsePhaseGetOptions({"--topic", "T", "--phases", "1,,3"}),
+        UniPlan::UsageError);
+}
+
+// ===================================================================
+// phase drift (v0.84.0)
+// ===================================================================
+
+TEST_F(FBundleTestFixture, PhaseDriftDetectsStatusLagLane)
+{
+    CreateMinimalFixture("DriftLane", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("DriftLane", Bundle));
+    // Phase status = not_started, but lane 0 is completed.
+    UniPlan::FLaneRecord L;
+    L.mStatus = UniPlan::EExecutionStatus::Completed;
+    L.mScope = "Implemented sub-task A";
+    Bundle.mPhases[0].mLanes.push_back(L);
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "DriftLane.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"drift", "--topic", "DriftLane", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_EQ(Json["drift_count"].get<size_t>(), 1u);
+    const auto &E = Json["drift_entries"][0];
+    EXPECT_EQ(E["topic"].get<std::string>(), "DriftLane");
+    EXPECT_EQ(E["phase_index"].get<int>(), 0);
+    EXPECT_EQ(E["kind"].get<std::string>(), "status_lag_lane");
+    EXPECT_EQ(E["phase_status"].get<std::string>(), "not_started");
+    ASSERT_EQ(E["evidence"]["lane_indices"].size(), 1u);
+    EXPECT_EQ(E["evidence"]["lane_indices"][0].get<int>(), 0);
+}
+
+TEST_F(FBundleTestFixture, PhaseDriftDetectsStatusLagDone)
+{
+    CreateMinimalFixture("DriftDone", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("DriftDone", Bundle));
+    // Phase status = not_started but `done` carries substantive prose
+    // that is not a placeholder literal.
+    Bundle.mPhases[0].mLifecycle.mDone =
+        "Implemented subcommand dispatcher in Main.cpp and verified on both "
+        "platforms; 224/224 tests pass.";
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "DriftDone.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"drift", "--topic", "DriftDone", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    bool bFoundDone = false;
+    for (const auto &E : Json["drift_entries"])
+    {
+        if (E["kind"].get<std::string>() == "status_lag_done")
+        {
+            bFoundDone = true;
+            EXPECT_GT(E["evidence"]["done_chars"].get<int>(), 10);
+        }
+    }
+    EXPECT_TRUE(bFoundDone) << "substantive done prose should emit "
+                               "status_lag_done";
+}
+
+TEST_F(FBundleTestFixture, PhaseDriftIgnoresPlaceholderDone)
+{
+    CreateMinimalFixture("DriftPlaceholder",
+                         UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("DriftPlaceholder", Bundle));
+    // "Not started" is a status-word placeholder — should not drift.
+    Bundle.mPhases[0].mLifecycle.mDone = "Not started";
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "DriftPlaceholder.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"drift", "--topic", "DriftPlaceholder", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    for (const auto &E : Json["drift_entries"])
+    {
+        EXPECT_NE(E["kind"].get<std::string>(), "status_lag_done")
+            << "placeholder `Not started` must not fire status_lag_done";
+    }
+}
+
+TEST_F(FBundleTestFixture, PhaseDriftDetectsCompletionLagLane)
+{
+    CreateMinimalFixture("DriftCompletion", UniPlan::ETopicStatus::InProgress,
+                         1, UniPlan::EExecutionStatus::Completed, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("DriftCompletion", Bundle));
+    // Phase is completed, but lane 0 is still not_started.
+    UniPlan::FLaneRecord L0;
+    L0.mStatus = UniPlan::EExecutionStatus::NotStarted;
+    L0.mScope = "Verify Windows parity";
+    UniPlan::FLaneRecord L1;
+    L1.mStatus = UniPlan::EExecutionStatus::Completed;
+    L1.mScope = "Verify macOS parity";
+    Bundle.mPhases[0].mLanes = {L0, L1};
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "DriftCompletion.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"drift", "--topic", "DriftCompletion", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    bool bFound = false;
+    for (const auto &E : Json["drift_entries"])
+    {
+        if (E["kind"].get<std::string>() == "completion_lag_lane")
+        {
+            bFound = true;
+            ASSERT_EQ(E["evidence"]["lane_indices"].size(), 1u);
+            EXPECT_EQ(E["evidence"]["lane_indices"][0].get<int>(), 0);
+        }
+    }
+    EXPECT_TRUE(bFound);
+}
+
+TEST_F(FBundleTestFixture, PhaseDriftAllClean)
+{
+    CreateMinimalFixture("Clean", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"drift", "--topic", "Clean", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["drift_count"].get<size_t>(), 0u);
+    EXPECT_EQ(Json["topic_count_scanned"].get<size_t>(), 1u);
+}
+
+TEST_F(FBundleTestFixture, PhaseDriftScansAllTopicsWhenTopicOmitted)
+{
+    CreateMinimalFixture("CleanA", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    CreateMinimalFixture("DriftB", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("DriftB", Bundle));
+    UniPlan::FLaneRecord L;
+    L.mStatus = UniPlan::EExecutionStatus::Completed;
+    L.mScope = "Finished early";
+    Bundle.mPhases[0].mLanes.push_back(L);
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "DriftB.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"drift", "--repo-root", mRepoRoot.string()}, mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["topic_count_scanned"].get<size_t>(), 2u);
+    EXPECT_EQ(Json["drift_count"].get<size_t>(), 1u);
+    EXPECT_EQ(Json["drift_entries"][0]["topic"].get<std::string>(), "DriftB");
 }
 
 TEST_F(FBundleTestFixture, PhaseReadinessOutOfRangeFails)

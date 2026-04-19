@@ -122,6 +122,140 @@ int RunPhaseNextCommand(const std::vector<std::string> &InArgs,
 }
 
 // ---------------------------------------------------------------------------
+// phase drift — report phases whose declared status lags the evidence
+// stored elsewhere in the bundle. Optional --topic scopes to a single
+// bundle; omit to scan the whole corpus. Added v0.84.0 after the
+// ISeeThroughYou investigation surfaced 3 phases where lanes were
+// completed but the phase itself was still not_started.
+// ---------------------------------------------------------------------------
+
+int RunPhaseDriftCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FPhaseDriftOptions Options = ParsePhaseDriftOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    std::vector<std::string> BundleWarnings;
+    std::vector<FTopicBundle> Bundles;
+    if (!Options.mTopic.empty())
+    {
+        FTopicBundle Bundle;
+        std::string Error;
+        if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+        {
+            std::cerr << Error << "\n";
+            return 1;
+        }
+        Bundles.push_back(std::move(Bundle));
+    }
+    else
+    {
+        Bundles = LoadAllBundles(RepoRoot, BundleWarnings);
+    }
+
+    // Collect every drift row across every bundle + phase.
+    struct FRow
+    {
+        std::string mTopic;
+        int mPhaseIndex = -1;
+        std::string mPhaseStatus; // serialized form
+        FPhaseDriftEntry mEntry;
+    };
+    std::vector<FRow> Rows;
+    size_t TopicsScanned = 0;
+    for (const FTopicBundle &B : Bundles)
+    {
+        ++TopicsScanned;
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            const auto Entries = ComputePhaseDriftEntries(Phase);
+            for (const FPhaseDriftEntry &E : Entries)
+            {
+                FRow R;
+                R.mTopic = B.mTopicKey;
+                R.mPhaseIndex = static_cast<int>(PI);
+                R.mPhaseStatus = ToString(Phase.mLifecycle.mStatus);
+                R.mEntry = E;
+                Rows.push_back(std::move(R));
+            }
+        }
+    }
+
+    if (Options.mbHuman)
+    {
+        std::cout << kColorBold
+                  << "Phase drift — " << TopicsScanned << " topic(s) scanned, "
+                  << Rows.size() << " entry/entries\n"
+                  << kColorReset;
+        if (Rows.empty())
+        {
+            std::cout << kColorDim << "No drift detected.\n" << kColorReset;
+            return 0;
+        }
+        std::cout << kColorBold
+                  << "Topic                Phase  Status       Kind  "
+                     "                Detail\n"
+                  << kColorReset;
+        for (const FRow &R : Rows)
+        {
+            std::cout << R.mTopic;
+            for (size_t I = R.mTopic.size(); I < 21; ++I)
+                std::cout << ' ';
+            std::cout << R.mPhaseIndex;
+            for (int I = 0; I < 6 - static_cast<int>(
+                                        std::to_string(R.mPhaseIndex).size());
+                 ++I)
+                std::cout << ' ';
+            std::cout << ' ' << R.mPhaseStatus;
+            for (size_t I = R.mPhaseStatus.size(); I < 12; ++I)
+                std::cout << ' ';
+            std::cout << ' ' << R.mEntry.mKind;
+            for (size_t I = R.mEntry.mKind.size(); I < 21; ++I)
+                std::cout << ' ';
+            std::cout << ' ' << R.mEntry.mDetail << "\n";
+        }
+        return 0;
+    }
+
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kPhaseDriftSchema, UTC, RepoRoot.string());
+    std::cout << "\"drift_entries\":[";
+    for (size_t I = 0; I < Rows.size(); ++I)
+    {
+        PrintJsonSep(I);
+        const FRow &R = Rows[I];
+        std::cout << "{";
+        EmitJsonField("topic", R.mTopic);
+        EmitJsonFieldInt("phase_index", R.mPhaseIndex);
+        EmitJsonField("phase_status", R.mPhaseStatus);
+        EmitJsonField("kind", R.mEntry.mKind);
+        EmitJsonField("detail", R.mEntry.mDetail);
+        // Evidence block — only populate fields relevant to the kind.
+        std::cout << "\"evidence\":{";
+        std::cout << "\"lane_indices\":[";
+        for (size_t J = 0; J < R.mEntry.mLaneIndices.size(); ++J)
+        {
+            PrintJsonSep(J);
+            std::cout << R.mEntry.mLaneIndices[J];
+        }
+        std::cout << "],";
+        std::cout << "\"done_chars\":" << R.mEntry.mDoneChars << ",";
+        std::cout << "\"has_completed_at\":"
+                  << (R.mEntry.mbHasCompletedAt ? "true" : "false");
+        std::cout << "}";
+        std::cout << "}";
+    }
+    std::cout << "],";
+    EmitJsonFieldSizeT("drift_count", Rows.size());
+    EmitJsonFieldSizeT("topic_count_scanned", TopicsScanned, false);
+    std::cout << ",";
+    PrintJsonClose(BundleWarnings);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // phase readiness — gate-by-gate status for a specific phase
 // ---------------------------------------------------------------------------
 

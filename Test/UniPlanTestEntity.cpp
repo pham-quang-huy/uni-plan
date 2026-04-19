@@ -391,6 +391,252 @@ TEST(OptionParsing, ManifestListAcceptsEmptyArgs)
     EXPECT_NO_THROW(UniPlan::ParseManifestListOptions({}));
 }
 
+// v0.84.0: --stale-plan classifies plan↔disk drift in 3 subcategories.
+// stale_create   — action=create, file already exists
+// stale_delete   — action=delete, file still exists
+// dangling_modify— action=modify, file does not exist
+TEST_F(FBundleTestFixture, ManifestListStalePlanFlagsStaleCreate)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
+    UniPlan::FFileManifestItem Item;
+    // Points at a file that really exists on disk (the bundle itself),
+    // but marked action=create → stale_create.
+    Item.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
+    Item.mAction = UniPlan::EFileAction::Create;
+    Item.mDescription = "Stale create — file already landed";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--stale-plan", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_EQ(Json["entry_count"].get<size_t>(), 1u);
+    const auto &E = Json["entries"][0];
+    EXPECT_EQ(E["action"].get<std::string>(), "create");
+    EXPECT_TRUE(E["exists_on_disk"].get<bool>());
+    EXPECT_EQ(E["stale_reason"].get<std::string>(), "stale_create");
+}
+
+TEST_F(FBundleTestFixture, ManifestListStalePlanFlagsStaleDelete)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
+    UniPlan::FFileManifestItem Item;
+    // File exists but plan says "delete" — promised removal never happened.
+    Item.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
+    Item.mAction = UniPlan::EFileAction::Delete;
+    Item.mDescription = "Stale delete — plan promised removal";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--stale-plan", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_EQ(Json["entry_count"].get<size_t>(), 1u);
+    const auto &E = Json["entries"][0];
+    EXPECT_EQ(E["action"].get<std::string>(), "delete");
+    EXPECT_TRUE(E["exists_on_disk"].get<bool>());
+    EXPECT_EQ(E["stale_reason"].get<std::string>(), "stale_delete");
+}
+
+TEST_F(FBundleTestFixture, ManifestListStalePlanFlagsDanglingModify)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
+    UniPlan::FFileManifestItem Item;
+    // File does not exist but plan says "modify" — dangling reference.
+    Item.mFilePath = "does/not/exist/anywhere.cpp";
+    Item.mAction = UniPlan::EFileAction::Modify;
+    Item.mDescription = "Dangling modify — file is absent";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--stale-plan", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_EQ(Json["entry_count"].get<size_t>(), 1u);
+    const auto &E = Json["entries"][0];
+    EXPECT_EQ(E["action"].get<std::string>(), "modify");
+    EXPECT_FALSE(E["exists_on_disk"].get<bool>());
+    EXPECT_EQ(E["stale_reason"].get<std::string>(), "dangling_modify");
+}
+
+TEST_F(FBundleTestFixture, ManifestListStalePlanSkipsAlignedEntries)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
+    // Aligned entry: action=modify + file exists → NOT stale.
+    UniPlan::FFileManifestItem Aligned;
+    Aligned.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
+    Aligned.mAction = UniPlan::EFileAction::Modify;
+    Aligned.mDescription = "Aligned — file exists and plan says modify";
+    Bundle.mPhases[0].mFileManifest.push_back(Aligned);
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--stale-plan", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["entry_count"].get<size_t>(), 0u)
+        << "aligned manifest entries must not be reported under --stale-plan";
+}
+
+// v0.84.0: --human renders an ANSI table with explicit count/filter
+// header. Pre-v0.84.0 the flag was silently ignored (command always
+// emitted JSON). These tests gate the new behavior.
+TEST_F(FBundleTestFixture, ManifestListHumanRendersTableHeader)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--human", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const std::string &Output = mCapturedStdout;
+    // Must NOT emit JSON envelope — the silent-ignore path would have.
+    EXPECT_EQ(Output.find("\"schema\""), std::string::npos)
+        << "--human path leaked JSON envelope";
+    // Must emit the human-mode summary line + table headers.
+    EXPECT_NE(Output.find("File manifest"), std::string::npos);
+    EXPECT_NE(Output.find("Topic"), std::string::npos);
+    EXPECT_NE(Output.find("Action"), std::string::npos);
+    EXPECT_NE(Output.find("Stale"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, ManifestListHumanShowsStaleColumn)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
+    UniPlan::FFileManifestItem Item;
+    Item.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
+    Item.mAction = UniPlan::EFileAction::Create;
+    Item.mDescription = "stale create target";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--stale-plan", "--human", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const std::string &Output = mCapturedStdout;
+    EXPECT_NE(Output.find("stale_create"), std::string::npos)
+        << "--human must surface stale_reason in the Stale column";
+    EXPECT_NE(Output.find("[--stale-plan]"), std::string::npos)
+        << "--human header must reflect the active --stale-plan filter";
+}
+
+TEST_F(FBundleTestFixture, ManifestListHumanShowsEmptyMessageWhenNoEntries)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--human", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const std::string &Output = mCapturedStdout;
+    EXPECT_NE(Output.find("No manifest entries match the filter"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, ManifestListEmitsStaleReasonNullForAlignedEntries)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
+    UniPlan::FFileManifestItem Aligned;
+    Aligned.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
+    Aligned.mAction = UniPlan::EFileAction::Modify;
+    Aligned.mDescription = "Aligned entry";
+    Bundle.mPhases[0].mFileManifest.push_back(Aligned);
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    // Default listing (no --stale-plan) emits every row with stale_reason.
+    StartCapture();
+    const int Code = UniPlan::RunManifestListCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    ASSERT_EQ(Json["entry_count"].get<size_t>(), 1u);
+    const auto &E = Json["entries"][0];
+    ASSERT_TRUE(E.contains("stale_reason"));
+    // Aligned entries serialize stale_reason as JSON null.
+    EXPECT_TRUE(E["stale_reason"].is_null())
+        << "aligned manifest entries must emit stale_reason=null";
+}
+
 // v0.71.1 regression: exists_on_disk checks must resolve relative
 // file_manifest paths against --repo-root, not the process cwd. The
 // test-process cwd is the build dir, so a path like
@@ -443,7 +689,8 @@ TEST_F(FBundleTestFixture, ValidateSummaryResolvesManifestAgainstRepoRoot)
     CopyFixture("SampleTopic");
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
-    Bundle.mPhases[0].mFileManifest.clear();
+    for (auto &Phase : Bundle.mPhases)
+        Phase.mFileManifest.clear();
     UniPlan::FFileManifestItem Exists;
     Exists.mFilePath = "Docs/Plans/SampleTopic.Plan.json";
     Exists.mAction = UniPlan::EFileAction::Modify;

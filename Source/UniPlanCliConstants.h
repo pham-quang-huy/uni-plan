@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.83.1";
+static constexpr const char *kCliVersion = "0.84.1";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -104,6 +104,10 @@ inline std::string MakeChangelogTarget(int InIndex)
 static constexpr const char *kTopicListSchema = "uni-plan-topic-list-v1";
 static constexpr const char *kTopicGetSchema = "uni-plan-topic-get-v1";
 static constexpr const char *kPhaseGetSchema = "uni-plan-phase-get-v1";
+// Batch multi-phase get (v0.84.0). Single-phase --phase <N> continues to
+// emit v1 at the top level (backward compat). --phases 1,3,5 emits this
+// wrapped schema with the phase objects inside a `phases` array.
+static constexpr const char *kPhaseGetBatchSchema = "uni-plan-phase-get-v2";
 static constexpr const char *kPhaseListSchemaV2 = "uni-plan-phase-list-v2";
 static constexpr const char *kChangelogSchemaV2 = "uni-plan-changelog-v2";
 static constexpr const char *kVerificationSchemaV2 = "uni-plan-verification-v2";
@@ -115,6 +119,13 @@ static constexpr const char *kMutationSchema = "uni-plan-mutation-v1";
 // inline — the k*Schema constant is the single source of truth consumed by
 // PrintJsonHeader() and by schema-aware downstream tooling.
 static constexpr const char *kLegacyGapSchema = "uni-plan-legacy-gap-v1";
+
+// Phase-drift command schema (v0.84.0). Reports phases where declared
+// lifecycle status disagrees with the evidence stored elsewhere in the
+// bundle (completed lanes, substantive `done` prose, completed_at
+// timestamps). Consumed by agents to find status-lag drift without
+// reading each phase manually.
+static constexpr const char *kPhaseDriftSchema = "uni-plan-phase-drift-v1";
 
 // ---------------------------------------------------------------------------
 // ANSI color codes for --human mode

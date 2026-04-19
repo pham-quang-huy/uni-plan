@@ -568,6 +568,137 @@ EvalTopicPhaseStatusAlignment(const std::vector<FTopicBundle> &InBundles,
     }
 }
 
+// ---------------------------------------------------------------------------
+// ComputePhaseDriftEntries — shared detection logic for the phase drift
+// command (RunPhaseDriftCommand) and the phase_status_lane_alignment
+// evaluator (EvalPhaseStatusLaneAlignment). Returns one entry per
+// detected drift kind; an empty vector means the phase's declared status
+// matches its evidence. Added v0.84.0.
+//
+// Four kinds:
+//   status_lag_lane       — status=not_started but lanes progressed
+//   status_lag_done       — status=not_started but `done` is substantive
+//   status_lag_timestamp  — status=not_started but completed_at set
+//   completion_lag_lane   — status=completed but some lane isn't
+// ---------------------------------------------------------------------------
+
+static bool IsSubstantiveDonePhrase(const std::string &InDone)
+{
+    if (InDone.empty())
+        return false;
+    const size_t First = InDone.find_first_not_of(" \t\n\r");
+    if (First == std::string::npos)
+        return false;
+    const size_t Last = InDone.find_last_not_of(" \t\n\r");
+    const std::string Trimmed = InDone.substr(First, Last - First + 1);
+    if (Trimmed.size() < 12)
+        return false;
+    // Mirror the placeholder patterns in EvalNoEmptyPlaceholderLiteral so
+    // leftover "Not started" / "TBD" / etc. don't look like substantive
+    // done prose.
+    static const std::regex ClassicPattern(
+        R"(^\s*(?:None|N/A|n/a|none|TBD|tbd|-)\s*$)");
+    static const std::regex StatusWordPattern(
+        R"(^\s*[`"']*(?:complete[d]?|in[\s_]?progress|not[\s_]?started|blocked|pending|wip|done)[`"']*\s*$)",
+        std::regex::icase);
+    if (std::regex_match(Trimmed, ClassicPattern))
+        return false;
+    if (std::regex_match(Trimmed, StatusWordPattern))
+        return false;
+    return true;
+}
+
+std::vector<FPhaseDriftEntry>
+ComputePhaseDriftEntries(const FPhaseRecord &InPhase)
+{
+    std::vector<FPhaseDriftEntry> Out;
+    const EExecutionStatus Status = InPhase.mLifecycle.mStatus;
+
+    if (Status == EExecutionStatus::NotStarted)
+    {
+        std::vector<int> ProgressedLanes;
+        for (size_t I = 0; I < InPhase.mLanes.size(); ++I)
+        {
+            const auto LS = InPhase.mLanes[I].mStatus;
+            if (LS == EExecutionStatus::Completed ||
+                LS == EExecutionStatus::InProgress)
+                ProgressedLanes.push_back(static_cast<int>(I));
+        }
+        if (!ProgressedLanes.empty())
+        {
+            FPhaseDriftEntry E;
+            E.mKind = "status_lag_lane";
+            E.mLaneIndices = ProgressedLanes;
+            E.mDetail = std::to_string(ProgressedLanes.size()) + " of " +
+                        std::to_string(InPhase.mLanes.size()) +
+                        " lane(s) are completed/in_progress but phase "
+                        "status is not_started";
+            Out.push_back(std::move(E));
+        }
+
+        if (IsSubstantiveDonePhrase(InPhase.mLifecycle.mDone))
+        {
+            FPhaseDriftEntry E;
+            E.mKind = "status_lag_done";
+            E.mDoneChars = static_cast<int>(InPhase.mLifecycle.mDone.size());
+            E.mDetail = "`done` field has " + std::to_string(E.mDoneChars) +
+                        " chars of substantive prose but phase status is "
+                        "not_started";
+            Out.push_back(std::move(E));
+        }
+
+        if (!InPhase.mLifecycle.mCompletedAt.empty())
+        {
+            FPhaseDriftEntry E;
+            E.mKind = "status_lag_timestamp";
+            E.mbHasCompletedAt = true;
+            E.mDetail = "completed_at=" + InPhase.mLifecycle.mCompletedAt +
+                        " but phase status is not_started";
+            Out.push_back(std::move(E));
+        }
+    }
+    else if (Status == EExecutionStatus::Completed)
+    {
+        std::vector<int> IncompleteLanes;
+        for (size_t I = 0; I < InPhase.mLanes.size(); ++I)
+        {
+            if (InPhase.mLanes[I].mStatus != EExecutionStatus::Completed)
+                IncompleteLanes.push_back(static_cast<int>(I));
+        }
+        if (!IncompleteLanes.empty())
+        {
+            FPhaseDriftEntry E;
+            E.mKind = "completion_lag_lane";
+            E.mLaneIndices = IncompleteLanes;
+            E.mDetail = std::to_string(IncompleteLanes.size()) + " of " +
+                        std::to_string(InPhase.mLanes.size()) +
+                        " lane(s) are not completed but phase status is "
+                        "completed";
+            Out.push_back(std::move(E));
+        }
+    }
+    return Out;
+}
+
+void EvalPhaseStatusLaneAlignment(const std::vector<FTopicBundle> &InBundles,
+                                  std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const auto Entries = ComputePhaseDriftEntries(B.mPhases[PI]);
+            for (const auto &E : Entries)
+            {
+                Fail(OutChecks, "phase_status_lane_alignment",
+                     EValidationSeverity::Warning, B.mTopicKey,
+                     "phases[" + std::to_string(PI) + "]",
+                     E.mKind + ": " + E.mDetail);
+            }
+        }
+    }
+}
+
 // 17b. completed_phase_timestamp_required (Warning) — a phase marked
 // completed must carry both started_at and completed_at, otherwise the
 // evidence trail has a hole. `EvalTimestampFormat` validates format of
@@ -799,6 +930,7 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     // Warning
     EvalPhaseTracking(InBundles, Checks);
     EvalTopicPhaseStatusAlignment(InBundles, Checks);
+    EvalPhaseStatusLaneAlignment(InBundles, Checks);
     EvalCompletedPhaseTimestampRequired(InBundles, Checks);
     EvalTestingActorCoverage(InBundles, Checks);
     EvalCanonicalEntityRef(InBundles, Checks);
@@ -819,6 +951,7 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     EvalNoDuplicateChangelog(InBundles, Checks);
     EvalNoDuplicatePhaseField(InBundles, Checks);
     EvalNoHollowCompletedPhase(InBundles, Checks);
+    EvalNoDuplicateLaneScope(InBundles, Checks);
     EvalPathResolves(InBundles, Checks);
 
     return Checks;

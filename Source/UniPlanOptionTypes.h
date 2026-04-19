@@ -59,6 +59,15 @@ struct FTopicListOptions : BaseOptions
 struct FTopicGetOptions : BaseOptions
 {
     std::string mTopic;
+    // --sections <csv>: filter output to named top-level sections.
+    // Empty = emit everything (backward-compatible default).
+    // Populated = emit only the named sections; identity fields
+    // (topic, status, title, schema envelope) are always emitted.
+    // Valid names: summary, goals, non_goals, risks, acceptance_criteria,
+    // problem_statement, validation_commands, baseline_audit,
+    // execution_strategy, locked_decisions, source_references,
+    // dependencies, next_actions, phases. Added v0.84.0.
+    std::vector<std::string> mSections;
 };
 
 struct FPhaseListOptions : BaseOptions
@@ -71,6 +80,8 @@ struct FPhaseGetOptions : BaseOptions
 {
     std::string mTopic;
     int mPhaseIndex = -1;
+    std::vector<int> mPhaseIndices; // --phases <csv>: batch mode (v0.84.0)
+                                    // mutually exclusive with --phase <N>
     bool mbBrief = false;     // --brief: compact view for session resume
     bool mbExecution = false; // --execution: jobs/tasks/lanes + structural
                               //              dependencies / validation_commands
@@ -397,6 +408,20 @@ struct FManifestListOptions : BaseOptions
     int mPhaseIndex = -1;       // optional — filters to single phase
     bool mbMissingOnly = false; // --missing-only: only emit entries whose
                                 // file_path does not resolve on disk
+    bool mbStalePlan = false;   // --stale-plan: only emit entries where
+                                // the plan intent disagrees with on-disk
+                                // reality (stale_create / stale_delete /
+                                // dangling_modify). Orthogonal to
+                                // --missing-only; when both are set the
+                                // predicates intersect (AND).
+};
+
+// phase drift command options (v0.84.0). Reports phases where declared
+// lifecycle status lags behind evidence stored elsewhere in the bundle.
+// Optional --topic scopes to a single bundle; omit to scan the whole repo.
+struct FPhaseDriftOptions : BaseOptions
+{
+    std::string mTopic; // optional — scan all topics when empty
 };
 
 struct FManifestSetOptions : BaseOptions

@@ -113,18 +113,19 @@ void PrintUsage(std::ostream &Out)
     Out << "\n";
     Out << "Query commands:\n";
     Out << "  uni-plan topic list [--status <filter>]\n";
-    Out << "  uni-plan topic get --topic <T>\n";
+    Out << "  uni-plan topic get --topic <T> [--sections <csv>]\n";
     Out << "  uni-plan topic status\n";
     Out << "  uni-plan phase list --topic <T> "
            "[--status <filter>]\n";
     Out << "  uni-plan phase get --topic <T> "
-           "--phase <N> [--brief|--execution|"
-           "--design]\n";
+           "[--phase <N> | --phases <csv>] "
+           "[--brief|--execution|--design]\n";
     Out << "  uni-plan phase next --topic <T>\n";
     Out << "  uni-plan phase readiness --topic <T> "
            "--phase <N>\n";
     Out << "  uni-plan phase wave-status --topic <T> "
            "--phase <N>\n";
+    Out << "  uni-plan phase drift [--topic <T>]\n";
     Out << "  uni-plan changelog --topic <T> "
            "[--phase <N>]\n";
     Out << "  uni-plan verification --topic <T> "
@@ -311,7 +312,8 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  uni-plan phase next --topic <T>\n"
      "  uni-plan phase readiness --topic <T> --phase <N>\n"
      "  uni-plan phase wave-status --topic <T> "
-     "--phase <N>\n\n",
+     "--phase <N>\n"
+     "  uni-plan phase drift [--topic <T>]\n\n",
      "List, inspect, or update phases within a topic.\n\n",
      "Required:\n"
      "  --topic <T>             Topic key\n"

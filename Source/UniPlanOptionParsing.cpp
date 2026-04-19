@@ -284,6 +284,27 @@ ParseTopicListOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+// Canonical `topic get` section names (v0.84.0). Matches the fields
+// emitted by RunTopicGetJson/Human. Identity fields (topic/status/title,
+// phase_count, schema envelope) are always emitted — they're not
+// sectionable. Unknown names throw UsageError at parse time.
+static bool IsValidTopicSection(const std::string &InName)
+{
+    static const char *const kValid[] = {
+        "summary",           "goals",          "non_goals",
+        "risks",             "acceptance_criteria",
+        "problem_statement", "validation_commands",
+        "baseline_audit",    "execution_strategy",
+        "locked_decisions",  "source_references",
+        "dependencies",      "next_actions",   "phases"};
+    for (const char *V : kValid)
+    {
+        if (InName == V)
+            return true;
+    }
+    return false;
+}
+
 FTopicGetOptions ParseTopicGetOptions(const std::vector<std::string> &InTokens)
 {
     FTopicGetOptions Options;
@@ -294,6 +315,32 @@ FTopicGetOptions ParseTopicGetOptions(const std::vector<std::string> &InTokens)
         if (Token == "--topic")
         {
             Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--sections")
+        {
+            const std::string Val =
+                ConsumeValuedOption(Remaining, Index, "--sections");
+            // Split CSV, trim each, validate against the canonical list.
+            std::string Cur;
+            const auto Emit = [&]()
+            {
+                const std::string Name = Trim(Cur);
+                Cur.clear();
+                if (Name.empty())
+                    throw UsageError("--sections has an empty field");
+                if (!IsValidTopicSection(Name))
+                    throw UsageError("--sections unknown section: " + Name);
+                Options.mSections.push_back(Name);
+            };
+            for (const char C : Val)
+            {
+                if (C == ',')
+                    Emit();
+                else
+                    Cur.push_back(C);
+            }
+            Emit();
             continue;
         }
         throw UsageError("Unknown option for topic get: " + Token);
@@ -354,6 +401,35 @@ FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens)
             Options.mPhaseIndex = std::atoi(Val.c_str());
             continue;
         }
+        if (Token == "--phases")
+        {
+            // Comma-separated batch mode (v0.84.0). Mutually exclusive
+            // with --phase <N>; enforced after the loop so callers get a
+            // clear "both flags set" error instead of a silent priority.
+            const std::string Val =
+                ConsumeValuedOption(Remaining, Index, "--phases");
+            try
+            {
+                Options.mPhaseIndices = SplitCsvInts(Val);
+            }
+            catch (const std::invalid_argument &InError)
+            {
+                throw UsageError(
+                    "--phases requires a comma-separated list of non-negative "
+                    "integers (e.g. 1,3,5): " +
+                    std::string(InError.what()));
+            }
+            // Dedupe + sort so callers can assume stable ordering in the
+            // response. Preserves caller-visible semantics without forcing
+            // input ordering on authors.
+            std::sort(Options.mPhaseIndices.begin(),
+                      Options.mPhaseIndices.end());
+            Options.mPhaseIndices.erase(
+                std::unique(Options.mPhaseIndices.begin(),
+                            Options.mPhaseIndices.end()),
+                Options.mPhaseIndices.end());
+            continue;
+        }
         if (Token == "--brief")
         {
             Options.mbBrief = true;
@@ -373,8 +449,16 @@ FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens)
     }
     if (Options.mTopic.empty())
         throw UsageError("phase get requires --topic <topic>");
-    if (Options.mPhaseIndex < 0)
-        throw UsageError("phase get requires --phase <index>");
+    // Enforce mutual exclusion and presence: exactly one of --phase /
+    // --phases must be provided.
+    const bool bSingle = (Options.mPhaseIndex >= 0);
+    const bool bBatch = !Options.mPhaseIndices.empty();
+    if (bSingle && bBatch)
+        throw UsageError("phase get: --phase and --phases are mutually "
+                         "exclusive; pick one");
+    if (!bSingle && !bBatch)
+        throw UsageError("phase get requires --phase <index> or "
+                         "--phases <csv>");
     return Options;
 }
 
@@ -1883,9 +1967,35 @@ ParseManifestListOptions(const std::vector<std::string> &InTokens)
             Options.mbMissingOnly = true;
             continue;
         }
+        if (Token == "--stale-plan")
+        {
+            Options.mbStalePlan = true;
+            continue;
+        }
         throw UsageError("Unknown option for manifest list: " + Token);
     }
     // All arguments optional — no post-validation.
+    return Options;
+}
+
+// phase drift — report phases where declared status lags the evidence
+// stored elsewhere in the bundle. --topic is optional; omit to scan all
+// topics. Added v0.84.0.
+FPhaseDriftOptions
+ParsePhaseDriftOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseDriftOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        throw UsageError("Unknown option for phase drift: " + Token);
+    }
     return Options;
 }
 

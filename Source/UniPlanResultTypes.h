@@ -109,6 +109,22 @@ struct ValidateCheck
     std::vector<std::string> mDiagnostics;
 };
 
+// Single drift observation on a phase, produced by
+// ComputePhaseDriftEntries() and shared by RunPhaseDriftCommand and
+// EvalPhaseStatusLaneAlignment. Added v0.84.0.
+struct FPhaseDriftEntry
+{
+    std::string mKind; // status_lag_lane | status_lag_done |
+                       // status_lag_timestamp | completion_lag_lane
+    std::string mDetail;
+    std::vector<int> mLaneIndices; // completed/in_progress lanes for
+                                   // status_lag_lane; not-completed lanes
+                                   // for completion_lag_lane. Empty for
+                                   // done/timestamp kinds.
+    int mDoneChars = -1;           // substantive-done length (-1 unused)
+    bool mbHasCompletedAt = false; // true only for status_lag_timestamp
+};
+
 struct BlockerItem
 {
     std::string mTopicKey;

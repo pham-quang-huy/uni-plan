@@ -101,6 +101,15 @@ uni-plan validate --strict | jq '[.summary.topics[].phases[] | select(.design_ch
 
 # All manifest paths that don't resolve on disk
 uni-plan manifest list --missing-only | jq '.entries[] | {topic, phase_index, file_path}'
+
+# v0.84.0+: plan↔disk drift (action mismatches file existence)
+uni-plan manifest list --stale-plan | jq '.entries[] | {topic, phase_index, file_path, stale_reason}'
+
+# v0.84.0+: status-vs-evidence drift per phase
+uni-plan phase drift | jq '.drift_entries[] | {topic, phase_index, kind, detail}'
+
+# v0.84.1+: human-readable manifest audit (ANSI table, was silently JSON-only pre-0.84.1)
+uni-plan manifest list --stale-plan --human
 ```
 
 ### Corpus-wide depth overview (v0.82.0+)
