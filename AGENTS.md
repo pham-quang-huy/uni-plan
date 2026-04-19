@@ -397,84 +397,55 @@ Example JSON issue:
 
 ## cli_commands
 
-### Query commands
+**`--help` is the authoritative per-command reference (v0.85.0+).** This
+section lists the grammar so agents can discover the command surface;
+flag-level detail lives on `uni-plan <cmd> [<sub>] --help` — every leaf
+prints usage, required flags, options, mutually exclusive modes, the
+output schema name, exit codes, and examples. `--help` always exits 0
+to stdout, unknown subcommands still exit 2 with a `UsageError`.
 
-```bash
-uni-plan topic list [--status <filter>] [--human]
-uni-plan topic get --topic <T> [--human]
-uni-plan topic status [--human]                              # overview: counts + active phases
-uni-plan phase list --topic <T> [--status <filter>] [--human]
-uni-plan phase get --topic <T> --phase <N> [--brief|--execution|--design] [--human]
-uni-plan phase next --topic <T> [--human]                    # find next not_started phase + readiness
-uni-plan phase readiness --topic <T> --phase <N> [--human]   # gate-by-gate status
-uni-plan phase wave-status --topic <T> --phase <N> [--human] # per-wave job completion
-uni-plan changelog --topic <T> [--phase <N>] [--human]
-uni-plan verification --topic <T> [--phase <N>] [--human]
-uni-plan timeline --topic <T> [--phase <N>] [--since <date>] [--human]
-uni-plan blockers [--topic <T>] [--human]
-uni-plan validate [--topic <T>] [--strict] [--human]
+### Command index
 
-# Legacy V3 ↔ V4 parity (v0.75.0: stateless — discovers .md files at invoke time)
-uni-plan legacy-gap  [--topic <T>] [--category <c>] [--human]    # per-phase parity report, 8 categories
+```
+uni-plan --help                                  # global overview
+uni-plan <cmd> --help                            # group help (subcommand index)
+uni-plan <cmd> <sub> --help                      # per-subcommand detail
 ```
 
-The default (non-`--human`) output is JSON with two top-level sections:
-- `issues[]` — one entry per failing check (id, severity, topic, path, line, detail)
-- `summary` — aggregate stats for cross-topic queries without raw JSON reads: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing` (count of `file_manifest[*].file_path` entries that don't resolve on disk). Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation.
+| Group | Subcommands | Purpose |
+|---|---|---|
+| `topic` | list, get, set, start, complete, block, status | Topic-level queries + lifecycle |
+| `phase` | list, get, set, add, remove, normalize, start, complete, block, unblock, progress, complete-jobs, log, verify, next, readiness, wave-status, drift | Phase queries + lifecycle |
+| `job` | set | Mutate a job |
+| `task` | set | Mutate a task |
+| `changelog` | (query), add, set, remove | Changelog queries + mutations |
+| `verification` | (query), add, set | Verification queries + mutations |
+| `lane` | set, add | Lane mutations |
+| `testing` | add, set | Testing record mutations |
+| `manifest` | add, remove, list, set | file_manifest mutations + disk-drift audit |
+| `cache` | info, clear, config | Inventory cache management |
+| `timeline` | — | Changelog+verification chronology for a topic |
+| `blockers` | — | Phases with blocked status or blockers prose |
+| `validate` | — | Run the 34-check validator surface |
+| `legacy-gap` | — | V3↔V4 parity audit (stateless, 8 categories) |
+| `watch` | — | FTXUI dashboard (built with `-DUPLAN_WATCH=1`) |
 
-### Semantic lifecycle commands
+### Key output-shape flags
 
-Enforce gates with hard errors. Prefer these over raw `set` commands.
+- `--human` — formatted ANSI output (every query supports it)
+- `--phases <csv>` on `phase get` — batch mode, emits wrapped v2 schema `uni-plan-phase-get-v2` (single-phase continues v1)
+- `--sections <csv>` on `topic get` — filter to named top-level prose sections (14 enumerated names)
+- `--brief` / `--design` / `--execution` on `phase get` — mutually exclusive view modes; default is the full view including testing + file_manifest
+- `--stale-plan` on `manifest list` — drift filter (stale_create / stale_delete / dangling_modify), AND-intersects with `--missing-only`
+- `--strict` on `validate` — promotes ErrorMinor + Warning to fail (`valid=false`, exit 1)
 
-```bash
-# Topic lifecycle
-uni-plan topic start --topic <T>                              # gate: not_started
-uni-plan topic complete --topic <T> [--verification <text>]   # gate: all phases completed
-uni-plan topic block --topic <T> --reason <text>              # gate: in_progress
+### Default JSON output shape
 
-# Phase lifecycle
-uni-plan phase start --topic <T> --phase <N> [--context <t>]  # gate: not_started + design material
-uni-plan phase complete --topic <T> --phase <N> --done <text> [--verification <text>]  # gate: in_progress
-uni-plan phase block --topic <T> --phase <N> --reason <text>  # gate: in_progress
-uni-plan phase unblock --topic <T> --phase <N>                # gate: blocked
-uni-plan phase progress --topic <T> --phase <N> --done <text> --remaining <text>       # gate: in_progress
-uni-plan phase complete-jobs --topic <T> --phase <N>          # bulk-complete all jobs
+Every query command emits JSON with:
+- Top-level schema envelope: `schema`, `generated_utc`, `repo_root`
+- `issues[]` — one entry per failing check (id, severity, topic, path, line, detail) for validator commands
+- `summary` — aggregate stats for `validate`: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`. Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation.
 
-# Evidence shortcuts (phase-scoped with bounds check)
-uni-plan phase log --topic <T> --phase <N> --change <text> [--type <type>] [--affected <text>]
-uni-plan phase verify --topic <T> --phase <N> --check <text> [--result <text>] [--detail <text>]
-```
+### File-based prose input
 
-### Raw mutation commands
-
-Low-level field setters. Use semantic commands above when possible.
-
-```bash
-uni-plan topic set --topic <T> [--status <s>] [--next-actions <text>] [--summary <t>] [--goals <t>] [--non-goals <t>] [--risks <t>] [--acceptance-criteria <t>] [--problem-statement <t>] [--validation-commands <t>] [--baseline-audit <t>] [--execution-strategy <t>] [--locked-decisions <t>] [--source-references <t>] [--dependency-clear] [--dependency-add '<kind>|<topic>|<phase>|<path>|<note>']
-uni-plan phase set --topic <T> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>] [--scope <t>] [--output <t>] [--investigation <t>] [--code-entity-contract <t>] [--code-snippets <t>] [--best-practices <t>] [--multi-platforming <t>] [--readiness-gate <t>] [--handoff <t>] [--validation-commands <t>] [--dependency-clear] [--dependency-add '<kind>|<topic>|<phase>|<path>|<note>']
-uni-plan phase add --topic <T> [--scope <t>] [--output <t>] [--status <s>]  # append trailing phase; default status=not_started
-uni-plan phase remove --topic <T> --phase <N>  # trailing-only; requires not_started + no changelog/verification refs
-uni-plan phase normalize --topic <T> --phase <N> [--dry-run]  # replace em/en/figure dashes -> hyphen, smart quotes -> straight, NBSP -> space across all phase prose fields
-uni-plan job set --topic <T> --phase <N> --job <N> [--status <s>] [--scope <t>] [--output <t>] [--exit-criteria <t>] [--lane <N>] [--wave <N>]
-uni-plan task set --topic <T> --phase <N> --job <N> --task <N> [--status <s>] [--evidence <t>] [--notes <t>]
-uni-plan changelog add --topic <T> [--phase <N>] --change <text> [--type <feat|fix|refactor|chore>] [--affected <t>]
-uni-plan changelog set --topic <T> --index <N> [--phase <N|topic>] [--date <YYYY-MM-DD>] [--change <t>] [--type <t>] [--affected <t>]
-uni-plan verification add --topic <T> [--phase <N>] --check <text> [--result <text>] [--detail <text>]
-uni-plan verification set --topic <T> --index <N> [--check <t>] [--result <t>] [--detail <t>]
-uni-plan lane set --topic <T> --phase <N> --lane <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
-uni-plan lane add --topic <T> --phase <N> [--status <s>] [--scope <t>] [--exit-criteria <t>]
-uni-plan testing add --topic <T> --phase <N> --session <text> --step <text> --action <text> --expected <text> [--actor <human|ai|automated>] [--evidence <t>]
-uni-plan testing set --topic <T> --phase <N> --index <N> [--session <t>] [--actor <t>] [--step <t>] [--action <t>] [--expected <t>] [--evidence <t>]
-uni-plan manifest add --topic <T> --phase <N> --file <path> --action <create|modify|delete> --description <text>
-uni-plan manifest remove --topic <T> --phase <N> --index <N>
-uni-plan manifest list [--topic <T>] [--phase <N>] [--missing-only]  # enumerate file_manifest entries; --missing-only filters to paths that don't resolve on disk
-uni-plan manifest set --topic <T> --phase <N> --index <N> [--file <t>] [--action <t>] [--description <t>]
-```
-
-### Utility commands
-
-```bash
-uni-plan cache info|clear|config [--dir <path>] [--human]
-uni-plan watch [--repo-root <path>]
-uni-plan lint [--human]  # legacy .md filename check only
-```
+Every `--<field> <text>` mutation flag has a sibling `--<field>-file <path>` (v0.76.0+). The file form reads raw bytes and bypasses shell expansion — prefer it for any content containing `$`, backticks, double quotes, or newlines. Documented on every prose-bearing leaf's `--help` via the shared `kFileFlagFooter`.

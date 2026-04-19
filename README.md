@@ -137,16 +137,18 @@ All skills live under `.claude/skills/` with `implicit_invocation: true`, so the
 
 ## cli_surface_summary
 
-Full grammar (options, flags, every subcommand) lives in [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md). Orientation table:
+**`--help` is the authoritative per-command reference (v0.85.0+).** Run `uni-plan <cmd> [<sub>] --help` for exhaustive detail — every leaf prints usage, required flags, options, mutually exclusive modes, the output schema name, exit codes, and examples. This section is the orientation map; flag-level prose in [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) mirrors what `--help` emits.
 
 | Family | Purpose | Representative commands |
 | --- | --- | --- |
-| `query` | Read-only inspection; JSON by default, `--human` for ANSI tables | `topic list / get / status`, `phase list / get / next / readiness / wave-status`, `changelog`, `verification`, `timeline`, `blockers`, `validate` |
+| `query` | Read-only inspection; JSON by default, `--human` for ANSI tables | `topic list / get / status`, `phase list / get / next / readiness / wave-status / drift`, `changelog`, `verification`, `timeline`, `blockers`, `validate` |
 | `semantic_lifecycle` | Gated state transitions — prefer these over raw `set` | `topic start / complete / block`, `phase start / complete / block / unblock / progress / complete-jobs`, `phase log`, `phase verify` |
-| `raw_mutation` | Low-level field setters; use only when a semantic command doesn't fit | `topic set`, `phase set / add / remove / normalize`, `job set`, `task set`, `changelog add / set`, `verification add / set`, `lane set / add`, `testing add / set`, `manifest add / remove / list / set` |
-| `utility` | Operational commands | `cache info / clear / config`, `watch`, `lint` (legacy `.md` filename check) |
+| `raw_mutation` | Low-level field setters; use only when a semantic command doesn't fit | `topic set`, `phase set / add / remove / normalize`, `job set`, `task set`, `changelog add / set / remove`, `verification add / set`, `lane set / add`, `testing add / set`, `manifest add / remove / list / set` |
+| `utility` | Operational commands | `cache info / clear / config`, `watch` |
 
 Default output is JSON with two top-level sections — `issues[]` and `summary` — so agents can consume any command without raw file reads.
+
+Discoverability: `uni-plan --help` emits the full command tree; `uni-plan <group>` with no subcommand prints the group's subcommand index; `uni-plan <group> <sub> --help` emits the complete leaf. Exit codes are stable — `0` for success (including `--help`), `1` for runtime errors, `2` for `UsageError` (missing required flag, invalid enum, unknown subcommand).
 
 ## playbook_is_phase_record
 
