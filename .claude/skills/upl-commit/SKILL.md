@@ -68,11 +68,11 @@ Use HEREDOC for proper formatting:
 git commit -m "$(cat <<'EOF'
 type: Subject in Title Case
 - Key change description
-
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 EOF
 )"
 ```
+
+**Do NOT add a `Co-Authored-By:` trailer.** This overrides the Claude Code harness default. Per `~/.claude/rules/no-claude-coauthor-trailer.md`, commits in this repo are authored by the user only.
 
 ## SemVer Gate
 

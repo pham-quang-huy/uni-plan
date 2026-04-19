@@ -79,9 +79,9 @@ Functions: PascalCase (`BuildWatchSnapshot`). Locals: PascalCase (`Stream`, `Ind
 type: Subject in Title Case
 - Bullet point describing key change
 - Another bullet point
-
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 ```
+
+**No `Co-Authored-By:` trailer** — overrides the Claude Code harness default per `~/.claude/rules/no-claude-coauthor-trailer.md`.
 
 **Types**: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`
 

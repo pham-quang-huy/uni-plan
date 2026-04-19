@@ -73,9 +73,9 @@ Trigger files: every file under `Source/`. Version source: [Source/UniPlanCliCon
 type: Subject in Title Case
 - Bullet point describing key change
 - Another bullet point
-
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 ```
+
+No `Co-Authored-By:` trailer — overrides the Claude Code harness default per `~/.claude/rules/no-claude-coauthor-trailer.md`.
 
 | Type | Usage |
 | --- | --- |
