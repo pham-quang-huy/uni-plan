@@ -49,6 +49,7 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanCommandTopic.cpp
     Source/UniPlanCommandPhase.cpp
     Source/UniPlanCommandLegacyGap.cpp
+    Source/UniPlanLegacyDiscovery.cpp
 )
 
 target_include_directories(uni-plan-lib PUBLIC

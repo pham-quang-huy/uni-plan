@@ -37,6 +37,18 @@ LintResult BuildLintResult(const std::string &InRepoRoot, const bool InQuiet)
             Result.mNamePatternWarningCount += 1;
         }
 
+        // H1 is required for governance and reference artifacts but not
+        // for generator-output prompt templates whose first line is
+        // typically a structured payload like `Procedure context:` rather
+        // than a human-readable title. The exemption applies to any
+        // artifact whose filename ends in `.Prompt.md` OR carries a
+        // provider-flavour tail such as `.Prompt.Grok.md`.
+        const bool bIsPromptArtifact =
+            Name.find(".Prompt.") != std::string::npos &&
+            Name.size() >= std::string(".md").size() &&
+            Name.compare(Name.size() - std::string(".md").size(),
+                         std::string(".md").size(), ".md") == 0;
+
         std::string H1Error;
         const bool HasH1 = HasFirstNonEmptyLineH1(Doc.mAbsolutePath, H1Error);
         if (!H1Error.empty())
@@ -46,7 +58,7 @@ LintResult BuildLintResult(const std::string &InRepoRoot, const bool InQuiet)
                            H1Error + ")");
             continue;
         }
-        if (!HasH1)
+        if (!HasH1 && !bIsPromptArtifact)
         {
             AddWarning(Result.mWarnings,
                        "WARN missing H1: " + Doc.mRelativePath);

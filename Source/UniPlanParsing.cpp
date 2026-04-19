@@ -341,8 +341,25 @@ fs::path NormalizeRepoRootPath(const std::string &InRepoRoot)
 
 bool IsExcludedDocsScriptPath(const std::string &InRelativePath)
 {
+    // Segments that must be skipped during doc-lint traversal.
+    //   - `.references`      : vendored reference material (not first-party).
+    //   - `ThirdParty`       : vendored source trees.
+    //   - `x64`, `build_deps`: build-system caches.
+    //   - `Build`, `build`, `_deps` : CMake/Cargo build trees containing
+    //                                 FetchContent dependency checkouts
+    //                                 with third-party .md files.
+    //   - `target`, `dist`   : Rust / bundler output directories.
+    //   - `.claude`, `.tools`, `.agent`: local tooling configs and bundled
+    //                                    tool docs — not governance artifacts.
+    //   - `.mmf`, `.tmp`     : runtime state and scratch directories.
+    //   - `node_modules`, `.git`: ecosystem/system dirs that may contain
+    //                             arbitrary `.md` with no authorship by
+    //                             this project.
     static const std::set<std::string> ExcludedSegments = {
-        ".references", "ThirdParty", "x64", "build_deps"};
+        ".references", "ThirdParty",   "x64",    "build_deps",
+        ".claude",     ".tools",       ".agent", ".mmf",
+        ".tmp",        "node_modules", ".git",   "Build",
+        "build",       "_deps",        "target", "dist"};
 
     std::string Segment;
     for (const char Character : (InRelativePath + "/"))
@@ -470,15 +487,34 @@ EnumerateMarkdownDocuments(const fs::path &InRepoRoot,
 
 bool IsAllowedLintFilename(const std::string &InName)
 {
+    // Simple (un-prefixed) conventional filenames.
+    //   - CLAUDE.md      : Claude Code project instructions (repo root +
+    //                      per-area).
+    //   - DEVNET.md      : per-area deployment runbook convention.
+    //   - README.local.md: local-only (git-ignored) companion to README
+    //                      documenting host-specific infrastructure.
     static const std::set<std::string> AllowedSimpleNames = {
         "README.md",   "INDEX.md",  "AGENTS.md",      "TODO.md",
         "CODING.md",   "NAMING.md", "DIAGRAMMING.md", "COORDINATESYSTEM.md",
-        "PATTERNS.md", "PARITY.md", "PARALLEL.md",    "PARALLEL.sample.md"};
+        "PATTERNS.md", "PARITY.md", "PARALLEL.md",    "PARALLEL.sample.md",
+        "CLAUDE.md",   "DEVNET.md", "README.local.md"};
 
     static const std::regex AllowedPrefixPattern(
         R"(^(PLAN|PLAYBOOK|IMPLEMENTATION|CHANGELOG|VERIFICATION|SPEC|REFERENCE|DIAGRAM|MIGRATION|ADR|ARCHITECTURE)(-[A-Z0-9-]+)*\.md$)");
+    // Topic-prefixed artifact suffixes. The topic prefix supports multiple
+    // dot segments (e.g. `CycleStep.Brand.ResolvedContext.Prompt.md`).
+    //
+    // Two sub-forms are recognised:
+    //
+    //   Governance artifacts (`Plan` / `Impl` / `Playbook`) have a strict
+    //   sidecar tail — only `.ChangeLog` or `.Verification` is allowed.
+    //
+    //   Auxiliary artifacts (`Prompt` / `Reference` / `Brief` / `Business`)
+    //   may carry an optional PascalCase flavour tail, for
+    //   provider-specific or format-specific variants
+    //   (e.g. `Topic.Prompt.Grok.md`, `Topic.Reference.Gemini.md`).
     static const std::regex AllowedTopicArtifactPattern(
-        R"(^[A-Z][A-Za-z0-9-]*(\.[A-Z][A-Za-z0-9-]*)*\.(Plan|Impl|Playbook)(\.(ChangeLog|Verification))?\.md$)");
+        R"(^[A-Z][A-Za-z0-9-]*(\.[A-Z][A-Za-z0-9-]*)*\.((Plan|Impl|Playbook)(\.(ChangeLog|Verification))?|(Prompt|Reference|Brief|Business)(\.[A-Z][A-Za-z0-9-]*)?)\.md$)");
     static const std::regex AllowedSchemaPattern(
         R"(^[A-Z][A-Za-z0-9]*\.Schema\.md$)");
 

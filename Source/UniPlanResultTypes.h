@@ -120,25 +120,20 @@ struct BlockerItem
     std::string mNotes;      // phase scope (context for the blocker)
 };
 
+// PhaseItem — display-oriented projection of a single FPhaseRecord for the
+// watch TUI. Mirrors the V4 typed phase-field model directly (mScope,
+// mOutput, mDone, mRemaining) — no key/value bag and no V3 fuzzy-match
+// heuristics. Populated by BuildPlanSummaryFromBundle from FPhaseRecord.
 struct PhaseItem
 {
-    std::string mPhaseKey;
+    std::string mPhaseKey; // stringified zero-based phase index
     std::string mStatusRaw;
     EExecutionStatus mStatus = EExecutionStatus::NotStarted;
-    std::string mPlaybookPath;
-    std::string mDescription;
-    std::string mNextAction;
-    int mTableID = 0;
-    int mRowIndex = 0;
-    std::vector<std::pair<std::string, std::string>> mFields;
-};
-
-struct PhaseListAllEntry
-{
-    std::string mTopicKey;
-    std::string mPlanPath;
-    std::string mPlanStatus;
-    std::vector<PhaseItem> mPhases;
+    std::string mPlaybookPath; // optional legacy .md playbook, if any
+    std::string mScope;
+    std::string mOutput;
+    std::string mDone;
+    std::string mRemaining;
 };
 
 struct FCommandHelpEntry

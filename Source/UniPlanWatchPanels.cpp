@@ -417,33 +417,9 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         const auto PlaybookColor =
             HasPlaybook ? color(Color::Green) : color(Color::Red);
 
-        std::string Desc;
-        for (const auto &Field : Phase.mFields)
-        {
-            const std::string Key = ToLower(Field.first);
-            if (Key == "scope" || Key == "description" || Key == "output" ||
-                Key == "goal" || Key == "deliverables" ||
-                Key == "deliverable" || Key == "name" || Key == "focus" ||
-                Key == "main tasks" || Key == "work")
-            {
-                Desc = Field.second;
-                break;
-            }
-        }
-
-        // Extract Output field
-        std::string Output;
-        for (const auto &Field : Phase.mFields)
-        {
-            const std::string FieldKey = ToLower(Field.first);
-            if (FieldKey == "output" || FieldKey == "deliverables" ||
-                FieldKey == "deliverable" || FieldKey == "exit criteria" ||
-                FieldKey == "exit_criteria" || FieldKey == "main tasks")
-            {
-                Output = Field.second;
-                break;
-            }
-        }
+        // Typed fields from FPhaseRecord — no fuzzy key matching.
+        const std::string &Desc = Phase.mScope;
+        const std::string &Output = Phase.mOutput;
 
         // Playbook line count
         std::string PBLines = "-";
