@@ -65,9 +65,9 @@ static Element PhaseProgressBar(int InDone, int InTotal)
 }
 
 // Render the V4 design-char count as the PHASE DETAIL `Design` column.
-// Thresholds come from UniPlanTopicTypes.h (`kPhaseHollowChars` = 4000,
-// `kPhaseRichMinChars` = 16000, calibrated at ~80 chars/line to match
-// the V3 Playbook.md convention of 200+ lines for a proper playbook).
+// Thresholds come from UniPlanTopicTypes.h (`kPhaseHollowChars` = 3000,
+// `kPhaseRichMinChars` = 10000 as of v0.83.0, calibrated against V4
+// schema semantics — see that header for the derivation).
 // Color coding:
 //   • < kPhaseHollowChars   → dim red ("hollow", phase needs more authoring)
 //   • [hollow, rich)        → yellow  ("thin", executable but sparse)
@@ -214,7 +214,8 @@ ValidationPanel::Render(const FWatchValidationSummary &InValidation) const
     return window(text(" VALIDATION  " +
                        std::to_string(InValidation.mTotalChecks) + " checks ") |
                       bold,
-                  vbox(std::move(Content)));
+                  vbox(std::move(Content))) |
+           size(HEIGHT, EQUAL, 9);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +276,7 @@ Element LintPanel::Render(const FWatchLintSummary &InLint) const
 Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
                                  int InSelectedIndex) const
 {
-    const int MaxVisible = 30;
+    const int MaxVisible = 15;
     const int Count = static_cast<int>(InPlans.size());
 
     // Compute scroll window so selected index is always visible
@@ -368,7 +369,8 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
     const std::string Title =
         " [A]CTIVE PLANS (" + std::to_string(Count) + ") ";
     return window(text(Title) | bold | color(Color::Green),
-                  vbox(std::move(FinalRows)));
+                  vbox(std::move(FinalRows))) |
+           size(HEIGHT, EQUAL, 20);
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +397,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         text("Output") | bold | flex,
     }));
 
-    const int MaxPhases = 30;
+    const int MaxPhases = 20;
     const int Count = static_cast<int>(InPlan.mPhases.size());
 
     // Scroll window
@@ -539,7 +541,8 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         " [P]HASE DETAIL: " + Truncate(InPlan.mTopicKey, 30) + " (" +
         std::to_string(Count) + ") ";
     return window(text(Title) | bold | color(Color::Cyan),
-                  vbox(std::move(FinalRows)));
+                  vbox(std::move(FinalRows))) |
+           size(HEIGHT, EQUAL, 25);
 }
 
 // ---------------------------------------------------------------------------
@@ -593,7 +596,7 @@ Element
 CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
                             int InSelectedIndex) const
 {
-    const int MaxVisible = 30;
+    const int MaxVisible = 10;
     const int Count = static_cast<int>(InPlans.size());
 
     // Compute scroll window
@@ -665,7 +668,8 @@ CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
 
     return window(text(" [N]ON-ACTIVE (" + std::to_string(Count) + ") ") |
                       bold | dim,
-                  vbox(std::move(NonActiveFinal)));
+                  vbox(std::move(NonActiveFinal))) |
+           size(HEIGHT, EQUAL, 15);
 }
 
 // ---------------------------------------------------------------------------
@@ -712,7 +716,8 @@ Element ValidationFailPanel::Render(
     if (InFailedChecks.empty())
     {
         return window(text(" VALIDATION FAILURES ") | bold,
-                      text("All checks passed") | color(Color::Green) | bold);
+                      text("All checks passed") | color(Color::Green) | bold) |
+               size(HEIGHT, EQUAL, 5);
     }
 
     std::vector<std::vector<Element>> Data;
@@ -736,7 +741,8 @@ Element ValidationFailPanel::Render(
     return window(text(" VALIDATION FAILURES (" +
                        std::to_string(InFailedChecks.size()) + ") ") |
                       bold | color(Color::Red),
-                  FailTable.Render() | flex);
+                  FailTable.Render() | flex) |
+           size(HEIGHT, EQUAL, 5);
 }
 
 // ---------------------------------------------------------------------------

@@ -119,7 +119,7 @@ void PrintUsage(std::ostream &Out)
            "[--status <filter>]\n";
     Out << "  uni-plan phase get --topic <T> "
            "--phase <N> [--brief|--execution|"
-           "--reference]\n";
+           "--design]\n";
     Out << "  uni-plan phase next --topic <T>\n";
     Out << "  uni-plan phase readiness --topic <T> "
            "--phase <N>\n";
@@ -290,7 +290,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "Usage:\n"
      "  uni-plan phase list --topic <T> [--status <filter>]\n"
      "  uni-plan phase get --topic <T> --phase <N> "
-     "[--brief|--execution|--reference]\n"
+     "[--brief|--execution|--design]\n"
      "  uni-plan phase set --topic <T> --phase <N> "
      "[--status <s>] [--done <text>] ...\n"
      "  uni-plan phase start --topic <T> --phase <N> "
@@ -317,8 +317,13 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  --topic <T>             Topic key\n"
      "  --phase <N>             Phase index (integer)\n\n",
      "  --brief                 Compact view for session resume\n"
-     "  --execution             Jobs/tasks only\n"
-     "  --reference             Design material only\n"
+     "  --execution             Jobs / tasks / lanes + dependencies + "
+     "validation_commands\n"
+     "  --design                Exactly the fields that contribute to "
+     "design_chars\n"
+     "                          (scope + output + 7 design material prose "
+     "fields).\n"
+     "                          Renamed from --reference in v0.83.0.\n"
      "  --context <text>        Agent continuation prompt\n"
      "  --done <text>           Completed work summary\n"
      "  --done-clear            Clear done field (for reverting a phase "
@@ -474,12 +479,12 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "falls\n"
      "into legacy_absent / v4_only which is the correct steady state.\n\n"
      "Each phase is bucketed into one of 8 categories:\n"
-     "  legacy_rich          legacy >= 200 LOC, V4 < 4000 chars (rebuild)\n"
-     "  legacy_rich_matched  legacy >= 200 LOC, V4 >= 16000 chars\n"
-     "  legacy_thin          legacy 50-199 LOC\n"
+     "  legacy_rich          legacy >= 150 LOC, V4 < 3000 chars (rebuild)\n"
+     "  legacy_rich_matched  legacy >= 150 LOC, V4 >= 10000 chars\n"
+     "  legacy_thin          legacy 50-149 LOC\n"
      "  legacy_stub          legacy < 50 LOC\n"
      "  legacy_absent        no legacy playbook\n"
-     "  v4_only              V4 is rich (>= 16000 chars, >= 3 jobs) and "
+     "  v4_only              V4 is rich (>= 10000 chars, >= 3 jobs) and "
      "no legacy\n"
      "  hollow_both          legacy stub AND V4 hollow on a completed phase\n"
      "  drift                reserved for future semantic-overlap "

@@ -704,25 +704,30 @@ inline bool PhaseOriginFromString(const std::string &InValue,
 // computed by `uni-plan legacy-gap`. Thresholds are documented next to
 // the resolver in UniPlanCommandLegacyGap.cpp and derive from
 // `kPhaseHollowChars` / `kPhaseRichMinChars` in UniPlanTopicTypes.h
-// (4000 / 16000 chars, calibrated at 80 chars/line to match the V3
-// Playbook.md convention of 200+ lines for a proper playbook).
-//   LegacyRich         — legacy playbook >= 200 content LOC, V4 < 4000
+// (3000 / 10000 chars, calibrated against V4 schema semantics — see
+// that comment block for derivation).
+//   LegacyRich         — legacy playbook >= 150 content LOC, V4 < 3000
 //                        design chars. Rebuild V4 from legacy.
-//   LegacyRichMatched  — legacy >= 200 LOC, V4 >= 16000 chars. Verify
+//   LegacyRichMatched  — legacy >= 150 LOC, V4 >= 10000 chars. Verify
 //                        no drift.
-//   LegacyThin         — legacy 50-199 LOC. Small uplift available.
+//   LegacyThin         — legacy 50-149 LOC. Small uplift available.
 //   LegacyStub         — legacy < 50 LOC (file exists but near-empty).
 //                        Fall back to commit archaeology.
 //   LegacyAbsent       — no legacy playbook file exists for this phase.
-//   V4Only             — no legacy AND V4 already rich (>=16000 chars,
+//   V4Only             — no legacy AND V4 already rich (>=10000 chars,
 //                        >=3 jobs).
 //   HollowBoth         — legacy < 50 LOC AND completed phase with V4
-//                        < 4000 chars. Status likely wrong; demote
+//                        < 3000 chars. Status likely wrong; demote
 //                        from completed.
 //   Drift              — reserved for future semantic-overlap detection.
 //
-// Thresholds bumped in v0.80.0 alongside removal of the watch PB
-// column; prior 50 / 150 LOC and 500 / 2000 chars were too loose.
+// Version history:
+//   v0.78.0 and earlier: 50 / 150 LOC, 500 / 2000 chars.
+//   v0.80.0: bumped to 50 / 200 LOC, 4000 / 16000 chars (over-
+//            translated V3 "200-line playbook" into V4 chars without
+//            accounting for V3 `.md` format overhead).
+//   v0.83.0: recalibrated to 50 / 150 LOC, 3000 / 10000 chars against
+//            V4 schema semantics (user-ratified).
 // ---------------------------------------------------------------------------
 
 enum class EPhaseGapCategory : uint8_t

@@ -92,11 +92,12 @@ Use `uni-plan validate` (default JSON) to answer aggregate questions in one call
 # Topic count
 uni-plan validate --strict | jq '.summary.topic_count'
 
-# Hollow-but-completed phases (design_chars < 4000 AND status=completed).
-# 4000 chars ≈ 50 lines; matches kPhaseHollowChars and legacy-gap bucketing.
+# Hollow-but-completed phases (design_chars < 3000 AND status=completed).
+# 3000 chars ≈ 5-7 design fields populated with 1-3 sentences each;
+# matches kPhaseHollowChars (v0.83.0) and legacy-gap bucketing.
 # Equivalent to the `no_hollow_completed_phase` warning (v0.82.0+ fires
 # on exactly this predicate plus empty jobs/testing/manifest).
-uni-plan validate --strict | jq '[.summary.topics[].phases[] | select(.design_chars < 4000 and .status == "completed")] | length'
+uni-plan validate --strict | jq '[.summary.topics[].phases[] | select(.design_chars < 3000 and .status == "completed")] | length'
 
 # All manifest paths that don't resolve on disk
 uni-plan manifest list --missing-only | jq '.entries[] | {topic, phase_index, file_path}'

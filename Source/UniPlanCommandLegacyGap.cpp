@@ -46,23 +46,29 @@ namespace UniPlan
 // resulting EPhaseGapCategory. Documented next to EPhaseGapCategory in
 // UniPlanEnums.h.
 //
-// Calibrated to the V3 Playbook.md discipline: a proper per-phase
-// playbook carried 200+ lines of content, ~400 for a comprehensive
-// one. At ~80 chars/line that's 16000 / 32000 V4 chars. The LOC-form
-// thresholds (kLegacyRichMinLoc / kLegacyThinMinLoc) and the chars-form
-// thresholds (kV4HollowMaxChars = kPhaseHollowChars / kV4RichMinChars =
-// kPhaseRichMinChars) are kept in lockstep so legacy and V4 phases
-// fall into the same hollow / thin / rich buckets.
+// Chars-form thresholds (kV4HollowMaxChars / kV4RichMinChars) come
+// from UniPlanTopicTypes.h, calibrated against V4 schema semantics
+// (see that comment block for derivation).
 //
-// Bumped in v0.80.0. Prior values (50 / 150 LOC, 500 / 2000 chars)
-// counted bare-skeleton phases as "authored," which is what caused the
-// PB-col always-✓ false-positive that motivated the column's removal.
+// LOC-form thresholds measure V3 `.md` content lines directly
+// (banner-stripped, non-blank, via CountLegacyContentLines). 150 V3
+// content-LOC × ~67 chars/line of signal content ≈ 10000 V4 chars,
+// matching the 10000 V4 rich floor. The hollow floor stays at 50 LOC
+// — a V3 file under 50 content lines is genuinely skeletal.
+//
+// Version history:
+//   v0.78.0 and earlier: 50 / 150 LOC, 500 / 2000 chars.
+//   v0.80.0: bumped to 50 / 200 LOC + 4000 / 16000 chars (over-
+//            translated V3 Playbook.md "200-line" convention — did
+//            not account for V3 `.md` format overhead).
+//   v0.83.0: reverted LOC to 150 to align with the 10000 V4 chars
+//            rich floor recalibrated in UniPlanTopicTypes.h.
 // ---------------------------------------------------------------------------
 
-static constexpr int kLegacyRichMinLoc = 200;
+static constexpr int kLegacyRichMinLoc = 150;
 static constexpr int kLegacyThinMinLoc = 50;
-static constexpr size_t kV4HollowMaxChars = kPhaseHollowChars; // 4000
-static constexpr size_t kV4RichMinChars = kPhaseRichMinChars;  // 16000
+static constexpr size_t kV4HollowMaxChars = kPhaseHollowChars; // 3000
+static constexpr size_t kV4RichMinChars = kPhaseRichMinChars;  // 10000
 static constexpr size_t kV4RichMinJobs = 3;
 
 static EPhaseGapCategory CategorizePhase(int InLegacyLoc, size_t InV4Chars,

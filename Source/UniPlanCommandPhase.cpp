@@ -257,12 +257,15 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         return 0;
     }
 
-    // --reference: design material only
-    if (InOptions.mbReference)
+    // --design: exactly the fields that contribute to `design_chars`
+    // (scope + output + 7 design material prose fields). Structural
+    // gate info — dependencies, validation_commands — lives in
+    // --execution (v0.83.0 realignment). Renamed from --reference.
+    if (InOptions.mbDesign)
     {
+        EmitJsonFieldNullable("output", Phase.mOutput);
         EmitJsonFieldNullable("readiness_gate", Phase.mDesign.mReadinessGate);
         EmitJsonFieldNullable("investigation", Phase.mDesign.mInvestigation);
-        EmitDependenciesJson("dependencies", Phase.mDesign.mDependencies);
         EmitJsonFieldNullable("code_entity_contract",
                               Phase.mDesign.mCodeEntityContract);
         EmitJsonFieldNullable("code_snippets", Phase.mDesign.mCodeSnippets);
@@ -270,8 +273,6 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
         EmitJsonFieldNullable("multi_platforming",
                               Phase.mDesign.mMultiPlatforming);
         EmitJsonFieldNullable("handoff", Phase.mDesign.mHandoff);
-        EmitValidationCommandsJson("validation_commands",
-                                   Phase.mDesign.mValidationCommands);
         std::vector<std::string> Warnings;
         PrintJsonClose(Warnings);
         return 0;
@@ -286,15 +287,19 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
     EmitJsonFieldNullable("completed_at", Phase.mLifecycle.mCompletedAt);
     EmitJsonFieldNullable("agent_context", Phase.mLifecycle.mAgentContext);
 
+    // Structural gate info — emitted in both --execution and full mode.
+    // dependencies + validation_commands are contracts/pre-requisites,
+    // not prose, so they moved out of --design in v0.83.0.
+    EmitDependenciesJson("dependencies", Phase.mDesign.mDependencies);
+    EmitValidationCommandsJson("validation_commands",
+                               Phase.mDesign.mValidationCommands);
+
     if (!InOptions.mbExecution)
     {
-        // Full mode includes reference fields
+        // Full mode also includes design material prose
         EmitJsonFieldNullable("readiness_gate", Phase.mDesign.mReadinessGate);
         EmitJsonFieldNullable("investigation", Phase.mDesign.mInvestigation);
-        EmitDependenciesJson("dependencies", Phase.mDesign.mDependencies);
         EmitJsonFieldNullable("handoff", Phase.mDesign.mHandoff);
-        EmitValidationCommandsJson("validation_commands",
-                                   Phase.mDesign.mValidationCommands);
         EmitJsonFieldNullable("best_practices", Phase.mDesign.mBestPractices);
         EmitJsonFieldNullable("code_entity_contract",
                               Phase.mDesign.mCodeEntityContract);

@@ -218,11 +218,11 @@ uni-plan phase set --topic A --phase N \
 
 The `uni-plan watch` TUI's PHASE DETAIL panel surfaces playbook depth in the `Design` column — total char count of `phases[N].scope + output + design.*` (same measure as `legacy-gap`'s `v4_design_chars`, computed by `ComputePhaseDesignChars` in `UniPlanTopicTypes.h`). Color coded against shared thresholds:
 
-- `< 4000 chars` (≈ 50 lines) — **hollow**, dim red. Not yet authored to an executable level.
-- `4000–15999` chars — **thin**, yellow. Executable but sparse.
-- `≥ 16000 chars` (≈ 200 lines) — **rich**, green. Properly detailed playbook.
+- `< 3000 chars` — **hollow**, dim red. Not yet authored to an executable level (< 5-7 design fields populated with 1-3 sentences each).
+- `3000–9999` chars — **thin**, yellow. Executable but sparse.
+- `≥ 10000 chars` — **rich**, green. Properly detailed playbook (all 9 design fields substantively populated).
 
-Thresholds (`kPhaseHollowChars = 4000`, `kPhaseRichMinChars = 16000`) are calibrated at ~80 chars per line to match the V3 Playbook.md convention that a proper per-phase playbook was 200+ lines of content. The same constants drive `legacy-gap`'s 8-category bucketing so watch and CLI agree on "authored" vs "hollow."
+Thresholds (`kPhaseHollowChars = 3000`, `kPhaseRichMinChars = 10000` as of v0.83.0) are calibrated against V4 schema semantics, not a mechanical V3-line-count translation. The same constants drive `legacy-gap`'s 8-category bucketing so watch and CLI agree on "authored" vs "hollow." See `Source/UniPlanTopicTypes.h` for the full derivation (the v0.80.0–v0.82.0 values of 4000 / 16000 over-translated the V3 Playbook.md 200-line convention by ignoring V3 `.md` format overhead).
 
 The prior `PB` / `PBLines` columns were **removed in v0.80.0**. `PB` as a ✓/✗ indicator was uninformative by construction: once the depth rules gave ✓ to any phase with jobs, lanes, substantial design, or a residual legacy `.md`, nearly every authored phase flipped ✓, so the column couldn't discriminate. The `Design` column replaces it with the direct honest measurement.
 

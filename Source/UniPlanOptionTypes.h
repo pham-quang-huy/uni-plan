@@ -72,8 +72,14 @@ struct FPhaseGetOptions : BaseOptions
     std::string mTopic;
     int mPhaseIndex = -1;
     bool mbBrief = false;     // --brief: compact view for session resume
-    bool mbExecution = false; // --execution: jobs/tasks only
-    bool mbReference = false; // --reference: design material only
+    bool mbExecution = false; // --execution: jobs/tasks/lanes + structural
+                              //              dependencies / validation_commands
+    bool mbDesign = false;    // --design: only the fields that feed
+                              //           ComputePhaseDesignChars (scope +
+                              //           output + 7 design material prose
+                              //           fields). Renamed from --reference in
+                              //           v0.83.0 to match the design_chars
+                              //           measure and FPhaseDesignMaterial.
 };
 
 struct FBundleChangelogOptions : BaseOptions

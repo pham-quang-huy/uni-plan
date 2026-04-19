@@ -179,22 +179,47 @@ inline size_t ComputePhaseDesignChars(const FPhaseRecord &InPhase)
 }
 
 // Phase-depth thresholds — char-based measures of "how much plan has
-// been authored." Calibrated against the V3 corpus convention that a
-// proper Playbook.md was 200–400 lines of content; at ~80 chars/line
-// that's 16000–32000 chars. The chars-form and LOC-form thresholds
-// are kept in lockstep (80 chars ≈ 1 line) so V3 LOC and V4 chars
-// classify phases into the same hollow / thin / rich buckets.
+// been authored." Calibrated against V4 schema semantics, NOT a raw
+// V3-line-count translation.
 //
-//   < kPhaseHollowChars     — hollow: not enough plan to execute
+// Derivation (schema-based, independent of any repo's data):
+//   ComputePhaseDesignChars sums 9 fields: scope + output +
+//   investigation + code_entity_contract + code_snippets +
+//   best_practices + handoff + readiness_gate + multi_platforming.
+//
+//   Minimum substantive populated record: 5-7 fields × 1-3 sentences
+//   each (~300-500 chars) → ~3000 chars total. Below this, a reader
+//   cannot reconstruct what happened across the schema surface —
+//   truly hollow, regardless of whether any single field is non-empty.
+//
+//   Fully populated record: 9 fields × multi-paragraph (~1000-1200
+//   chars each) → ~10000 chars total. Above this, the phase is
+//   exhaustively documented — a "properly authored playbook" in V4
+//   terms. 150 V3 content-LOC × ~67 chars/signal-line ≈ 10000 V4
+//   chars, so the LOC-form `kLegacyRichMinLoc` (150) aligns cleanly
+//   with the chars-form `kPhaseRichMinChars` (10000).
+//
+// Classification:
+//   < kPhaseHollowChars     — hollow: not enough authored prose
 //   [hollow, rich) chars    — thin:   executable but sparse
-//   ≥ kPhaseRichMinChars    — rich:   properly detailed playbook
+//   ≥ kPhaseRichMinChars    — rich:   exhaustively documented
 //
-// Bumped in v0.80.0 from the prior 500 / 2000 values, which mapped to
-// only ~6 / ~25 lines and classified even bare-skeleton phases as
-// "has a plan." The new thresholds match the V3 Playbook.md discipline
-// that required 200+ lines of content for a phase to be considered
-// authored.
-static constexpr size_t kPhaseHollowChars = 4000;   // ≈ 50 lines
-static constexpr size_t kPhaseRichMinChars = 16000; // ≈ 200 lines
+// Version history:
+//   v0.80.0: bumped from 500 / 2000 (too lenient — ~6 / ~25 lines).
+//   v0.80.0–0.82.0: 4000 / 16000, derived by mechanically translating
+//                   "V3 Playbook.md was 200+ lines" × 80 chars/line.
+//                   This OVER-translated: V3 .md carried banner +
+//                   section headers + transition prose overhead that
+//                   V4 JSON discards. Signal content of a 200-line
+//                   V3 playbook is well below 16000 V4 chars.
+//   v0.83.0: recalibrated to 3000 / 10000 against schema semantics,
+//            ratified by the user. The hollow gate retains its
+//            structural-evidence safety valve
+//            (no_hollow_completed_phase only fires when jobs AND
+//            testing AND file_manifest are all empty AND prose is
+//            below the threshold), so these thresholds bound the
+//            pure-prose-only path.
+static constexpr size_t kPhaseHollowChars = 3000;   // ≈ 5-7 populated fields
+static constexpr size_t kPhaseRichMinChars = 10000; // ≈ all 9 fields richly
 
 } // namespace UniPlan

@@ -185,18 +185,27 @@ TEST_F(FBundleTestFixture, PhaseGetEmitsAllDesignMaterialKeys)
     }
 }
 
-TEST_F(FBundleTestFixture, PhaseGetReferenceEmitsMultiPlatforming)
+TEST_F(FBundleTestFixture, PhaseGetDesignEmitsMultiPlatforming)
 {
+    // --design (renamed from --reference in v0.83.0) emits exactly the
+    // fields that contribute to `design_chars`, including
+    // `multi_platforming` from FPhaseDesignMaterial.
     CopyFixture("SampleTopic");
     StartCapture();
     const int Code = UniPlan::RunBundlePhaseCommand(
-        {"get", "--topic", "SampleTopic", "--phase", "0", "--reference",
+        {"get", "--topic", "SampleTopic", "--phase", "0", "--design",
          "--repo-root", mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_TRUE(Json.contains("multi_platforming"));
+    // v0.83.0 realignment: --design includes `output` (prev. absent)
+    // and excludes `dependencies` / `validation_commands` (moved to
+    // --execution since they are structural, not prose).
+    EXPECT_TRUE(Json.contains("output"));
+    EXPECT_FALSE(Json.contains("dependencies"));
+    EXPECT_FALSE(Json.contains("validation_commands"));
 }
 
 // Regression guard: every populated phase field must surface in --human

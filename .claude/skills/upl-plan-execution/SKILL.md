@@ -47,8 +47,8 @@ Before marking a phase `in_progress`, verify ALL gates:
 
 | Gate | Requirement | Check |
 |------|-------------|-------|
-| Design material | Phase has non-empty investigation and design fields | `uni-plan phase get --topic <T> --phase <N> --reference` |
-| Content depth | Design material is substantive, not empty stubs | Review `--reference` output |
+| Design material | Phase has non-empty investigation and design fields | `uni-plan phase get --topic <T> --phase <N> --design` (renamed from `--reference` in v0.83.0) |
+| Content depth | `design_chars ≥ 3000` (`kPhaseHollowChars`) clears `no_hollow_completed_phase`; `≥ 10000` (`kPhaseRichMinChars`) is the aspirational "rich" bar | Inspect `design_chars` header from `--design` output |
 | Testing | For testable active phases: testing records exist with both manual and automation-capable coverage | `uni-plan phase get --topic <T> --phase <N> --execution` |
 | Validation clean | No ErrorMajor issues for this topic | `uni-plan validate --topic <T>` |
 

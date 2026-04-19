@@ -364,9 +364,9 @@ FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens)
             Options.mbExecution = true;
             continue;
         }
-        if (Token == "--reference")
+        if (Token == "--design")
         {
-            Options.mbReference = true;
+            Options.mbDesign = true;
             continue;
         }
         throw UsageError("Unknown option for phase get: " + Token);
