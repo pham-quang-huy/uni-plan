@@ -22,7 +22,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.71.1`) |
+| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.73.1`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |
@@ -237,6 +237,28 @@ uni-plan phase unblock --topic A --phase N
 
 `phase block --reason` **replaces** `mBlockers`; it does not append. `phase unblock` flips `blocked → in_progress`, clears `mBlockers`, and auto-logs the transition. Typed dependencies are not touched by block/unblock — they remain as historical record.
 
+### backfill_missing_phase_timestamps
+
+> Target: a phase's `started_at` or `completed_at` is missing (e.g. migrated from legacy data, or completed by a caller that skipped the `phase start` step). Repair them with explicit ISO-8601 overrides.
+
+```bash
+# Normal completion (started_at was stamped by an earlier phase start / phase set --status in_progress)
+uni-plan phase complete --topic A --phase N --done "<summary>"
+
+# Backfill completion — phase jumps straight from not_started to completed.
+# --started-at is REQUIRED because the CLI refuses to fabricate a historical
+# start time. --completed-at is optional (defaults to "now", the truthful
+# moment the transition is being recorded).
+uni-plan phase set --topic A --phase N --status completed \
+  --started-at 2025-12-01T14:00:00Z --completed-at 2025-12-05T18:30:00Z
+
+# Repair timestamps on a phase that is already in the right status
+uni-plan phase set --topic A --phase N \
+  --started-at 2025-12-01T14:00:00Z --completed-at 2025-12-05T18:30:00Z
+```
+
+Both flags validate ISO-8601 at parse time (`YYYY-MM-DD` or `YYYY-MM-DDThh:mm:ssZ`); invalid strings fail with `UsageError` (exit 2). In v0.73.1, `phase set --status completed` **rejects** any call where the phase has empty `started_at` and no `--started-at` override — this prevents silent fabrication of historical data and is what makes the `completed_phase_timestamp_required` structural-warning honest rather than cosmetic.
+
 ### patch_one_word_of_a_long_prose_field
 
 > Target: change a single word (or insert a paragraph) in a long `investigation` / `scope` / `code_snippets` / `handoff` field. **The CLI does not support partial-field patching** — every mutation is a whole-field replace.
@@ -334,23 +356,34 @@ V3-era vocabulary/filename/CLI drift checks were removed in `v0.63.0`. Pattern e
 
 ```
 uni-plan/
-├── Source/                    # C++17 implementation (flat directory)
+├── Source/                    # C++17 implementation (flat directory, ~52 files)
 │   ├── Main.cpp               # Entry point
-│   ├── UniPlanTypes.h         # kCliVersion, JSON schema constants, core types
+│   ├── UniPlanTypes.h         # IWYU umbrella — re-exports the 4 domain headers below
+│   ├── UniPlanCliConstants.h  # Schemas / colors / sidecar extensions / mutation targets
+│   ├── UniPlanOptionTypes.h   # BaseOptions + every F*Options + UsageError (enum fields: std::optional<E*>)
+│   ├── UniPlanInventoryTypes.h # V3 markdown inventory types (lint only)
+│   ├── UniPlanResultTypes.h   # Per-command result / data structs
+│   ├── UniPlanTopicTypes.h    # FTopicBundle, FPhaseRecord, FPhaseLifecycle, FPlanMetadata
+│   ├── UniPlanTaxonomyTypes.h # FBundleReference, FValidationCommand, FPhaseTaxonomy
+│   ├── UniPlanEnums.h         # EExecutionStatus, EDependencyKind, EChangeType, ETopicStatus, …
 │   ├── UniPlanForwardDecls.h  # Run*Command declarations
-│   ├── UniPlanRuntime.*       # Runtime engine
-│   ├── UniPlanCommand*.cpp    # Command dispatch (Bundle, Plan, Evidence, Search, Dispatch)
-│   ├── UniPlanMutation.*      # Mutation pipeline + typed mutation operations
-│   ├── UniPlanParsing.cpp     # V4 bundle parsing into FTopicBundle
-│   ├── UniPlanValidation.cpp  # V4 evaluator functions (ValidateAllBundles)
-│   ├── UniPlanSchemaValidation.* # Schema-driven structural validation
+│   ├── UniPlanCommand*.cpp    # Per-group command implementations (post-v0.72.0 split):
+│   │                          #   Dispatch, Bundle, Topic, Phase, Validate, History,
+│   │                          #   Lifecycle, Mutation, Entity, SemanticQuery, MutationCommon
+│   ├── UniPlanValidation.cpp       # Structural + structural-warning evaluators + lint
+│   ├── UniPlanValidationContent.cpp # Content-hygiene evaluators (split from Validation.cpp in v0.72.0)
+│   ├── UniPlanSchemaValidation.cpp/h # Schema-driven structural validation
+│   ├── UniPlanJSON.h / UniPlanJSONIO.cpp/h / UniPlanJSONLineIndex.cpp/h # nlohmann adaptor + bundle serialize + line index
 │   ├── UniPlanCache.cpp       # Caching layer (uni-plan.ini)
-│   ├── UniPlanOutput*.cpp     # JSON / Text / ANSI-Human formatters
-│   ├── UniPlanWatch*.{cpp,h}  # FTXUI watch-mode TUI (App, Panels, Snapshot)
-│   └── UniPlan*Helpers.h      # String / JSON / file / markdown / status / inventory utilities
-├── Schemas/                   # Legacy V3 .md schemas (used only by `uni-plan lint`)
+│   ├── UniPlanOutputJSON.cpp / UniPlanOutputText.cpp / UniPlanOutputHuman.cpp # Output formatters
+│   ├── UniPlanWatchApp.cpp/h / UniPlanWatchPanels.cpp/h / UniPlanWatchSnapshot.cpp/h # FTXUI watch TUI
+│   ├── UniPlanOptionParsing.cpp # CLI option parsing (enum fields validated at parse time)
+│   ├── UniPlanParsing.cpp     # V4 bundle / markdown parsing
+│   ├── UniPlanRuntime.cpp/h   # Runtime engine
+│   └── UniPlan*Helpers.h      # Domain helpers (String, File, JSON, Inventory, Markdown, Status, Output)
+├── Schemas/                   # 10 canonical V3 schema files (used only by `uni-plan lint`)
 ├── Docs/                      # Plan corpus — active .Plan.json bundles live in Docs/Plans/
-├── Test/                      # GoogleTest suite
+├── Test/                      # GoogleTest suite (187 tests as of v0.72.0)
 ├── ThirdParty/                # FTXUI
 ├── Build/                     # CMake output (ignored)
 ├── .claude/                   # Rules, hooks, skills, agents

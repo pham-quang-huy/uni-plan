@@ -32,7 +32,7 @@ Read all `Test/UniPlanTest*.cpp` files. For each `TEST_F` or `TEST`:
 
 ### Step 3: Cross-reference JSON fields
 
-For each query test that asserts JSON fields: read the corresponding `Run*Command` function in `Source/UniPlanCommandBundle.cpp` and verify the field names match what the command actually emits. Flag any assertion on a field that doesn't exist.
+For each query test that asserts JSON fields: read the corresponding `Run*Command` function in the appropriate per-group file (post-v0.72.0 split): `Source/UniPlanCommandTopic.cpp`, `Source/UniPlanCommandPhase.cpp`, `Source/UniPlanCommandValidate.cpp`, `Source/UniPlanCommandHistory.cpp`, `Source/UniPlanCommandLifecycle.cpp`, `Source/UniPlanCommandMutation.cpp`, `Source/UniPlanCommandEntity.cpp`, or `Source/UniPlanCommandSemanticQuery.cpp`. Verify the field names match what the command actually emits. Flag any assertion on a field that doesn't exist.
 
 ### Step 4: Output coverage matrix
 

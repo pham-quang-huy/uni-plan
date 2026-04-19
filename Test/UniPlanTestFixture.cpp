@@ -70,11 +70,27 @@ void FBundleTestFixture::CreateMinimalFixture(
     Bundle.mMetadata.mTitle = "Test topic: " + InTopicKey;
     Bundle.mMetadata.mSummary = "Minimal fixture for testing";
 
+    // Stamp timestamps consistent with the requested phase status so the
+    // fixture satisfies `completed_phase_timestamp_required`. Tests that
+    // want to exercise the missing-timestamp path can blank these fields
+    // explicitly after ReloadBundle.
+    const std::string kStartedAt = "2026-01-15T09:00:00Z";
+    const std::string kCompletedAt = "2026-01-16T17:00:00Z";
     for (int I = 0; I < InPhaseCount; ++I)
     {
         UniPlan::FPhaseRecord Phase;
         Phase.mScope = "Phase " + std::to_string(I);
         Phase.mLifecycle.mStatus = InPhaseStatus;
+        if (InPhaseStatus == UniPlan::EExecutionStatus::Completed)
+        {
+            Phase.mLifecycle.mStartedAt = kStartedAt;
+            Phase.mLifecycle.mCompletedAt = kCompletedAt;
+        }
+        else if (InPhaseStatus == UniPlan::EExecutionStatus::InProgress ||
+                 InPhaseStatus == UniPlan::EExecutionStatus::Blocked)
+        {
+            Phase.mLifecycle.mStartedAt = kStartedAt;
+        }
         if (InPopulateDesign)
         {
             Phase.mDesign.mInvestigation = "Test investigation";

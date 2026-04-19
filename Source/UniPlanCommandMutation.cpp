@@ -181,20 +181,85 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
         Phase.mLifecycle.mStatus = NewStatus;
         Desc = Target + " → " + NewStatusStr;
 
-        // Auto-set timestamps
-        const std::string UTC = GetUtcNow();
+        // Resolve the timestamp to write: explicit override (validated
+        // at parse time) wins over the auto-stamp (GetUtcNow). The
+        // override is intended for migration/repair passes that backfill
+        // historical timestamps; without it, `phase set --status` would
+        // always stamp "now" and bury real history.
+        const std::string AutoUTC = GetUtcNow();
         if (NewStatus == EExecutionStatus::InProgress &&
             Phase.mLifecycle.mStartedAt.empty())
         {
-            Phase.mLifecycle.mStartedAt = UTC;
-            Changes.push_back({"started_at", {"", UTC}});
+            const std::string &StartedAt =
+                Options.mStartedAt.empty() ? AutoUTC : Options.mStartedAt;
+            Phase.mLifecycle.mStartedAt = StartedAt;
+            Changes.push_back({"started_at", {"", StartedAt}});
         }
-        if (NewStatus == EExecutionStatus::Completed &&
-            Phase.mLifecycle.mCompletedAt.empty())
+        if (NewStatus == EExecutionStatus::Completed)
         {
-            Phase.mLifecycle.mCompletedAt = UTC;
-            Changes.push_back({"completed_at", {"", UTC}});
+            // Completed implies both started_at and completed_at. If the
+            // phase never captured started_at, require the caller to
+            // supply --started-at <iso> explicitly — fabricating one
+            // from completed_at or "now" would invent historical data
+            // the caller has not provided (Data Fix Gate violation).
+            // The normal execution path (`phase start` → `phase
+            // complete`, or `phase set --status in_progress` →
+            // `... completed`) already stamps started_at at the
+            // in_progress transition, so this gate only fires when
+            // callers skip straight from not_started to completed.
+            if (Phase.mLifecycle.mStartedAt.empty())
+            {
+                if (Options.mStartedAt.empty())
+                {
+                    throw UsageError(
+                        "phase set --status completed requires --started-at "
+                        "<iso> when the phase has no recorded started_at; "
+                        "supply the real historical start time, or call "
+                        "`phase set --status in_progress` first so the "
+                        "started_at stamp is recorded truthfully");
+                }
+                Phase.mLifecycle.mStartedAt = Options.mStartedAt;
+                Changes.push_back({"started_at", {"", Options.mStartedAt}});
+            }
+            // completed_at defaults to "now" because the caller is
+            // invoking the transition right now; that stamp is
+            // truthful. Callers backfilling a past completion supply
+            // --completed-at explicitly.
+            if (Phase.mLifecycle.mCompletedAt.empty())
+            {
+                const std::string &CompletedAt = Options.mCompletedAt.empty()
+                                                     ? AutoUTC
+                                                     : Options.mCompletedAt;
+                Phase.mLifecycle.mCompletedAt = CompletedAt;
+                Changes.push_back({"completed_at", {"", CompletedAt}});
+            }
         }
+    }
+
+    // Allow timestamp overrides even without a status change — this is
+    // the explicit repair path for phases already in the right status
+    // but missing/incorrect timestamps. Each non-empty override replaces
+    // the existing value unconditionally; operators invoking this path
+    // know what they are doing. A single `phase set` call can fix any
+    // combination of status + started_at + completed_at.
+    if (!Options.mStartedAt.empty() &&
+        Phase.mLifecycle.mStartedAt != Options.mStartedAt)
+    {
+        Changes.push_back(
+            {"started_at", {Phase.mLifecycle.mStartedAt, Options.mStartedAt}});
+        Phase.mLifecycle.mStartedAt = Options.mStartedAt;
+        if (Desc.empty())
+            Desc = Target + " updated started_at";
+    }
+    if (!Options.mCompletedAt.empty() &&
+        Phase.mLifecycle.mCompletedAt != Options.mCompletedAt)
+    {
+        Changes.push_back(
+            {"completed_at",
+             {Phase.mLifecycle.mCompletedAt, Options.mCompletedAt}});
+        Phase.mLifecycle.mCompletedAt = Options.mCompletedAt;
+        if (Desc.empty())
+            Desc = Target + " updated completed_at";
     }
     if (!Options.mDone.empty())
     {

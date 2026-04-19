@@ -549,31 +549,208 @@ void EvalNoHtmlInProse(const std::vector<FTopicBundle> &InBundles,
 }
 
 // 27. no_empty_placeholder_literal (Warning) — literal "None"/"N/A"/"TBD"/"-"
-// should be empty string.
+// /status-word placeholders should be empty string.
+//
+// The status-word branch catches migration/column-shift defects where a
+// table's Status column leaked into a prose field — producing `scope =
+// "Completed"` or `done = "`completed`"`. These values are grammatically
+// short placeholders, not real content, and silently satisfy presence
+// checks elsewhere in the validator (e.g. `no_hollow_completed_phase`
+// which only fires on empty fields). Catching them here forces callers
+// to populate real prose.
+//
+// The scope of scanned fields mirrors `FPhaseLifecycle.mDone/mRemaining/
+// mBlockers` plus the phase-level `scope`/`output` and the most common
+// design-material prose (`investigation`). Other design fields are
+// scanned by `no_unresolved_marker` and `no_smart_quotes` if/when they
+// contain prose drift; a literal status word inside e.g. `code_snippets`
+// would be meaningful content, not corruption.
 void EvalNoEmptyPlaceholderLiteral(const std::vector<FTopicBundle> &InBundles,
                                    std::vector<ValidateCheck> &OutChecks)
 {
-    static const std::regex Pattern(
+    // The classic branch — the original None/N/A/TBD/- pattern, anchored
+    // so it only fires on whole-field matches (not e.g. "ISO-like-TBD
+    // banner").
+    static const std::regex ClassicPattern(
         R"(^\s*(?:None|N/A|n/a|none|TBD|tbd|-)\s*$)");
+    // The status-word branch — whole-field matches of bare status literals
+    // with optional surrounding quotes/backticks, any case. Matches values
+    // like `Completed`, `` `completed` ``, `"In progress"`, `not_started`,
+    // `WIP`, etc. Multi-word tokens allow space or underscore between words
+    // ("In progress" == "in_progress").
+    static const std::regex StatusWordPattern(
+        R"(^\s*[`"']*(?:complete[d]?|in[\s_]?progress|not[\s_]?started|blocked|pending|wip|done)[`"']*\s*$)",
+        std::regex::icase);
+    const auto Scan = [&](const std::string &InTopic, const std::string &InPath,
+                          const std::string &InVal)
+    {
+        ScanProseField(InTopic, InPath, InVal, ClassicPattern,
+                       "no_empty_placeholder_literal",
+                       EValidationSeverity::Warning,
+                       "placeholder literal: ", OutChecks);
+        ScanProseField(InTopic, InPath, InVal, StatusWordPattern,
+                       "no_empty_placeholder_literal",
+                       EValidationSeverity::Warning,
+                       "status-word placeholder: ", OutChecks);
+    };
     for (const FTopicBundle &B : InBundles)
     {
         for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
         {
             const FPhaseRecord &P = B.mPhases[PI];
             const std::string Base = "phases[" + std::to_string(PI) + "]";
-            const auto Scan =
-                [&](const std::string &InField, const std::string &InVal)
-            {
-                ScanProseField(B.mTopicKey, Base + "." + InField, InVal,
-                               Pattern, "no_empty_placeholder_literal",
-                               EValidationSeverity::Warning,
-                               "placeholder literal: ", OutChecks);
-            };
-            Scan("blockers", P.mLifecycle.mBlockers);
-            Scan("remaining", P.mLifecycle.mRemaining);
-            Scan("done", P.mLifecycle.mDone);
+            // Lifecycle prose (original coverage).
+            Scan(B.mTopicKey, Base + ".blockers", P.mLifecycle.mBlockers);
+            Scan(B.mTopicKey, Base + ".remaining", P.mLifecycle.mRemaining);
+            Scan(B.mTopicKey, Base + ".done", P.mLifecycle.mDone);
+            // Phase-level prose — catches the known column-shift defect
+            // where V3 "Status" leaked into V4 `scope` / `output`.
+            Scan(B.mTopicKey, Base + ".scope", P.mScope);
+            Scan(B.mTopicKey, Base + ".output", P.mOutput);
+            // Design-material prose — catches "Delivered:... Scope:
+            // Completed" style leaks where a status line landed in
+            // investigation.
+            Scan(B.mTopicKey, Base + ".investigation",
+                 P.mDesign.mInvestigation);
             // dependencies is a typed vector — an empty vector means "no
             // dependencies" (structural), not a placeholder literal.
+            // Degenerate typed entries are caught by
+            // `no_degenerate_dependency_entry`.
+        }
+    }
+}
+
+// 27a. topic_fields_not_identical (Warning) — semantically-distinct
+// topic-level prose fields should not be byte-identical to each other.
+// Byte-identical values signal a migration bug (one field copied verbatim
+// into another) rather than intentional overlap: governance writers
+// naturally paraphrase when they repeat a point.
+//
+// Pairs checked:
+//   summary vs goals         — summary is the "why", goals are "what"
+//   summary vs problem_statement
+//   goals vs non_goals       — non_goals is inversion-by-definition
+//
+// Other fields (risks, acceptance_criteria, baseline_audit) are typed
+// tables or long-form lists; equality there is extraordinarily unlikely
+// and would already surface via other structural checks if it happened.
+void EvalTopicFieldsNotIdentical(const std::vector<FTopicBundle> &InBundles,
+                                 std::vector<ValidateCheck> &OutChecks)
+{
+    const auto CheckPair = [&](const FTopicBundle &B, const std::string &LName,
+                               const std::string &LVal,
+                               const std::string &RName,
+                               const std::string &RVal)
+    {
+        // Both must be non-empty; two empty strings are trivially equal and
+        // caught by required_fields if required.
+        if (LVal.empty() || RVal.empty())
+            return;
+        if (LVal != RVal)
+            return;
+        // Short values can legitimately overlap (e.g. one-word titles).
+        // Require at least 40 characters of content before flagging — this
+        // is long enough to catch migration copy-paste of summary prose
+        // into goals, short enough to not gate single-sentence topics.
+        if (LVal.size() < 40)
+            return;
+        Fail(OutChecks, "topic_fields_not_identical",
+             EValidationSeverity::Warning, B.mTopicKey, LName + "==" + RName,
+             "topic fields are byte-identical (" + std::to_string(LVal.size()) +
+                 " chars): " + LName + " and " + RName);
+    };
+    for (const FTopicBundle &B : InBundles)
+    {
+        const FPlanMetadata &M = B.mMetadata;
+        CheckPair(B, "summary", M.mSummary, "goals", M.mGoals);
+        CheckPair(B, "summary", M.mSummary, "problem_statement",
+                  M.mProblemStatement);
+        CheckPair(B, "goals", M.mGoals, "non_goals", M.mNonGoals);
+    }
+}
+
+// 27b. no_degenerate_dependency_entry (Warning) — every typed dependency
+// row must have real content. A row with empty kind (parsed as default
+// Bundle) AND empty topic AND empty path is a shell that migrated
+// free-prose into the `note` field without ever populating the structured
+// reference fields. Downstream queries (`topic_ref_integrity`,
+// `path_resolves`) silently skip such rows because the structure says
+// "nothing to check", which hides the migration defect instead of
+// surfacing it.
+//
+// Rule: kind is always valid (enum-typed), so we check whether the row
+// carries any resolution-bearing value — a topic key (for Bundle/Phase),
+// a path (for Governance/External), or — at minimum — a non-empty note
+// that describes what the row is for. A row with topic="" + path="" +
+// note="" is unambiguously empty and fails.
+//
+// Stricter variant: for Bundle/Phase kinds, topic is the primary key;
+// missing topic is a structural break.
+void EvalNoDegenerateDependencyEntry(const std::vector<FTopicBundle> &InBundles,
+                                     std::vector<ValidateCheck> &OutChecks)
+{
+    // Severity promoted from Warning to ErrorMinor in v0.73.1 — the
+    // check is at zero residuals across the mm-factory corpus post-
+    // repair, and the structural invariant (every typed dependency
+    // carries enough content to resolve) is cheap for producers to
+    // satisfy. Regressions should block CI, not pass silently as
+    // warnings.
+    const auto CheckRef = [&](const std::string &InTopicKey,
+                              const std::string &InPath,
+                              const FBundleReference &InRef)
+    {
+        const bool bHasTopic = !InRef.mTopic.empty();
+        const bool bHasPath = !InRef.mPath.empty();
+        const bool bHasNote = !InRef.mNote.empty();
+        if (!bHasTopic && !bHasPath && !bHasNote)
+        {
+            Fail(OutChecks, "no_degenerate_dependency_entry",
+                 EValidationSeverity::ErrorMinor, InTopicKey, InPath,
+                 "dependency row has empty topic, path, and note");
+            return;
+        }
+        // Bundle/Phase dependencies must resolve to a topic. A note-only
+        // Bundle-kind row is the classic migration shell: the free-prose
+        // "Upstream dependency" column was wrapped in an empty-kind
+        // envelope.
+        if ((InRef.mKind == EDependencyKind::Bundle ||
+             InRef.mKind == EDependencyKind::Phase) &&
+            !bHasTopic)
+        {
+            Fail(OutChecks, "no_degenerate_dependency_entry",
+                 EValidationSeverity::ErrorMinor, InTopicKey, InPath,
+                 "dependency kind=" + std::string(ToString(InRef.mKind)) +
+                     " requires a topic key");
+        }
+        // Governance/External dependencies must point at a path.
+        if ((InRef.mKind == EDependencyKind::Governance ||
+             InRef.mKind == EDependencyKind::External) &&
+            !bHasPath)
+        {
+            Fail(OutChecks, "no_degenerate_dependency_entry",
+                 EValidationSeverity::ErrorMinor, InTopicKey, InPath,
+                 "dependency kind=" + std::string(ToString(InRef.mKind)) +
+                     " requires a path");
+        }
+    };
+    for (const FTopicBundle &B : InBundles)
+    {
+        const FPlanMetadata &M = B.mMetadata;
+        for (size_t I = 0; I < M.mDependencies.size(); ++I)
+        {
+            CheckRef(B.mTopicKey, "dependencies[" + std::to_string(I) + "]",
+                     M.mDependencies[I]);
+        }
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const auto &Deps = B.mPhases[PI].mDesign.mDependencies;
+            for (size_t DI = 0; DI < Deps.size(); ++DI)
+            {
+                CheckRef(B.mTopicKey,
+                         "phases[" + std::to_string(PI) + "].dependencies[" +
+                             std::to_string(DI) + "]",
+                         Deps[DI]);
+            }
         }
     }
 }

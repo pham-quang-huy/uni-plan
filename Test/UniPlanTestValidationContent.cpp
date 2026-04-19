@@ -755,3 +755,250 @@ TEST_F(FBundleTestFixture, IssueLineFieldForPhaseKey)
     }
     EXPECT_GT(Line, 0);
 }
+
+// -------------------------------------------------------------------
+// no_empty_placeholder_literal — status-word extension (v0.73.0)
+// Catches migration column-shift where V3 Status column leaked into
+// V4 scope/output/done. See UniPlanValidationContent.cpp EvalNoEmpty-
+// PlaceholderLiteral comment for the rationale.
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, NoEmptyPlaceholderLiteralFlagsStatusWordInScope)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Classic column-shift defect: status-word landed in scope.
+    Bundle.mPhases[0].mScope = "Completed";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    // Confirm the check fires on phases[0].scope specifically.
+    bool bFoundScope = false;
+    for (const auto &Issue : Json["issues"])
+    {
+        if (Issue["id"] == "no_empty_placeholder_literal" &&
+            Issue["path"].get<std::string>() == "phases[0].scope")
+        {
+            EXPECT_EQ(Issue["severity"], "warning");
+            bFoundScope = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(bFoundScope);
+}
+
+TEST_F(FBundleTestFixture, NoEmptyPlaceholderLiteralAllowsProseMentioningDone)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Real prose that happens to contain status words must pass. The
+    // check is anchored to whole-field matches, not substring matches.
+    Bundle.mPhases[0].mScope = "Completed the foo and started the bar";
+    Bundle.mPhases[0].mLifecycle.mDone = "done wiring X; in_progress on Y";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_empty_placeholder_literal"), 0);
+}
+
+// -------------------------------------------------------------------
+// topic_phase_status_alignment — topic.status must match phase.status
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture,
+       TopicPhaseStatusAlignmentFlagsCompletedTopicWithNotStartedPhase)
+{
+    // Topic says completed, but phases are all not_started — the
+    // migration defect we saw on 30 topics in mm-factory.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::Completed, 3,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "topic_phase_status_alignment");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+    EXPECT_EQ(Issue["path"], "status");
+}
+
+TEST_F(FBundleTestFixture, TopicPhaseStatusAlignmentPassesWhenAligned)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::Completed, 2,
+                         UniPlan::EExecutionStatus::Completed, true);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "topic_phase_status_alignment"), 0);
+}
+
+// -------------------------------------------------------------------
+// completed_phase_timestamp_required — completed phases must carry
+// both started_at and completed_at
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, CompletedPhaseTimestampRequiredFlagsMissingStartedAt)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::Completed, 1,
+                         UniPlan::EExecutionStatus::Completed, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Fixture pre-populates timestamps when Completed — blank them so
+    // the check has something to fire on.
+    Bundle.mPhases[0].mLifecycle.mStartedAt = "";
+    Bundle.mPhases[0].mLifecycle.mCompletedAt = "";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    // Expect two failures: one for started_at, one for completed_at.
+    int Count = CountIssuesWithId(Json, "completed_phase_timestamp_required");
+    EXPECT_EQ(Count, 2);
+}
+
+TEST_F(FBundleTestFixture,
+       CompletedPhaseTimestampRequiredPassesWithBothTimestamps)
+{
+    // Fixture pre-stamps both timestamps on Completed phases.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::Completed, 1,
+                         UniPlan::EExecutionStatus::Completed, true);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "completed_phase_timestamp_required"), 0);
+}
+
+// -------------------------------------------------------------------
+// topic_fields_not_identical — byte-identical summary/goals signals a
+// migration copy-paste bug
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, TopicFieldsNotIdenticalFlagsSummaryEqualsGoals)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // 50-char string — above the 40-char threshold.
+    const std::string Prose =
+        "Freeze command semantics and provider mapping before code.";
+    Bundle.mMetadata.mSummary = Prose;
+    Bundle.mMetadata.mGoals = Prose;
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "topic_fields_not_identical");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+    // Path encodes which pair collided.
+    EXPECT_EQ(Issue["path"].get<std::string>(), "summary==goals");
+}
+
+TEST_F(FBundleTestFixture, TopicFieldsNotIdenticalPassesWhenDistinct)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mMetadata.mSummary =
+        "Freeze command semantics and provider mapping before code.";
+    Bundle.mMetadata.mGoals =
+        "Ship one working end-to-end image.create happy path on Freepik.";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "topic_fields_not_identical"), 0);
+}
+
+// -------------------------------------------------------------------
+// no_degenerate_dependency_entry — typed deps must carry real fields
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, NoDegenerateDependencyEntryFlagsBundleWithoutTopic)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Shell entry: kind=Bundle (the default) with empty topic — the
+    // exact migration defect seen in 25 mm-factory bundles.
+    UniPlan::FBundleReference Ref;
+    Ref.mKind = UniPlan::EDependencyKind::Bundle;
+    Ref.mNote = "Upstream depends on CiloLaunch";
+    Bundle.mMetadata.mDependencies.push_back(std::move(Ref));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "no_degenerate_dependency_entry");
+    ASSERT_FALSE(Issue.empty());
+    // Promoted from Warning to ErrorMinor in v0.73.1 once mm-factory
+    // corpus hit zero residuals on this check.
+    EXPECT_EQ(Issue["severity"], "error_minor");
+    EXPECT_EQ(Issue["path"].get<std::string>(), "dependencies[0]");
+}
+
+TEST_F(FBundleTestFixture, NoDegenerateDependencyEntryPassesWithRealTopic)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FBundleReference Ref;
+    Ref.mKind = UniPlan::EDependencyKind::Bundle;
+    Ref.mTopic = "CiloLaunch";
+    Ref.mNote = "Upstream token launchpad";
+    Bundle.mMetadata.mDependencies.push_back(std::move(Ref));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_degenerate_dependency_entry"), 0);
+}

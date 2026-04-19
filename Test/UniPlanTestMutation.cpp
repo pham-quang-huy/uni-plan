@@ -754,3 +754,159 @@ TEST_F(FBundleTestFixture, LaneSetNoFieldsFails)
     StopCapture();
     EXPECT_EQ(Code, 1);
 }
+
+// ===================================================================
+// phase set — --started-at / --completed-at timestamp overrides
+// (v0.73.0)
+//
+// These flags exist to support migration / repair scenarios where a
+// historical completion date must be backfilled instead of stamping
+// "now". Without the override, `phase set --status completed` always
+// writes GetUtcNow() which buries real history.
+// ===================================================================
+
+TEST_F(FBundleTestFixture, PhaseSetStartedAtOverrideWinsOverAutoStamp)
+{
+    // Phase 1 of SampleTopic starts as not_started. Moving it to
+    // in_progress WITHOUT the override stamps "now"; WITH the override
+    // the explicit value must win.
+    CopyFixture("SampleTopic");
+    const std::string kHistorical = "2025-06-15T09:00:00Z";
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--status", "in_progress",
+         "--started-at", kHistorical, "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::InProgress);
+    EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mStartedAt, kHistorical);
+}
+
+TEST_F(FBundleTestFixture, PhaseSetCompletedAtOverrideWinsForStatusCompleted)
+{
+    // Explicit --completed-at must beat the auto-stamp for a completion
+    // transition. The fixture phase 1 already carries a started_at, so
+    // only completed_at is written; the pre-existing started_at must be
+    // preserved (NOT clobbered by the override or auto-stamp).
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const std::string PriorStart = Before.mPhases[1].mLifecycle.mStartedAt;
+    ASSERT_FALSE(PriorStart.empty());
+    const std::string kHistorical = "2024-11-01T18:00:00Z";
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--status", "completed",
+         "--completed-at", kHistorical, "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::Completed);
+    EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mCompletedAt, kHistorical);
+    // started_at must be left alone when it was already populated.
+    EXPECT_EQ(Bundle.mPhases[1].mLifecycle.mStartedAt, PriorStart);
+}
+
+TEST_F(FBundleTestFixture, PhaseSetStartedAtInvalidFormatThrowsUsageError)
+{
+    // Parse-time validation must reject malformed ISO values before any
+    // bundle mutation. The option parser throws UsageError; the CLI
+    // dispatcher catches and emits exit 1 in production. The test
+    // exercises the parser contract directly.
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const UniPlan::EExecutionStatus PriorStatus =
+        Before.mPhases[1].mLifecycle.mStatus;
+    const std::string PriorStart = Before.mPhases[1].mLifecycle.mStartedAt;
+    const size_t PriorChangelogs = Before.mChangeLogs.size();
+
+    StartCapture();
+    EXPECT_THROW(UniPlan::RunPhaseSetCommand(
+                     {"--topic", "SampleTopic", "--phase", "1", "--status",
+                      "completed", "--started-at", "not-a-timestamp",
+                      "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+    StopCapture();
+
+    // Bundle must not have been mutated — status unchanged, timestamps
+    // unchanged, no changelog entry appended.
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mLifecycle.mStatus, PriorStatus);
+    EXPECT_EQ(After.mPhases[1].mLifecycle.mStartedAt, PriorStart);
+    EXPECT_EQ(After.mChangeLogs.size(), PriorChangelogs);
+}
+
+TEST_F(FBundleTestFixture, PhaseSetStatusCompletedRequiresStartedAtWhenMissing)
+{
+    // Data Fix Gate contract: when a not_started phase is flipped
+    // straight to completed, the CLI must refuse to fabricate a
+    // started_at from "now" or from completed_at. The caller must
+    // supply --started-at <iso> so the recorded start time reflects
+    // real history, not invented data. Phase 2 of the fixture is
+    // not_started with empty started_at — the exact shape this gate
+    // protects.
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    ASSERT_EQ(Before.mPhases[2].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::NotStarted);
+    ASSERT_TRUE(Before.mPhases[2].mLifecycle.mStartedAt.empty());
+    const size_t PriorChangelogs = Before.mChangeLogs.size();
+
+    StartCapture();
+    EXPECT_THROW(UniPlan::RunPhaseSetCommand(
+                     {"--topic", "SampleTopic", "--phase", "2", "--status",
+                      "completed", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+    StopCapture();
+
+    // Bundle must not have been mutated — status stays not_started,
+    // timestamps still empty, no changelog entry appended.
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[2].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::NotStarted);
+    EXPECT_TRUE(After.mPhases[2].mLifecycle.mStartedAt.empty());
+    EXPECT_TRUE(After.mPhases[2].mLifecycle.mCompletedAt.empty());
+    EXPECT_EQ(After.mChangeLogs.size(), PriorChangelogs);
+}
+
+TEST_F(FBundleTestFixture, PhaseSetStatusCompletedWithStartedAtSucceeds)
+{
+    // Positive counterpart to the gate: supplying --started-at unblocks
+    // the not_started → completed transition. completed_at defaults to
+    // "now" (the transition is happening now, truthfully), while
+    // started_at is taken verbatim from the override.
+    CopyFixture("SampleTopic");
+    const std::string kHistoricalStart = "2025-12-01T14:00:00Z";
+
+    StartCapture();
+    const int ExitCode = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "2", "--status", "completed",
+         "--started-at", kHistoricalStart, "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(ExitCode, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[2].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::Completed);
+    EXPECT_EQ(After.mPhases[2].mLifecycle.mStartedAt, kHistoricalStart);
+    EXPECT_FALSE(After.mPhases[2].mLifecycle.mCompletedAt.empty());
+}

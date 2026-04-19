@@ -485,6 +485,123 @@ static void EvalPhaseTracking(const std::vector<FTopicBundle> &InBundles,
     }
 }
 
+// 17a. topic_phase_status_alignment (Warning) — topic-level status must be
+// supportable by phase-level statuses. The lifecycle commands (`topic
+// complete`) already gate this at mutation time, but direct JSON writes
+// and legacy migrations can desync the two axes. This check catches that
+// drift post-load, regardless of how the bundle was produced.
+//
+// Rules enforced:
+//   topic.status == completed    => every phase.status must be completed
+//   topic.status == not_started  => every phase.status must be not_started
+//   topic.status == in_progress  => at least one phase must be started
+//                                   (in_progress, completed, or blocked)
+static void
+EvalTopicPhaseStatusAlignment(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        if (B.mPhases.empty())
+            continue;
+        const ETopicStatus TopicStatus = B.mStatus;
+
+        int CompletedCount = 0;
+        int NotStartedCount = 0;
+        int StartedCount = 0; // in_progress / completed / blocked
+        for (const FPhaseRecord &P : B.mPhases)
+        {
+            switch (P.mLifecycle.mStatus)
+            {
+            case EExecutionStatus::Completed:
+                ++CompletedCount;
+                ++StartedCount;
+                break;
+            case EExecutionStatus::NotStarted:
+                ++NotStartedCount;
+                break;
+            case EExecutionStatus::InProgress:
+            case EExecutionStatus::Blocked:
+                ++StartedCount;
+                break;
+            }
+        }
+        const int Total = static_cast<int>(B.mPhases.size());
+
+        if (TopicStatus == ETopicStatus::Completed && CompletedCount != Total)
+        {
+            Fail(OutChecks, "topic_phase_status_alignment",
+                 EValidationSeverity::Warning, B.mTopicKey, "status",
+                 "topic status=completed but " +
+                     std::to_string(Total - CompletedCount) + " of " +
+                     std::to_string(Total) + " phase(s) are not completed (" +
+                     std::to_string(NotStartedCount) + " not_started)");
+        }
+        else if (TopicStatus == ETopicStatus::NotStarted &&
+                 NotStartedCount != Total)
+        {
+            Fail(OutChecks, "topic_phase_status_alignment",
+                 EValidationSeverity::Warning, B.mTopicKey, "status",
+                 "topic status=not_started but " +
+                     std::to_string(Total - NotStartedCount) +
+                     " phase(s) have progressed past not_started");
+        }
+        else if (TopicStatus == ETopicStatus::InProgress && StartedCount == 0)
+        {
+            Fail(OutChecks, "topic_phase_status_alignment",
+                 EValidationSeverity::Warning, B.mTopicKey, "status",
+                 "topic status=in_progress but no phase has been started");
+        }
+    }
+}
+
+// 17b. completed_phase_timestamp_required (Warning) — a phase marked
+// completed must carry both started_at and completed_at, otherwise the
+// evidence trail has a hole. `EvalTimestampFormat` validates format of
+// non-empty timestamps but ignores null values — that exposes a gap
+// where a migration can bulk-flip status without stamping timestamps.
+// This check closes that gap.
+//
+// Symmetric rule for in_progress: started_at must be present. A phase
+// cannot have progressed past not_started without its start stamp.
+static void
+EvalCompletedPhaseTimestampRequired(const std::vector<FTopicBundle> &InBundles,
+                                    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mPhases.size(); ++I)
+        {
+            const FPhaseRecord &Phase = B.mPhases[I];
+            const std::string Base = "phases[" + std::to_string(I) + "]";
+            if (Phase.mLifecycle.mStatus == EExecutionStatus::Completed)
+            {
+                if (Phase.mLifecycle.mStartedAt.empty())
+                    Fail(OutChecks, "completed_phase_timestamp_required",
+                         EValidationSeverity::Warning, B.mTopicKey,
+                         Base + ".started_at",
+                         "phase status=completed but started_at is empty");
+                if (Phase.mLifecycle.mCompletedAt.empty())
+                    Fail(OutChecks, "completed_phase_timestamp_required",
+                         EValidationSeverity::Warning, B.mTopicKey,
+                         Base + ".completed_at",
+                         "phase status=completed but completed_at is empty");
+            }
+            else if (Phase.mLifecycle.mStatus == EExecutionStatus::InProgress ||
+                     Phase.mLifecycle.mStatus == EExecutionStatus::Blocked)
+            {
+                if (Phase.mLifecycle.mStartedAt.empty())
+                    Fail(OutChecks, "completed_phase_timestamp_required",
+                         EValidationSeverity::Warning, B.mTopicKey,
+                         Base + ".started_at",
+                         "phase status=" +
+                             std::string(ToString(Phase.mLifecycle.mStatus)) +
+                             " but started_at is empty");
+            }
+        }
+    }
+}
+
 // 18. testing_actor_coverage (Warning)
 static void EvalTestingActorCoverage(const std::vector<FTopicBundle> &InBundles,
                                      std::vector<ValidateCheck> &OutChecks)
@@ -668,6 +785,8 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
 
     // Warning
     EvalPhaseTracking(InBundles, Checks);
+    EvalTopicPhaseStatusAlignment(InBundles, Checks);
+    EvalCompletedPhaseTimestampRequired(InBundles, Checks);
     EvalTestingActorCoverage(InBundles, Checks);
     EvalCanonicalEntityRef(InBundles, Checks);
 
@@ -681,6 +800,8 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     EvalNoSmartQuotes(InBundles, Checks);
     EvalNoHtmlInProse(InBundles, Checks);
     EvalNoEmptyPlaceholderLiteral(InBundles, Checks);
+    EvalTopicFieldsNotIdentical(InBundles, Checks);
+    EvalNoDegenerateDependencyEntry(InBundles, Checks);
     EvalNoUnresolvedMarker(InBundles, Checks);
     EvalNoDuplicateChangelog(InBundles, Checks);
     EvalNoDuplicatePhaseField(InBundles, Checks);

@@ -166,6 +166,13 @@ struct FPhaseSetOptions : BaseOptions
     std::string mRemaining;
     std::string mBlockers;
     std::string mContext; // agent_context
+    // Explicit timestamp overrides — when present, these values win over
+    // the auto-stamp that `phase set --status` normally emits. Intended
+    // for migration/repair passes that need to backfill historical
+    // started_at / completed_at from legacy evidence instead of "now".
+    // Format is validated against IsValidISOTimestamp at apply time.
+    std::string mStartedAt;
+    std::string mCompletedAt;
     // Phase-level fields
     std::string mScope;
     std::string mOutput;

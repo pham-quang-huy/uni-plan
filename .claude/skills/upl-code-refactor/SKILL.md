@@ -31,7 +31,7 @@ One change-driver per struct/class/file. If a type mixes unrelated concerns, dec
 | God struct mixing unrelated state | Struct has >50 fields, or fields span multiple domains (e.g., inventory + validation + watch in one type) | Decompose into focused `F`-prefix sub-structs grouped by domain (`FDocumentIdentity`, `FPhaseTaxonomy`, `FValidateCheck`) |
 | Monolith file (>1000 lines) | Multiple responsibilities in one `.cpp`/`.h` | Split by domain into separate files in `Source/` with `UniPlan` prefix |
 | Mixed anonymous namespace (>20 functions) | Unrelated helpers lumped together | Extract into focused helper files by domain |
-| Types header spanning multiple domains | `UniPlanTypes.h` with inventory types + validation types + watch types + option types | Split into focused domain headers (`UniPlanDocumentTypes.h`, `UniPlanValidationTypes.h`, etc.) |
+| Types header spanning multiple domains | Historical example: `UniPlanTypes.h` (pre-v0.72.0) mixed CLI constants + option types + inventory types + result types | Split into focused domain headers. In v0.72.0, `UniPlanTypes.h` became an IWYU umbrella re-exporting `UniPlanCliConstants.h`, `UniPlanOptionTypes.h`, `UniPlanInventoryTypes.h`, `UniPlanResultTypes.h`. |
 
 **When NOT to over-apply**: Do not create one-field structs or one-function files for purity. If fields always change together, they belong in one struct. Test: "Do these fields change for the same reason at the same time?"
 

@@ -737,6 +737,37 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             Options.mDone = ConsumeValuedOption(Remaining, Index, "--done");
             continue;
         }
+        if (Token == "--started-at")
+        {
+            Options.mStartedAt =
+                ConsumeValuedOption(Remaining, Index, "--started-at");
+            // Validate at parse time so the usage error surfaces
+            // alongside the other --status / --phase errors, not after
+            // the bundle has been loaded.
+            if (!Options.mStartedAt.empty() &&
+                !IsValidISOTimestampValue(Options.mStartedAt))
+            {
+                throw UsageError(
+                    "Invalid --started-at value: expected ISO timestamp "
+                    "(YYYY-MM-DD or YYYY-MM-DDThh:mm:ssZ), got '" +
+                    Options.mStartedAt + "'");
+            }
+            continue;
+        }
+        if (Token == "--completed-at")
+        {
+            Options.mCompletedAt =
+                ConsumeValuedOption(Remaining, Index, "--completed-at");
+            if (!Options.mCompletedAt.empty() &&
+                !IsValidISOTimestampValue(Options.mCompletedAt))
+            {
+                throw UsageError(
+                    "Invalid --completed-at value: expected ISO timestamp "
+                    "(YYYY-MM-DD or YYYY-MM-DDThh:mm:ssZ), got '" +
+                    Options.mCompletedAt + "'");
+            }
+            continue;
+        }
         if (Token == "--remaining")
         {
             Options.mRemaining =

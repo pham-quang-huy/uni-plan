@@ -89,34 +89,38 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
 ```
 uni-plan/
-├── Source/                    # 19 C++ source files
-│   ├── Main.cpp              # Entry point
-│   ├── UniPlanTypes.h        # Types, version, JSON schema constants
-│   ├── UniPlanHelpers.h      # String/JSON/file utilities
-│   ├── UniPlanRuntime.cpp/h  # Runtime engine
-│   ├── UniPlanParsing.cpp    # Document parsing
-│   ├── UniPlanValidation.cpp # 18 V4 bundle evaluators + lint
-│   ├── UniPlanCache.cpp      # Caching system
-│   ├── UniPlanAnalysis.cpp   # Analysis operations
-│   ├── UniPlanOptionParsing.cpp # CLI option parsing
-│   ├── UniPlanOutputJson.cpp   # JSON output formatter
-│   ├── UniPlanOutputText.cpp   # Text output formatter
-│   ├── UniPlanOutputHuman.cpp  # ANSI human output formatter
-│   ├── UniPlanWatchApp.cpp/h   # Watch mode TUI (FTXUI)
-│   ├── UniPlanWatchPanels.cpp/h # Watch UI panels
-│   ├── UniPlanWatchSnapshot.cpp/h # Watch data builder
-│   └── UniPlanForwardDecls.h  # Forward declarations
-├── Schemas/                   # 10 canonical schema files
-│   ├── Doc.Schema.md          # Base document structure
-│   ├── Plan.Schema.md         # Plan document schema
-│   ├── Playbook.Schema.md     # Playbook schema
-│   ├── Implementation.Schema.md # Implementation tracker schema
-│   └── *ChangeLog.Schema.md / *Verification.Schema.md  # 6 sidecar schemas
+├── Source/                    # C++17 implementation (flat directory, ~52 files)
+│   ├── Main.cpp               # Entry point
+│   ├── UniPlanTypes.h         # IWYU umbrella — re-exports the 4 domain headers below
+│   ├── UniPlanCliConstants.h  # Schemas / colors / sidecar extensions / mutation targets
+│   ├── UniPlanOptionTypes.h   # BaseOptions + every F*Options + UsageError (enum fields: std::optional<E*>)
+│   ├── UniPlanInventoryTypes.h # V3 markdown inventory types (lint only)
+│   ├── UniPlanResultTypes.h   # Per-command result / data structs
+│   ├── UniPlanTopicTypes.h    # FTopicBundle, FPhaseRecord, FPhaseLifecycle, FPlanMetadata
+│   ├── UniPlanTaxonomyTypes.h # FBundleReference, FValidationCommand, FPhaseTaxonomy
+│   ├── UniPlanEnums.h         # EExecutionStatus, EDependencyKind, EChangeType, ETopicStatus, …
+│   ├── UniPlanForwardDecls.h  # Run*Command declarations
+│   ├── UniPlanCommand*.cpp    # Per-group command implementations (post-v0.72.0 split):
+│   │                          #   Dispatch, Bundle, Topic, Phase, Validate, History,
+│   │                          #   Lifecycle, Mutation, Entity, SemanticQuery, MutationCommon
+│   ├── UniPlanValidation.cpp       # Structural + structural-warning evaluators + lint
+│   ├── UniPlanValidationContent.cpp # Content-hygiene evaluators (split from Validation.cpp in v0.72.0)
+│   ├── UniPlanSchemaValidation.cpp/h # Schema-driven structural validation
+│   ├── UniPlanJSON.h / UniPlanJSONIO.cpp/h / UniPlanJSONLineIndex.cpp/h # nlohmann adaptor + bundle serialize + line index
+│   ├── UniPlanCache.cpp       # Caching layer (uni-plan.ini)
+│   ├── UniPlanOutputJSON.cpp / UniPlanOutputText.cpp / UniPlanOutputHuman.cpp # Output formatters
+│   ├── UniPlanWatchApp.cpp/h / UniPlanWatchPanels.cpp/h / UniPlanWatchSnapshot.cpp/h # FTXUI watch TUI
+│   ├── UniPlanOptionParsing.cpp # CLI option parsing (enum fields validated at parse time)
+│   ├── UniPlanParsing.cpp     # V4 bundle / markdown parsing
+│   ├── UniPlanRuntime.cpp/h   # Runtime engine
+│   └── UniPlan*Helpers.h      # Domain helpers (String, File, JSON, Inventory, Markdown, Status, Output)
+├── Schemas/                   # 10 canonical V3 schema files (used only by `uni-plan lint`)
 ├── Docs/                      # uni-plan's own development corpus
 │   ├── INDEX.md               # Plan discovery index
 │   ├── Plans/                 # Active .Plan.json bundles
 │   ├── Implementation/        # Legacy markdown fixtures / historical references
 │   └── Playbooks/             # Legacy markdown fixtures / historical references
+├── Test/                      # GoogleTest suite (187 tests as of v0.72.0)
 ├── ThirdParty/                # FTXUI (terminal UI library)
 ├── Build/                     # CMake output directory
 ├── .claude/                   # Claude Code system
@@ -125,7 +129,9 @@ uni-plan/
 │   ├── rules/                 # 2 auto-loaded rule files
 │   ├── skills/                # 12 skills (upl-* prefix)
 │   └── agents/                # 1 agent (upl-agent-*)
+├── README.md                  # Root agent-focused entry point
 ├── AGENTS.md                  # This file — project manifest
+├── CLAUDE.md                  # Parallel manifest for Claude Code (parity with AGENTS.md)
 ├── CODING.md                  # Code style and SOLID principles
 ├── NAMING.md                  # Naming conventions
 ├── .clang-format              # clang-format configuration
@@ -162,7 +168,7 @@ uni-plan/
 
 ## cli_semver_discipline
 
-uni-plan is still **pre-1.0** (currently `0.50.0`) and under active
+uni-plan is still **pre-1.0** (currently `0.73.1`) and under active
 development. The command surface, mutation target path format,
 validator output schema, and auto-changelog `affected` contract are all
 subject to change. There is no stability commitment until we explicitly
@@ -183,6 +189,19 @@ locked. Do not bump MAJOR while in the 0.x range.
 
 Before committing any `Source/` changes, verify `kCliVersion` was bumped
 appropriately for the kind of change introduced.
+
+### v0.72.0 behavior note — parse-time enum validation
+
+Invalid option enum values (`--status`, `--type`, `--actor`, `--action`, any `topic/phase/job/task/lane` status flag) now fail at **parse time** with **exit code 2** and a `UsageError`, instead of the previous deferred mutation-time exit 1. Valid values are enumerated in CLI `--help` output and in `Source/UniPlanEnums.h`. Option structs now store enum fields as `std::optional<E*>` — a missing flag is a real `std::nullopt`, not a sentinel string. Scripts that relied on exit 1 for invalid enum inputs must be updated to check exit 2.
+
+### v0.73.1 behavior note — `phase set` timestamp overrides and completed-phase gate
+
+Two new flags on `phase set`, intended for migration/repair passes that need to backfill historical timestamps instead of stamping "now":
+
+- `--started-at <iso>` — explicit `mStartedAt` override. ISO-8601 format validated at parse time; invalid values fail with `UsageError` (exit 2).
+- `--completed-at <iso>` — explicit `mCompletedAt` override (same parse-time validation).
+
+Transitioning a phase to `status=completed` when `started_at` is empty now **requires** `--started-at <iso>` to be supplied explicitly; otherwise the command fails with `UsageError` (exit 2). This enforces the Data Fix Gate — the CLI will not fabricate a historical start time from `completed_at` or "now". The normal execution path (`phase start` / `phase set --status in_progress` then `phase complete` / `phase set --status completed`) already stamps `started_at` at the in_progress transition, so this gate only fires when callers skip straight from `not_started` to `completed`. The new `completed_phase_timestamp_required` structural-warning flags any persisted phase that already violates the invariant — `completed` phases need both timestamps, `in_progress`/`blocked` phases need at least `started_at`.
 
 ## documentation_rules
 
@@ -211,7 +230,7 @@ Bundle entity references should use `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n
 
 ## schema_files
 
-The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 30 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
+The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 34 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
 
 | Schema | Purpose (lint only) |
 |--------|---------------------|
@@ -224,7 +243,7 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 
 ## validation_checks
 
-`uni-plan validate [--topic <T>] [--strict] [--human]` runs 28 evaluator functions against every `.Plan.json` bundle. Checks are split into three tiers:
+`uni-plan validate [--topic <T>] [--strict] [--human]` runs 34 evaluator functions against every `.Plan.json` bundle. Checks are split into three tiers:
 
 ### Structural checks (ErrorMajor + ErrorMinor) — 15 checks
 
@@ -242,15 +261,17 @@ Required fields, index references, enum values, timestamp format, and referentia
 | `testing_record_fields` / `file_manifest_fields` | ErrorMinor | array entry fields |
 | `timestamp_format` | ErrorMinor | ISO 8601 format |
 
-### Structural warnings (Warning) — 3 checks
+### Structural warnings (Warning) — 5 checks
 
 | Check ID | Scope |
 |---|---|
 | `phase_tracking` | phase has populated `done`/`remaining` |
 | `testing_actor_coverage` | phase has human + ai records |
 | `canonical_entity_ref` | `changelogs[*].affected` path format |
+| `topic_phase_status_alignment` | topic status is consistent with phase statuses — topic=completed ⇔ every phase completed; topic=not_started ⇔ no phase started; topic=in_progress ⇒ ≥1 phase started (added v0.73.0) |
+| `completed_phase_timestamp_required` | `completed` phase has both `started_at` and `completed_at`; `in_progress`/`blocked` phase has non-empty `started_at` (added v0.73.0) |
 
-### Content-hygiene checks (ErrorMinor + Warning) — 11 checks
+### Content-hygiene checks (ErrorMinor + Warning) — 14 checks
 
 Detect agent-safety hazards, format inconsistencies, and reference integrity in prose fields. All flip `valid=false` under `--strict`.
 
@@ -287,6 +308,8 @@ V3-era vocabulary/filename/CLI drift checks (`v3_terminology_free`, `legacy_cli_
 | `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
 | `no_duplicate_phase_field` | Warning | Two phases of the same bundle share byte-identical non-empty content (≥20 chars) in a prescriptive or lifecycle field (`scope`, `output`, `done`, `remaining`, `handoff`, `readiness_gate`, `investigation`, `code_entity_contract`, `code_snippets`, `best_practices`) — signature of a migration script that stamped the same template across many phases |
 | `no_hollow_completed_phase` | Warning | A phase with `status=completed` but no execution evidence: empty `jobs[]`, empty `testing[]`, empty `file_manifest[]`, and both `code_snippets` and `investigation` empty. Catches governance lies where `completed` is claimed without substance. |
+| `topic_fields_not_identical` | Warning | Two topic-level prose fields are byte-identical non-empty strings (≥20 chars) — topic-level parallel of `no_duplicate_phase_field`; catches migration-stamp artifacts that reuse one template across `summary`/`goals`/`non_goals`/etc. (added v0.73.0) |
+| `no_degenerate_dependency_entry` | ErrorMinor | Dependency row has all three of `topic`, `path`, `note` empty, OR `bundle`/`phase` kind is missing its required `topic` key, OR `governance`/`external` kind is missing its required `path`. Flags rows that survived a mutation but carry no information. (added Warning in v0.73.0, promoted to ErrorMinor in v0.73.1) |
 
 ### `--strict` flag
 

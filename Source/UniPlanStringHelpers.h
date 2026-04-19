@@ -4,6 +4,7 @@
 #include <cctype>
 #include <chrono>
 #include <iomanip>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -113,6 +114,17 @@ inline std::string GetUtcNow()
     std::ostringstream Stream;
     Stream << std::put_time(&UTCTime, "%Y-%m-%dT%H:%M:%SZ");
     return Stream.str();
+}
+
+// Shared with the `timestamp_format` validator in UniPlanValidation.cpp.
+// Anchored to the start of the value; an optional time suffix is permitted.
+// Accepts both bare ISO dates ("2026-04-19") and full ISO timestamps
+// ("2026-04-19T12:34:56Z").
+inline bool IsValidISOTimestampValue(const std::string &InValue)
+{
+    static const std::regex Pattern(
+        R"(^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}.*)?)");
+    return std::regex_match(InValue, Pattern);
 }
 
 } // namespace UniPlan

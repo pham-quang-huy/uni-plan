@@ -225,6 +225,10 @@ void EvalNoHtmlInProse(const std::vector<FTopicBundle> &InBundles,
                        std::vector<ValidateCheck> &OutChecks);
 void EvalNoEmptyPlaceholderLiteral(const std::vector<FTopicBundle> &InBundles,
                                    std::vector<ValidateCheck> &OutChecks);
+void EvalTopicFieldsNotIdentical(const std::vector<FTopicBundle> &InBundles,
+                                 std::vector<ValidateCheck> &OutChecks);
+void EvalNoDegenerateDependencyEntry(const std::vector<FTopicBundle> &InBundles,
+                                     std::vector<ValidateCheck> &OutChecks);
 void EvalNoUnresolvedMarker(const std::vector<FTopicBundle> &InBundles,
                             std::vector<ValidateCheck> &OutChecks);
 void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
