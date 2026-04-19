@@ -114,7 +114,6 @@ struct FDocWatchSnapshot
     FWatchValidationSummary mValidation{};
     FWatchLintSummary mLint{};
 
-    std::vector<DriftItem> mDriftItems;
     std::vector<BlockerItem> mAllBlockers;
 
     std::string mSnapshotAtUTC;

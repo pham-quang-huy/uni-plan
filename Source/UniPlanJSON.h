@@ -19,6 +19,6 @@
 namespace UniPlan
 {
 
-using JsonValue = nlohmann::json;
+using JSONValue = nlohmann::json;
 
 } // namespace UniPlan

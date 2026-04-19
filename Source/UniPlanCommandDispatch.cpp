@@ -1,49 +1,104 @@
 #include "UniPlanRuntime.h"
-#include "UniPlanDocumentStore.h"
 #include "UniPlanForwardDecls.h"
-#include "UniPlanJsonIO.h"
-#include "UniPlanTopicTypes.h"
+#include "UniPlanHelpers.h"
 #ifdef UPLAN_WATCH
 #include "UniPlanWatchApp.h"
 #endif
-#include "UniPlanHelpers.h"
 #include "UniPlanTypes.h"
 
-#include <algorithm>
 #include <cctype>
-#include <chrono>
-#include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
-#include <map>
-#include <queue>
-#include <regex>
-#include <set>
-#include <sstream>
-#include <stdexcept>
 #include <string>
-#include <system_error>
-#include <unordered_map>
-#include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#include <io.h>
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
-
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#endif
 
 namespace UniPlan
 {
+
+// ---------------------------------------------------------------------------
+// Command dispatch table
+//
+// Replaces a 13-branch if/else chain on command name with a data-driven
+// table. Each entry maps a command string to its handler function.
+// Subcommand dispatchers are defined separately (job, task, lane,
+// testing, manifest) and registered through the same table.
+// ---------------------------------------------------------------------------
+
+using FCommandHandler = int (*)(const std::vector<std::string> &,
+                                const std::string &);
+
+struct FCommandEntry
+{
+    const char *mName;
+    FCommandHandler mpHandler;
+};
+
+template <size_t N>
+static int DispatchSubcommand(const char *InGroupName,
+                              const std::vector<std::string> &InArgs,
+                              const std::string &InCwd,
+                              const FCommandEntry (&InSubs)[N],
+                              const char *InExpectedList)
+{
+    if (InArgs.empty())
+    {
+        throw UsageError(std::string(InGroupName) +
+                         " requires subcommand: " + InExpectedList);
+    }
+    for (size_t Index = 0; Index < N; ++Index)
+    {
+        if (InArgs[0] == InSubs[Index].mName)
+        {
+            const std::vector<std::string> SubArgs(InArgs.begin() + 1,
+                                                   InArgs.end());
+            return InSubs[Index].mpHandler(SubArgs, InCwd);
+        }
+    }
+    throw UsageError("Unknown " + std::string(InGroupName) +
+                     " subcommand: " + InArgs[0]);
+}
+
+static int DispatchJobCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {{"set", &RunJobSetCommand}};
+    return DispatchSubcommand("job", InArgs, InCwd, kSubs, "set");
+}
+
+static int DispatchTaskCommand(const std::vector<std::string> &InArgs,
+                               const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {{"set", &RunTaskSetCommand}};
+    return DispatchSubcommand("task", InArgs, InCwd, kSubs, "set");
+}
+
+static int DispatchLaneCommand(const std::vector<std::string> &InArgs,
+                               const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {{"set", &RunLaneSetCommand},
+                                          {"add", &RunLaneAddCommand}};
+    return DispatchSubcommand("lane", InArgs, InCwd, kSubs, "set, add");
+}
+
+static int DispatchTestingCommand(const std::vector<std::string> &InArgs,
+                                  const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {{"add", &RunTestingAddCommand},
+                                          {"set", &RunTestingSetCommand}};
+    return DispatchSubcommand("testing", InArgs, InCwd, kSubs, "add, set");
+}
+
+static int DispatchManifestCommand(const std::vector<std::string> &InArgs,
+                                   const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {{"add", &RunManifestAddCommand},
+                                          {"set", &RunManifestSetCommand},
+                                          {"remove", &RunManifestRemoveCommand},
+                                          {"list", &RunManifestListCommand}};
+    return DispatchSubcommand("manifest", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
+}
 
 // ---------------------------------------------------------------------------
 // Phase list all — collects phases from every plan in the inventory
@@ -496,158 +551,30 @@ int RunMain(const int InArgc, char *InArgv[])
     {
         // V4 bundle-native commands
         const std::string CWD = fs::current_path().string();
+        const std::vector<std::string> Args(Tokens.begin() + 1, Tokens.end());
 
-        if (Command == "topic")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            return RunTopicCommand(Args, CWD);
-        }
+        static const FCommandEntry kCommands[] = {
+            {"topic", &RunTopicCommand},
+            {"phase", &RunBundlePhaseCommand},
+            {"changelog", &RunBundleChangelogCommand},
+            {"verification", &RunBundleVerificationCommand},
+            {"timeline", &RunBundleTimelineCommand},
+            {"blockers", &RunBundleBlockersCommand},
+            {"validate", &RunBundleValidateCommand},
+            {"job", &DispatchJobCommand},
+            {"task", &DispatchTaskCommand},
+            {"lane", &DispatchLaneCommand},
+            {"testing", &DispatchTestingCommand},
+            {"manifest", &DispatchManifestCommand},
+        };
 
-        if (Command == "phase")
+        for (const FCommandEntry &Entry : kCommands)
         {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            return RunBundlePhaseCommand(Args, CWD);
-        }
-
-        if (Command == "changelog")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            return RunBundleChangelogCommand(Args, CWD);
-        }
-
-        if (Command == "verification")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            return RunBundleVerificationCommand(Args, CWD);
-        }
-
-        if (Command == "timeline")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            return RunBundleTimelineCommand(Args, CWD);
-        }
-
-        if (Command == "blockers")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            return RunBundleBlockersCommand(Args, CWD);
-        }
-
-        if (Command == "validate")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            return RunBundleValidateCommand(Args, CWD);
-        }
-
-        if (Command == "job")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (!Args.empty() && Args[0] == "set")
+            if (Command == Entry.mName)
             {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunJobSetCommand(SubArgs, CWD);
+                return Entry.mpHandler(Args, CWD);
             }
-            throw UsageError("job requires subcommand: set");
         }
-
-        if (Command == "task")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (!Args.empty() && Args[0] == "set")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunTaskSetCommand(SubArgs, CWD);
-            }
-            throw UsageError("task requires subcommand: set");
-        }
-
-        if (Command == "lane")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (!Args.empty() && Args[0] == "set")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunLaneSetCommand(SubArgs, CWD);
-            }
-            if (!Args.empty() && Args[0] == "add")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunLaneAddCommand(SubArgs, CWD);
-            }
-            throw UsageError("lane requires subcommand: set, add");
-        }
-
-        if (Command == "testing")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (!Args.empty() && Args[0] == "add")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunTestingAddCommand(SubArgs, CWD);
-            }
-            if (!Args.empty() && Args[0] == "set")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunTestingSetCommand(SubArgs, CWD);
-            }
-            throw UsageError("testing requires subcommand: add, set");
-        }
-
-        if (Command == "manifest")
-        {
-            const std::vector<std::string> Args(Tokens.begin() + 1,
-                                                Tokens.end());
-            if (!Args.empty() && Args[0] == "add")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunManifestAddCommand(SubArgs, CWD);
-            }
-            if (!Args.empty() && Args[0] == "set")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunManifestSetCommand(SubArgs, CWD);
-            }
-            if (!Args.empty() && Args[0] == "remove")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunManifestRemoveCommand(SubArgs, CWD);
-            }
-            if (!Args.empty() && Args[0] == "list")
-            {
-                const std::vector<std::string> SubArgs(Args.begin() + 1,
-                                                       Args.end());
-                return RunManifestListCommand(SubArgs, CWD);
-            }
-            throw UsageError(
-                "manifest requires subcommand: add, set, remove, list");
-        }
-
-        // --- Old .md-based commands removed ---
-        // list, phase (old), lint, inventory, orphan-check,
-        // artifacts, changelog (old), verification (old), schema,
-        // rules, validate (old), section, excerpt, table, graph,
-        // diagnose, timeline (old), blockers (old), plan, evidence,
-        // tag, search — all replaced by V4 bundle-native commands.
 
         if (Command == "cache")
         {

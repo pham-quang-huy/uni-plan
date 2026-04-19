@@ -1,7 +1,7 @@
 #include "UniPlanTestFixture.h"
 
 #include "UniPlanForwardDecls.h"
-#include "UniPlanJsonIO.h"
+#include "UniPlanJSONIO.h"
 #include "UniPlanTopicTypes.h"
 
 #include <fstream>

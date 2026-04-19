@@ -1,14 +1,10 @@
 #include "UniPlanForwardDecls.h"
-#include "UniPlanHelpers.h"
+#include "UniPlanStatusHelpers.h"
+#include "UniPlanStringHelpers.h"
 #include "UniPlanTypes.h"
 
 #include <algorithm>
-#include <fstream>
-#include <iostream>
-#include <map>
-#include <regex>
 #include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -131,178 +127,6 @@ std::string ValidateAndNormalizeStatusFilter(
         }
     }
     return bNegate ? ("!" + Normalized) : Normalized;
-}
-
-ListOptions ParseListOptions(const std::vector<std::string> &InTokens)
-{
-    ListOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--type")
-        {
-            Options.mKind =
-                ToLower(ConsumeValuedOption(Remaining, Index, "--type"));
-            continue;
-        }
-        if (Token == "--status" || Token == "--state")
-        {
-            Options.mStatus =
-                ToLower(Trim(ConsumeValuedOption(Remaining, Index, Token)));
-            continue;
-        }
-        throw UsageError("Unknown option for list: " + Token);
-    }
-
-    if (Options.mKind.empty())
-    {
-        throw UsageError("Missing required option --type");
-    }
-
-    static const std::set<std::string> AllowedKinds = {"implementation", "pair",
-                                                       "plan", "playbook"};
-    if (AllowedKinds.count(Options.mKind) == 0)
-    {
-        throw UsageError("Invalid value for --type: " + Options.mKind);
-    }
-
-    Options.mStatus = ValidateAndNormalizeStatusFilter(
-        Options.mStatus, "Supported values: all | not_started | in_progress | "
-                         "completed | closed | blocked | canceled | unknown "
-                         "(prefix with ! to exclude)");
-
-    return Options;
-}
-
-int ParsePositiveInteger(const std::string &InValue,
-                         const std::string &InOptionName)
-{
-    try
-    {
-        size_t ParsedLength = 0;
-        const int ParsedValue = std::stoi(InValue, &ParsedLength);
-        if (ParsedLength != InValue.size() || ParsedValue <= 0)
-        {
-            throw UsageError("Invalid value for " + InOptionName + ": " +
-                             InValue);
-        }
-        return ParsedValue;
-    }
-    catch (const std::invalid_argument &)
-    {
-        throw UsageError("Invalid value for " + InOptionName + ": " + InValue);
-    }
-    catch (const std::out_of_range &)
-    {
-        throw UsageError("Value out of range for " + InOptionName + ": " +
-                         InValue);
-    }
-}
-
-int ParseNonNegativeInteger(const std::string &InValue,
-                            const std::string &InOptionName)
-{
-    try
-    {
-        size_t ParsedLength = 0;
-        const int ParsedValue = std::stoi(InValue, &ParsedLength);
-        if (ParsedLength != InValue.size() || ParsedValue < 0)
-        {
-            throw UsageError("Invalid value for " + InOptionName + ": " +
-                             InValue);
-        }
-        return ParsedValue;
-    }
-    catch (const std::invalid_argument &)
-    {
-        throw UsageError("Invalid value for " + InOptionName + ": " + InValue);
-    }
-    catch (const std::out_of_range &)
-    {
-        throw UsageError("Value out of range for " + InOptionName + ": " +
-                         InValue);
-    }
-}
-
-ValidateOptions ParseValidateOptions(const std::vector<std::string> &InTokens)
-{
-    ValidateOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (const std::string &Token : Remaining)
-    {
-        if (Token == "--strict")
-        {
-            Options.mbStrict = true;
-            continue;
-        }
-        throw UsageError("Unknown option for validate: " + Token);
-    }
-    return Options;
-}
-
-TimelineOptions ParseTimelineOptions(const std::vector<std::string> &InTokens)
-{
-    TimelineOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--topic")
-        {
-            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
-            continue;
-        }
-        if (Token == "--since")
-        {
-            Options.mSince = ConsumeValuedOption(Remaining, Index, "--since");
-            continue;
-        }
-        throw UsageError("Unknown option for timeline: " + Token);
-    }
-
-    if (Trim(Options.mTopic).empty())
-    {
-        throw UsageError("Missing required option --topic");
-    }
-    if (!Options.mSince.empty() && !LooksLikeIsoDate(Options.mSince))
-    {
-        throw UsageError("Invalid value for --since (expected YYYY-MM-DD): " +
-                         Options.mSince);
-    }
-    return Options;
-}
-
-BlockersOptions ParseBlockersOptions(const std::vector<std::string> &InTokens)
-{
-    BlockersOptions Options;
-    const std::vector<std::string> Remaining =
-        ConsumeCommonOptions(InTokens, Options);
-
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--status")
-        {
-            Options.mStatus =
-                ToLower(ConsumeValuedOption(Remaining, Index, "--status"));
-            continue;
-        }
-        throw UsageError("Unknown option for blockers: " + Token);
-    }
-
-    static const std::set<std::string> AllowedStatus = {"open", "blocked"};
-    Options.mStatus = ValidateAndNormalizeStatusFilter(
-        Options.mStatus,
-        "Supported values: all | open | blocked (prefix with ! to exclude)",
-        &AllowedStatus);
-    return Options;
 }
 
 CacheInfoOptions ParseCacheInfoOptions(const std::vector<std::string> &InTokens)
@@ -685,7 +509,17 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--status")
         {
-            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            ETopicStatus Value;
+            if (!TopicStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid topic status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked, canceled)");
+            }
+            Options.opStatus = Value;
             continue;
         }
         if (Token == "--next-actions")
@@ -885,7 +719,17 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--status")
         {
-            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid phase status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
             continue;
         }
         if (Token == "--done")
@@ -1099,7 +943,17 @@ FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--status")
         {
-            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid job status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
             continue;
         }
         if (Token == "--scope")
@@ -1170,7 +1024,17 @@ FTaskSetOptions ParseTaskSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--status")
         {
-            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid task status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
             continue;
         }
         if (Token == "--evidence")
@@ -1222,7 +1086,15 @@ ParseChangelogAddOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--type")
         {
-            Options.mType = ConsumeValuedOption(Remaining, Index, "--type");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--type");
+            EChangeType Value;
+            if (!ChangeTypeFromString(Raw, Value))
+            {
+                throw UsageError("Invalid changelog type '" + Raw +
+                                 "' (expected: feat, fix, refactor, chore)");
+            }
+            Options.mType = Value;
             continue;
         }
         if (Token == "--affected")
@@ -1593,7 +1465,15 @@ ParsePhaseLogOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--type")
         {
-            Options.mType = ConsumeValuedOption(Remaining, Index, "--type");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--type");
+            EChangeType Value;
+            if (!ChangeTypeFromString(Raw, Value))
+            {
+                throw UsageError("Invalid changelog type '" + Raw +
+                                 "' (expected: feat, fix, refactor, chore)");
+            }
+            Options.mType = Value;
             continue;
         }
         if (Token == "--affected")
@@ -1713,7 +1593,17 @@ FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--status")
         {
-            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid lane status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
             continue;
         }
         if (Token == "--scope")
@@ -1764,7 +1654,15 @@ ParseTestingAddOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--actor")
         {
-            Options.mActor = ConsumeValuedOption(Remaining, Index, "--actor");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--actor");
+            ETestingActor Value;
+            if (!TestingActorFromString(Raw, Value))
+            {
+                throw UsageError("Invalid actor '" + Raw +
+                                 "' (expected: human, ai, automated)");
+            }
+            Options.opActor = Value;
             continue;
         }
         if (Token == "--step")
@@ -1831,7 +1729,15 @@ ParseManifestAddOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--action")
         {
-            Options.mAction = ConsumeValuedOption(Remaining, Index, "--action");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--action");
+            EFileAction Value;
+            if (!FileActionFromString(Raw, Value))
+            {
+                throw UsageError("Invalid file action '" + Raw +
+                                 "' (expected: create, modify, delete)");
+            }
+            Options.opAction = Value;
             continue;
         }
         if (Token == "--description")
@@ -1848,7 +1754,7 @@ ParseManifestAddOptions(const std::vector<std::string> &InTokens)
         throw UsageError("manifest add requires --phase");
     if (Options.mFile.empty())
         throw UsageError("manifest add requires --file");
-    if (Options.mAction.empty())
+    if (!Options.opAction.has_value())
         throw UsageError("manifest add requires --action");
     if (Options.mDescription.empty())
         throw UsageError("manifest add requires --description");
@@ -1890,7 +1796,15 @@ ParseTestingSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--actor")
         {
-            Options.mActor = ConsumeValuedOption(Remaining, Index, "--actor");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--actor");
+            ETestingActor Value;
+            if (!TestingActorFromString(Raw, Value))
+            {
+                throw UsageError("Invalid actor '" + Raw +
+                                 "' (expected: human, ai, automated)");
+            }
+            Options.opActor = Value;
             continue;
         }
         if (Token == "--step")
@@ -2061,7 +1975,15 @@ ParseManifestSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--action")
         {
-            Options.mAction = ConsumeValuedOption(Remaining, Index, "--action");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--action");
+            EFileAction Value;
+            if (!FileActionFromString(Raw, Value))
+            {
+                throw UsageError("Invalid file action '" + Raw +
+                                 "' (expected: create, modify, delete)");
+            }
+            Options.opAction = Value;
             continue;
         }
         if (Token == "--description")
@@ -2121,7 +2043,15 @@ ParseChangelogSetOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--type")
         {
-            Options.mType = ConsumeValuedOption(Remaining, Index, "--type");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--type");
+            EChangeType Value;
+            if (!ChangeTypeFromString(Raw, Value))
+            {
+                throw UsageError("Invalid changelog type '" + Raw +
+                                 "' (expected: feat, fix, refactor, chore)");
+            }
+            Options.opType = Value;
             continue;
         }
         if (Token == "--affected")
@@ -2158,7 +2088,17 @@ FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--status")
         {
-            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid lane status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
             continue;
         }
         if (Token == "--scope")
@@ -2205,7 +2145,17 @@ FPhaseAddOptions ParsePhaseAddOptions(const std::vector<std::string> &InTokens)
         }
         if (Token == "--status")
         {
-            Options.mStatus = ConsumeValuedOption(Remaining, Index, "--status");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid phase status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
             continue;
         }
         throw UsageError("Unknown option for phase add: " + Token);

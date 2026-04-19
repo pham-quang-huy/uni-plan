@@ -1,6 +1,5 @@
 #pragma once
 
-#include "UniPlanDocumentTypes.h"
 #include "UniPlanTaxonomyTypes.h"
 
 #include <map>

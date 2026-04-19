@@ -1,7 +1,7 @@
 #pragma once
 
 #include "UniPlanEnums.h"
-#include "UniPlanJson.h"
+#include "UniPlanJSON.h"
 
 #include <string>
 #include <vector>
@@ -15,21 +15,21 @@ namespace UniPlan
 // All Require* functions return false and set OutError on failure.
 // ---------------------------------------------------------------------------
 
-bool RequireString(const JsonValue &InJson, const std::string &InKey,
+bool RequireString(const JSONValue &InJson, const std::string &InKey,
                    std::string &OutValue, const std::string &InContext,
                    std::string &OutError);
 
-bool RequireArray(const JsonValue &InJson, const std::string &InKey,
+bool RequireArray(const JSONValue &InJson, const std::string &InKey,
                   const std::string &InContext, std::string &OutError);
 
-bool RequireStringArray(const JsonValue &InJson, const std::string &InKey,
+bool RequireStringArray(const JSONValue &InJson, const std::string &InKey,
                         std::vector<std::string> &OutValue,
                         const std::string &InContext, std::string &OutError);
 
-bool OptionalString(const JsonValue &InJson, const std::string &InKey,
+bool OptionalString(const JSONValue &InJson, const std::string &InKey,
                     std::string &OutValue);
 
-bool OptionalStringArray(const JsonValue &InJson, const std::string &InKey,
+bool OptionalStringArray(const JSONValue &InJson, const std::string &InKey,
                          std::vector<std::string> &OutValue);
 
 // ---------------------------------------------------------------------------
@@ -39,24 +39,24 @@ bool OptionalStringArray(const JsonValue &InJson, const std::string &InKey,
 //    not_started|in_progress|completed|blocked"
 // ---------------------------------------------------------------------------
 
-bool RequireExecutionStatus(const JsonValue &InJson, const std::string &InKey,
+bool RequireExecutionStatus(const JSONValue &InJson, const std::string &InKey,
                             EExecutionStatus &OutValue,
                             const std::string &InContext,
                             std::string &OutError);
 
-bool RequireTopicStatus(const JsonValue &InJson, const std::string &InKey,
+bool RequireTopicStatus(const JSONValue &InJson, const std::string &InKey,
                         ETopicStatus &OutValue, const std::string &InContext,
                         std::string &OutError);
 
-bool RequireFileAction(const JsonValue &InJson, const std::string &InKey,
+bool RequireFileAction(const JSONValue &InJson, const std::string &InKey,
                        EFileAction &OutValue, const std::string &InContext,
                        std::string &OutError);
 
-bool RequireTestingActor(const JsonValue &InJson, const std::string &InKey,
+bool RequireTestingActor(const JSONValue &InJson, const std::string &InKey,
                          ETestingActor &OutValue, const std::string &InContext,
                          std::string &OutError);
 
-bool RequireChangeType(const JsonValue &InJson, const std::string &InKey,
+bool RequireChangeType(const JSONValue &InJson, const std::string &InKey,
                        EChangeType &OutValue, const std::string &InContext,
                        std::string &OutError);
 
@@ -66,11 +66,11 @@ bool RequireChangeType(const JsonValue &InJson, const std::string &InKey,
 // the caller's struct default applies.
 // ---------------------------------------------------------------------------
 
-bool OptionalChangeType(const JsonValue &InJson, const std::string &InKey,
+bool OptionalChangeType(const JSONValue &InJson, const std::string &InKey,
                         EChangeType &OutValue, const std::string &InContext,
                         std::string &OutError);
 
-bool OptionalTestingActor(const JsonValue &InJson, const std::string &InKey,
+bool OptionalTestingActor(const JSONValue &InJson, const std::string &InKey,
                           ETestingActor &OutValue, const std::string &InContext,
                           std::string &OutError);
 

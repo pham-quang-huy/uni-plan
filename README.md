@@ -142,6 +142,169 @@ Full grammar (options, flags, every subcommand) lives in [CLAUDE.md](CLAUDE.md) 
 
 Default output is JSON with two top-level sections — `issues[]` and `summary` — so agents can consume any command without raw file reads.
 
+## primary_use_cases
+
+> Target: canonical agent recipes for the most common plan-governance actions. Every recipe is CLI-only — no raw JSON edits, no file opens.
+
+### dependencies_field_model
+
+> Target: understand what `dependencies` means before mutating it.
+
+Typed list of `FBundleReference` entries, present at **both** plan-level ([FPlanMetadata.mDependencies](Source/UniPlanTopicTypes.h)) and phase-level ([FPhaseDesignMaterial.mDependencies](Source/UniPlanTopicTypes.h)). Each reference has a kind, topic key, phase index, path, and free-text note. Kinds:
+
+| Kind | Purpose | Required segments |
+| --- | --- | --- |
+| `bundle` | Depend on another topic's whole plan | `<topic>` |
+| `phase` | Depend on a specific phase in another topic | `<topic>` + `<phase>` |
+| `governance` | Reference a repo governance doc (e.g. `CLAUDE.md`, `AGENTS.md`) | `<path>` |
+| `external` | Reference a third-party doc or URL | `<path>` |
+
+Validators enforce integrity: `topic_ref_integrity` (the target topic must exist), `path_resolves` (the path must resolve on disk for repo-local refs), `canonical_entity_ref` (changelog `affected` paths must match the `phases[N]` / `jobs[N]` / `lanes[N]` shape).
+
+### blockers_field_model
+
+> Target: understand the difference between a *dependency* (structural) and a *blocker* (narrative + status flip).
+
+| Field | Scope | Type | Set by |
+| --- | --- | --- | --- |
+| Phase `mBlockers` | Phase-level only | Free-form `std::string` on `FPhaseLifecycle` | `phase block --reason <text>` (semantic, also flips status to `blocked`) or `phase set --blockers <text>` (raw) |
+| Topic blockage | Topic-level | No dedicated string field — captured via `mStatus=Blocked` + auto-changelog entry | `topic block --reason <text>` |
+
+A blocker text describes *why* work is paused right now. A dependency is a durable typed link that survives across blockages and informs readiness checks.
+
+### record_a_topic_level_dependency
+
+> Target: express that Topic A's plan depends on another topic or doc.
+
+```bash
+# Depend on Topic B's whole plan
+uni-plan topic set --topic A \
+  --dependency-add 'bundle|B||Docs/Plans/B.Plan.json|B must ship first'
+
+# Depend on a specific phase of Topic B
+uni-plan topic set --topic A \
+  --dependency-add 'phase|B|3||Waiting on B phase 3 output'
+
+# Clear all existing topic dependencies before adding fresh ones
+uni-plan topic set --topic A --dependency-clear \
+  --dependency-add 'phase|B|3||Refreshed dep after replan'
+```
+
+Grammar is pipe-delimited: `<kind>|<topic>|<phase>|<path>|<note>`. Empty segments are allowed; only the kind-specific required segments must be non-empty.
+
+### record_a_phase_level_dependency
+
+> Target: express that Phase N of Topic A depends on a specific phase of Topic B.
+
+```bash
+uni-plan phase set --topic A --phase N \
+  --dependency-add 'phase|B|3||Phase 3 of B produces the schema that phase N consumes'
+```
+
+Same grammar as `topic set`. The dependency lives in `FPhaseDesignMaterial.mDependencies` and surfaces in `uni-plan phase get --execution`.
+
+### plan_blocked_by_an_external_plans_phase
+
+> Target: record that Topic A's *entire plan* is paused because Topic B phase 3 hasn't shipped.
+
+```bash
+# 1) Record the typed structural dependency (durable — stays past the blockage)
+uni-plan topic set --topic A \
+  --dependency-add 'phase|B|3||Waiting on B phase 3 output'
+
+# 2) Flip topic status to blocked and log the narrative reason
+uni-plan topic block --topic A --reason "Blocked by B[3]: schema not merged"
+```
+
+`topic block` gates on `status=in_progress`, flips status to `blocked`, and auto-appends a changelog entry. There is no semantic `topic unblock` — to resume, use `uni-plan topic set --topic A --status in_progress` once the dependency clears.
+
+### phase_blocked_by_an_external_plans_phase
+
+> Target: record that Phase N of Topic A is paused because Topic B phase 3 hasn't shipped.
+
+```bash
+# 1) Record the typed phase-to-phase dependency (once)
+uni-plan phase set --topic A --phase N \
+  --dependency-add 'phase|B|3||Requires B[3] telemetry schema'
+
+# 2) Flip the phase to blocked; the reason text persists in mBlockers
+uni-plan phase block --topic A --phase N \
+  --reason "Blocked by B[3]: telemetry schema not merged"
+
+# 3) When the external phase clears
+uni-plan phase unblock --topic A --phase N
+```
+
+`phase block --reason` **replaces** `mBlockers`; it does not append. `phase unblock` flips `blocked → in_progress`, clears `mBlockers`, and auto-logs the transition. Typed dependencies are not touched by block/unblock — they remain as historical record.
+
+### patch_one_word_of_a_long_prose_field
+
+> Target: change a single word (or insert a paragraph) in a long `investigation` / `scope` / `code_snippets` / `handoff` field. **The CLI does not support partial-field patching** — every mutation is a whole-field replace.
+
+Read → edit in memory → write back:
+
+```bash
+# 1) Read the current field via a query command (JSON output by default)
+uni-plan phase get --topic A --phase N > /tmp/phase.json
+# Extract the field: use jq, your agent's JSON parser, or any tool
+
+# 2) Edit the extracted string locally (sed, agent buffer, editor)
+
+# 3) Write the whole new string back
+uni-plan phase set --topic A --phase N --investigation "$(cat /tmp/new_investigation.txt)"
+```
+
+This pattern applies to every long text field (`scope`, `output`, `investigation`, `code_snippets`, `code_entity_contract`, `best_practices`, `handoff`, `readiness_gate`, `multi_platforming`, `done`, `remaining`). Never edit the `.Plan.json` file directly — raw writes bypass validation, timestamp updates, auto-changelog emission, and the typed domain model (violates R1).
+
+### reference_governance_or_external_docs
+
+> Target: mark reliance on a non-bundle doc — repo governance (`CLAUDE.md`, `AGENTS.md`), an RFC, or an external URL.
+
+```bash
+# Governance (repo-local)
+uni-plan phase set --topic A --phase 0 \
+  --dependency-add 'governance|||CLAUDE.md|Naming rules enforced by hooks'
+
+# External (third-party spec or URL)
+uni-plan topic set --topic A \
+  --dependency-add 'external|||https://example.org/spec.pdf|Reference spec v2'
+```
+
+For `governance` and `external`, the `<topic>` and `<phase>` segments are empty; `<path>` is required.
+
+### enumerate_currently_blocked_work
+
+> Target: list every phase currently in `blocked` status with its reason text.
+
+```bash
+uni-plan blockers                # every topic
+uni-plan blockers --topic A      # scope to one topic
+uni-plan blockers --human        # ANSI table rendering
+```
+
+### find_the_next_phase_to_execute
+
+> Target: ask the CLI which phase is ready to start and what gates still need to pass.
+
+```bash
+uni-plan phase next --topic A               # find next not_started phase + readiness summary
+uni-plan phase readiness --topic A --phase 3  # gate-by-gate status for a specific phase
+```
+
+`phase next` surfaces both the candidate phase and its readiness report, so an agent can decide whether to `phase start` or finish remaining prerequisites first.
+
+### audit_the_entire_corpus_through_one_command
+
+> Target: get aggregate stats across every `.Plan.json` bundle without raw JSON reads.
+
+```bash
+uni-plan validate                # issues[] + summary block (topic_count, per-phase char sizes, manifest stats)
+uni-plan validate --strict       # ErrorMinor + Warning also flip valid=false
+uni-plan manifest list --missing-only  # every file_manifest entry that doesn't resolve on disk
+```
+
+These three commands (added in `v0.71.0`) replaced the previous temptation to `json.load` each bundle for cross-topic statistics. If your analytical need isn't expressible here, report the CLI gap per R1 rather than falling back to raw reads.
+
 ## validation_surface
 
 > Target: every `.Plan.json` bundle passes three severity tiers covering structural integrity, structural warnings, and content hygiene.

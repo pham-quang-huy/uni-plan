@@ -1,5 +1,5 @@
-#include "UniPlanJsonIO.h"
-#include "UniPlanJson.h"
+#include "UniPlanJSONIO.h"
+#include "UniPlanJSON.h"
 #include "UniPlanSchemaValidation.h"
 
 #include <fstream>
@@ -12,7 +12,7 @@ namespace UniPlan
 // JSON access helpers
 // ---------------------------------------------------------------------------
 
-static std::string GetString(const JsonValue &InJson, const std::string &InKey,
+static std::string GetString(const JSONValue &InJson, const std::string &InKey,
                              const std::string &InDefault = "")
 {
     if (InJson.contains(InKey) && InJson[InKey].is_string())
@@ -24,9 +24,9 @@ static std::string GetString(const JsonValue &InJson, const std::string &InKey,
 // Serialization helpers: C++ structs -> JSON
 // ---------------------------------------------------------------------------
 
-static JsonValue SerializeChangeLogEntry(const FChangeLogEntry &InEntry)
+static JSONValue SerializeChangeLogEntry(const FChangeLogEntry &InEntry)
 {
-    JsonValue Entry = JsonValue::object();
+    JSONValue Entry = JSONValue::object();
     if (InEntry.mPhase < 0)
         Entry["phase"] = nullptr;
     else
@@ -39,9 +39,9 @@ static JsonValue SerializeChangeLogEntry(const FChangeLogEntry &InEntry)
     return Entry;
 }
 
-static JsonValue SerializeVerificationEntry(const FVerificationEntry &InEntry)
+static JSONValue SerializeVerificationEntry(const FVerificationEntry &InEntry)
 {
-    JsonValue Entry = JsonValue::object();
+    JSONValue Entry = JSONValue::object();
     if (InEntry.mPhase < 0)
         Entry["phase"] = nullptr;
     else
@@ -60,27 +60,27 @@ static JsonValue SerializeVerificationEntry(const FVerificationEntry &InEntry)
 // Changelogs/verifications as flat arrays with scope.
 // ---------------------------------------------------------------------------
 
-static JsonValue SerializeStringArray(const std::vector<std::string> &InArray)
+static JSONValue SerializeStringArray(const std::vector<std::string> &InArray)
 {
-    JsonValue Arr = JsonValue::array();
+    JSONValue Arr = JSONValue::array();
     for (const std::string &Item : InArray)
         Arr.push_back(Item);
     return Arr;
 }
 
-static JsonValue SerializeValidationCommand(const FValidationCommand &InEntry)
+static JSONValue SerializeValidationCommand(const FValidationCommand &InEntry)
 {
-    JsonValue Entry = JsonValue::object();
+    JSONValue Entry = JSONValue::object();
     Entry["platform"] = ToString(InEntry.mPlatform);
     Entry["command"] = InEntry.mCommand;
     Entry["description"] = InEntry.mDescription;
     return Entry;
 }
 
-static JsonValue
+static JSONValue
 SerializeValidationCommandArray(const std::vector<FValidationCommand> &InArray)
 {
-    JsonValue Arr = JsonValue::array();
+    JSONValue Arr = JSONValue::array();
     for (const FValidationCommand &C : InArray)
         Arr.push_back(SerializeValidationCommand(C));
     return Arr;
@@ -95,17 +95,17 @@ SerializeValidationCommandArray(const std::vector<FValidationCommand> &InArray)
 // continue to load. The migration script converts string form to array
 // form; the CLI always writes array form going forward.
 static void
-DeserializeValidationCommands(const JsonValue &InParent,
+DeserializeValidationCommands(const JSONValue &InParent,
                               const std::string &InKey,
                               std::vector<FValidationCommand> &OutArray)
 {
     OutArray.clear();
     if (!InParent.contains(InKey))
         return;
-    const JsonValue &V = InParent[InKey];
+    const JSONValue &V = InParent[InKey];
     if (V.is_array())
     {
-        for (const JsonValue &E : V)
+        for (const JSONValue &E : V)
         {
             if (!E.is_object())
                 continue;
@@ -136,9 +136,9 @@ DeserializeValidationCommands(const JsonValue &InParent,
 // is preserved as a single External record with mNote=<raw>).
 // ---------------------------------------------------------------------------
 
-static JsonValue SerializeBundleReference(const FBundleReference &InEntry)
+static JSONValue SerializeBundleReference(const FBundleReference &InEntry)
 {
-    JsonValue Entry = JsonValue::object();
+    JSONValue Entry = JSONValue::object();
     Entry["kind"] = ToString(InEntry.mKind);
     Entry["topic"] = InEntry.mTopic;
     if (InEntry.mPhase < 0)
@@ -150,26 +150,26 @@ static JsonValue SerializeBundleReference(const FBundleReference &InEntry)
     return Entry;
 }
 
-static JsonValue
+static JSONValue
 SerializeBundleReferenceArray(const std::vector<FBundleReference> &InArray)
 {
-    JsonValue Arr = JsonValue::array();
+    JSONValue Arr = JSONValue::array();
     for (const FBundleReference &R : InArray)
         Arr.push_back(SerializeBundleReference(R));
     return Arr;
 }
 
-static void DeserializeBundleReferences(const JsonValue &InParent,
+static void DeserializeBundleReferences(const JSONValue &InParent,
                                         const std::string &InKey,
                                         std::vector<FBundleReference> &OutArray)
 {
     OutArray.clear();
     if (!InParent.contains(InKey))
         return;
-    const JsonValue &V = InParent[InKey];
+    const JSONValue &V = InParent[InKey];
     if (V.is_array())
     {
-        for (const JsonValue &E : V)
+        for (const JSONValue &E : V)
         {
             if (!E.is_object())
                 continue;
@@ -200,18 +200,18 @@ static void DeserializeBundleReferences(const JsonValue &InParent,
     }
 }
 
-static JsonValue SerializeLaneRecord(const FLaneRecord &InLane)
+static JSONValue SerializeLaneRecord(const FLaneRecord &InLane)
 {
-    JsonValue Lane = JsonValue::object();
+    JSONValue Lane = JSONValue::object();
     Lane["status"] = ToString(InLane.mStatus);
     Lane["scope"] = InLane.mScope;
     Lane["exit_criteria"] = InLane.mExitCriteria;
     return Lane;
 }
 
-static JsonValue SerializeTaskRecord(const FTaskRecord &InTask)
+static JSONValue SerializeTaskRecord(const FTaskRecord &InTask)
 {
-    JsonValue Task = JsonValue::object();
+    JSONValue Task = JSONValue::object();
     Task["status"] = ToString(InTask.mStatus);
     Task["description"] = InTask.mDescription;
     Task["evidence"] = InTask.mEvidence;
@@ -220,16 +220,16 @@ static JsonValue SerializeTaskRecord(const FTaskRecord &InTask)
     return Task;
 }
 
-static JsonValue SerializeJobRecord(const FJobRecord &InJob)
+static JSONValue SerializeJobRecord(const FJobRecord &InJob)
 {
-    JsonValue Job = JsonValue::object();
+    JSONValue Job = JSONValue::object();
     Job["wave"] = InJob.mWave;
     Job["lane"] = InJob.mLane;
     Job["status"] = ToString(InJob.mStatus);
     Job["scope"] = InJob.mScope;
     Job["output"] = InJob.mOutput;
     Job["exit_criteria"] = InJob.mExitCriteria;
-    JsonValue Tasks = JsonValue::array();
+    JSONValue Tasks = JSONValue::array();
     for (const FTaskRecord &Task : InJob.mTasks)
         Tasks.push_back(SerializeTaskRecord(Task));
     Job["tasks"] = std::move(Tasks);
@@ -238,9 +238,9 @@ static JsonValue SerializeJobRecord(const FJobRecord &InJob)
     return Job;
 }
 
-static JsonValue SerializeTestingRecord(const FTestingRecord &InTest)
+static JSONValue SerializeTestingRecord(const FTestingRecord &InTest)
 {
-    JsonValue Test = JsonValue::object();
+    JSONValue Test = JSONValue::object();
     Test["session"] = InTest.mSession;
     Test["actor"] = ToString(InTest.mActor);
     Test["step"] = InTest.mStep;
@@ -250,18 +250,18 @@ static JsonValue SerializeTestingRecord(const FTestingRecord &InTest)
     return Test;
 }
 
-static JsonValue SerializeFileManifestItem(const FFileManifestItem &InItem)
+static JSONValue SerializeFileManifestItem(const FFileManifestItem &InItem)
 {
-    JsonValue Item = JsonValue::object();
+    JSONValue Item = JSONValue::object();
     Item["file"] = InItem.mFilePath;
     Item["action"] = ToString(InItem.mAction);
     Item["description"] = InItem.mDescription;
     return Item;
 }
 
-static JsonValue SerializePhaseRecord(const FPhaseRecord &InPhase)
+static JSONValue SerializePhaseRecord(const FPhaseRecord &InPhase)
 {
-    JsonValue Phase = JsonValue::object();
+    JSONValue Phase = JSONValue::object();
     Phase["scope"] = InPhase.mScope;
     Phase["output"] = InPhase.mOutput;
 
@@ -276,23 +276,23 @@ static JsonValue SerializePhaseRecord(const FPhaseRecord &InPhase)
     Phase["agent_context"] = LC.mAgentContext;
 
     // Execution taxonomy
-    JsonValue Lanes = JsonValue::array();
+    JSONValue Lanes = JSONValue::array();
     for (const FLaneRecord &Lane : InPhase.mLanes)
         Lanes.push_back(SerializeLaneRecord(Lane));
     Phase["lanes"] = std::move(Lanes);
 
-    JsonValue Jobs = JsonValue::array();
+    JSONValue Jobs = JSONValue::array();
     for (const FJobRecord &Job : InPhase.mJobs)
         Jobs.push_back(SerializeJobRecord(Job));
     Phase["jobs"] = std::move(Jobs);
 
     // Evidence
-    JsonValue Testing = JsonValue::array();
+    JSONValue Testing = JSONValue::array();
     for (const FTestingRecord &Test : InPhase.mTesting)
         Testing.push_back(SerializeTestingRecord(Test));
     Phase["testing"] = std::move(Testing);
 
-    JsonValue Manifest = JsonValue::array();
+    JSONValue Manifest = JSONValue::array();
     for (const FFileManifestItem &Item : InPhase.mFileManifest)
         Manifest.push_back(SerializeFileManifestItem(Item));
     Phase["file_manifest"] = std::move(Manifest);
@@ -313,9 +313,9 @@ static JsonValue SerializePhaseRecord(const FPhaseRecord &InPhase)
     return Phase;
 }
 
-static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
+static JSONValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
 {
-    JsonValue Root = JsonValue::object();
+    JSONValue Root = JSONValue::object();
     Root["$schema"] = "plan-v4";
     Root["topic"] = InBundle.mTopicKey;
     Root["status"] = ToString(InBundle.mStatus);
@@ -338,7 +338,7 @@ static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["dependencies"] = SerializeBundleReferenceArray(Meta.mDependencies);
 
     // Phases (with inline tracking, index-based)
-    JsonValue Phases = JsonValue::array();
+    JSONValue Phases = JSONValue::array();
     for (const FPhaseRecord &Phase : InBundle.mPhases)
         Phases.push_back(SerializePhaseRecord(Phase));
     Root["phases"] = std::move(Phases);
@@ -346,13 +346,13 @@ static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["next_actions"] = InBundle.mNextActions;
 
     // Changelogs (flat array with scope)
-    JsonValue ChangeLogs = JsonValue::array();
+    JSONValue ChangeLogs = JSONValue::array();
     for (const FChangeLogEntry &Entry : InBundle.mChangeLogs)
         ChangeLogs.push_back(SerializeChangeLogEntry(Entry));
     Root["changelogs"] = std::move(ChangeLogs);
 
     // Verifications (flat array with scope)
-    JsonValue Verifications = JsonValue::array();
+    JSONValue Verifications = JSONValue::array();
     for (const FVerificationEntry &Entry : InBundle.mVerifications)
         Verifications.push_back(SerializeVerificationEntry(Entry));
     Root["verifications"] = std::move(Verifications);
@@ -360,7 +360,7 @@ static JsonValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     return Root;
 }
 
-static bool DeserializeLaneRecordStrict(const JsonValue &InJson,
+static bool DeserializeLaneRecordStrict(const JSONValue &InJson,
                                         FLaneRecord &OutLane,
                                         const std::string &InContext,
                                         std::string &OutError)
@@ -376,7 +376,7 @@ static bool DeserializeLaneRecordStrict(const JsonValue &InJson,
     return true;
 }
 
-static bool DeserializeTaskRecordStrict(const JsonValue &InJson,
+static bool DeserializeTaskRecordStrict(const JSONValue &InJson,
                                         FTaskRecord &OutTask,
                                         const std::string &InContext,
                                         std::string &OutError)
@@ -395,7 +395,7 @@ static bool DeserializeTaskRecordStrict(const JsonValue &InJson,
     return true;
 }
 
-static bool DeserializeJobRecordStrict(const JsonValue &InJson,
+static bool DeserializeJobRecordStrict(const JSONValue &InJson,
                                        FJobRecord &OutJob,
                                        const std::string &InContext,
                                        std::string &OutError)
@@ -446,7 +446,7 @@ static bool DeserializeJobRecordStrict(const JsonValue &InJson,
     return true;
 }
 
-static bool DeserializeTestingRecordStrict(const JsonValue &InJson,
+static bool DeserializeTestingRecordStrict(const JSONValue &InJson,
                                            FTestingRecord &OutTest,
                                            const std::string &InContext,
                                            std::string &OutError)
@@ -470,7 +470,7 @@ static bool DeserializeTestingRecordStrict(const JsonValue &InJson,
     return true;
 }
 
-static bool DeserializeFileManifestStrict(const JsonValue &InJson,
+static bool DeserializeFileManifestStrict(const JSONValue &InJson,
                                           FFileManifestItem &OutItem,
                                           const std::string &InContext,
                                           std::string &OutError)
@@ -486,7 +486,7 @@ static bool DeserializeFileManifestStrict(const JsonValue &InJson,
     return true;
 }
 
-static bool DeserializeChangeLogStrict(const JsonValue &InJson,
+static bool DeserializeChangeLogStrict(const JSONValue &InJson,
                                        FChangeLogEntry &OutEntry,
                                        const std::string &InContext,
                                        std::string &OutError)
@@ -507,7 +507,7 @@ static bool DeserializeChangeLogStrict(const JsonValue &InJson,
     return true;
 }
 
-static bool DeserializeVerificationStrict(const JsonValue &InJson,
+static bool DeserializeVerificationStrict(const JSONValue &InJson,
                                           FVerificationEntry &OutEntry,
                                           const std::string &InContext,
                                           std::string &OutError)
@@ -525,7 +525,7 @@ static bool DeserializeVerificationStrict(const JsonValue &InJson,
     return true;
 }
 
-static bool DeserializePhaseRecordStrict(const JsonValue &InJson,
+static bool DeserializePhaseRecordStrict(const JSONValue &InJson,
                                          FPhaseRecord &OutPhase,
                                          const std::string &InContext,
                                          std::string &OutError)
@@ -629,7 +629,7 @@ static bool DeserializePhaseRecordStrict(const JsonValue &InJson,
 // Rejects missing required fields, invalid enum values, wrong types.
 // ---------------------------------------------------------------------------
 
-static bool DeserializeTopicBundleV4(const JsonValue &InRoot,
+static bool DeserializeTopicBundleV4(const JSONValue &InRoot,
                                      FTopicBundle &OutBundle,
                                      std::string &OutError)
 {
@@ -742,7 +742,7 @@ bool TryWriteTopicBundle(const FTopicBundle &InBundle, const fs::path &InPath,
 {
     try
     {
-        const JsonValue Root = SerializeTopicBundleV4(InBundle);
+        const JSONValue Root = SerializeTopicBundleV4(InBundle);
         const std::string Content = Root.dump(2);
 
         std::ofstream Stream(InPath, std::ios::out | std::ios::trunc);
@@ -789,7 +789,7 @@ bool TryReadTopicBundle(const fs::path &InPath, FTopicBundle &OutBundle,
             return false;
         }
 
-        const JsonValue Root = JsonValue::parse(Content);
+        const JSONValue Root = JSONValue::parse(Content);
 
         if (!Root.is_object())
         {
@@ -807,7 +807,7 @@ bool TryReadTopicBundle(const fs::path &InPath, FTopicBundle &OutBundle,
         }
         return DeserializeTopicBundleV4(Root, OutBundle, OutError);
     }
-    catch (const JsonValue::parse_error &Ex)
+    catch (const JSONValue::parse_error &Ex)
     {
         OutError = std::string("Bundle parse error: ") + Ex.what();
         return false;

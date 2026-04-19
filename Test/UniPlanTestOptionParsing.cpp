@@ -18,7 +18,8 @@ TEST(OptionParsing, TopicSetHappyPath)
     const auto Opts = UniPlan::ParseTopicSetOptions(
         {"--topic", "Foo", "--status", "blocked"});
     EXPECT_EQ(Opts.mTopic, "Foo");
-    EXPECT_EQ(Opts.mStatus, "blocked");
+    ASSERT_TRUE(Opts.opStatus.has_value());
+    EXPECT_EQ(*Opts.opStatus, UniPlan::ETopicStatus::Blocked);
 }
 
 TEST(OptionParsing, TopicStartRequiresTopic)
@@ -56,7 +57,8 @@ TEST(OptionParsing, PhaseSetHappyPath)
          "All done"});
     EXPECT_EQ(Opts.mTopic, "X");
     EXPECT_EQ(Opts.mPhaseIndex, 3);
-    EXPECT_EQ(Opts.mStatus, "completed");
+    ASSERT_TRUE(Opts.opStatus.has_value());
+    EXPECT_EQ(*Opts.opStatus, UniPlan::EExecutionStatus::Completed);
     EXPECT_EQ(Opts.mDone, "All done");
 }
 
@@ -185,7 +187,8 @@ TEST(OptionParsing, ManifestAddHappyPath)
     EXPECT_EQ(Opts.mTopic, "X");
     EXPECT_EQ(Opts.mPhaseIndex, 1);
     EXPECT_EQ(Opts.mFile, "Source/Foo.cpp");
-    EXPECT_EQ(Opts.mAction, "create");
+    ASSERT_TRUE(Opts.opAction.has_value());
+    EXPECT_EQ(*Opts.opAction, UniPlan::EFileAction::Create);
     EXPECT_EQ(Opts.mDescription, "New file");
 }
 
@@ -257,7 +260,8 @@ TEST(OptionParsing, ChangelogSetHappyPath)
     EXPECT_EQ(O.mIndex, 2);
     EXPECT_EQ(O.mPhase, -1);
     EXPECT_EQ(O.mChange, "Updated");
-    EXPECT_EQ(O.mType, "fix");
+    ASSERT_TRUE(O.opType.has_value());
+    EXPECT_EQ(*O.opType, UniPlan::EChangeType::Fix);
     EXPECT_EQ(O.mAffected, "phases[2]");
 }
 

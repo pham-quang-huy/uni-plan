@@ -30,16 +30,24 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanParsing.cpp
     Source/UniPlanCache.cpp
     Source/UniPlanValidation.cpp
-    Source/UniPlanJsonLineIndex.cpp
-    Source/UniPlanOutputJson.cpp
+    Source/UniPlanValidationContent.cpp
+    Source/UniPlanJSONLineIndex.cpp
+    Source/UniPlanOutputJSON.cpp
     Source/UniPlanOutputText.cpp
     Source/UniPlanOutputHuman.cpp
-    Source/UniPlanAnalysis.cpp
     Source/UniPlanOptionParsing.cpp
-    Source/UniPlanJsonIO.cpp
-    Source/UniPlanDocumentStore.cpp
+    Source/UniPlanJSONIO.cpp
     Source/UniPlanSchemaValidation.cpp
     Source/UniPlanCommandBundle.cpp
+    Source/UniPlanCommandValidate.cpp
+    Source/UniPlanCommandHistory.cpp
+    Source/UniPlanCommandMutationCommon.cpp
+    Source/UniPlanCommandMutation.cpp
+    Source/UniPlanCommandLifecycle.cpp
+    Source/UniPlanCommandEntity.cpp
+    Source/UniPlanCommandSemanticQuery.cpp
+    Source/UniPlanCommandTopic.cpp
+    Source/UniPlanCommandPhase.cpp
 )
 
 target_include_directories(uni-plan-lib PUBLIC

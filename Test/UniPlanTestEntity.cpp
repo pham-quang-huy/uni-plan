@@ -1,7 +1,7 @@
 #include "UniPlanTestFixture.h"
 
 #include "UniPlanForwardDecls.h"
-#include "UniPlanJsonIO.h"
+#include "UniPlanJSONIO.h"
 #include "UniPlanRuntime.h"
 #include "UniPlanTypes.h"
 
@@ -48,14 +48,12 @@ TEST_F(FBundleTestFixture, TestingAddAppendsRecord)
 TEST_F(FBundleTestFixture, TestingAddInvalidActorFails)
 {
     CopyFixture("SampleTopic");
-    StartCapture();
-    const int Code = UniPlan::RunTestingAddCommand(
-        {"--topic", "SampleTopic", "--phase", "0", "--session", "T1", "--actor",
-         "robot", "--step", "X", "--action", "Y", "--expected", "Z",
-         "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    EXPECT_EQ(Code, 1);
+    EXPECT_THROW(UniPlan::RunTestingAddCommand(
+                     {"--topic", "SampleTopic", "--phase", "0", "--session",
+                      "T1", "--actor", "robot", "--step", "X", "--action", "Y",
+                      "--expected", "Z", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
 }
 
 TEST_F(FBundleTestFixture, TestingAddOutOfRangeFails)
@@ -120,13 +118,12 @@ TEST_F(FBundleTestFixture, ManifestAddAppendsItem)
 TEST_F(FBundleTestFixture, ManifestAddInvalidActionFails)
 {
     CopyFixture("SampleTopic");
-    StartCapture();
-    const int Code = UniPlan::RunManifestAddCommand(
-        {"--topic", "SampleTopic", "--phase", "0", "--file", "X", "--action",
-         "rename", "--description", "Y", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    EXPECT_EQ(Code, 1);
+    EXPECT_THROW(UniPlan::RunManifestAddCommand(
+                     {"--topic", "SampleTopic", "--phase", "0", "--file", "X",
+                      "--action", "rename", "--description", "Y", "--repo-root",
+                      mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
 }
 
 TEST_F(FBundleTestFixture, ManifestAddOutOfRangeFails)

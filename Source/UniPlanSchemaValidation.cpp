@@ -34,7 +34,7 @@ static std::string NormalizeLower(const std::string &InValue)
 // RequireString
 // ---------------------------------------------------------------------------
 
-bool RequireString(const JsonValue &InJson, const std::string &InKey,
+bool RequireString(const JSONValue &InJson, const std::string &InKey,
                    std::string &OutValue, const std::string &InContext,
                    std::string &OutError)
 {
@@ -57,7 +57,7 @@ bool RequireString(const JsonValue &InJson, const std::string &InKey,
 // RequireArray
 // ---------------------------------------------------------------------------
 
-bool RequireArray(const JsonValue &InJson, const std::string &InKey,
+bool RequireArray(const JSONValue &InJson, const std::string &InKey,
                   const std::string &InContext, std::string &OutError)
 {
     if (!InJson.contains(InKey))
@@ -78,7 +78,7 @@ bool RequireArray(const JsonValue &InJson, const std::string &InKey,
 // RequireStringArray
 // ---------------------------------------------------------------------------
 
-bool RequireStringArray(const JsonValue &InJson, const std::string &InKey,
+bool RequireStringArray(const JSONValue &InJson, const std::string &InKey,
                         std::vector<std::string> &OutValue,
                         const std::string &InContext, std::string &OutError)
 {
@@ -97,7 +97,7 @@ bool RequireStringArray(const JsonValue &InJson, const std::string &InKey,
 // OptionalString
 // ---------------------------------------------------------------------------
 
-bool OptionalString(const JsonValue &InJson, const std::string &InKey,
+bool OptionalString(const JSONValue &InJson, const std::string &InKey,
                     std::string &OutValue)
 {
     if (InJson.contains(InKey) && InJson[InKey].is_string())
@@ -113,7 +113,7 @@ bool OptionalString(const JsonValue &InJson, const std::string &InKey,
 // OptionalStringArray
 // ---------------------------------------------------------------------------
 
-bool OptionalStringArray(const JsonValue &InJson, const std::string &InKey,
+bool OptionalStringArray(const JSONValue &InJson, const std::string &InKey,
                          std::vector<std::string> &OutValue)
 {
     OutValue.clear();
@@ -133,7 +133,7 @@ bool OptionalStringArray(const JsonValue &InJson, const std::string &InKey,
 // RequireExecutionStatus
 // ---------------------------------------------------------------------------
 
-bool RequireExecutionStatus(const JsonValue &InJson, const std::string &InKey,
+bool RequireExecutionStatus(const JSONValue &InJson, const std::string &InKey,
                             EExecutionStatus &OutValue,
                             const std::string &InContext, std::string &OutError)
 {
@@ -154,7 +154,7 @@ bool RequireExecutionStatus(const JsonValue &InJson, const std::string &InKey,
 // RequireTopicStatus
 // ---------------------------------------------------------------------------
 
-bool RequireTopicStatus(const JsonValue &InJson, const std::string &InKey,
+bool RequireTopicStatus(const JSONValue &InJson, const std::string &InKey,
                         ETopicStatus &OutValue, const std::string &InContext,
                         std::string &OutError)
 {
@@ -175,7 +175,7 @@ bool RequireTopicStatus(const JsonValue &InJson, const std::string &InKey,
 // RequireFileAction
 // ---------------------------------------------------------------------------
 
-bool RequireFileAction(const JsonValue &InJson, const std::string &InKey,
+bool RequireFileAction(const JSONValue &InJson, const std::string &InKey,
                        EFileAction &OutValue, const std::string &InContext,
                        std::string &OutError)
 {
@@ -195,7 +195,7 @@ bool RequireFileAction(const JsonValue &InJson, const std::string &InKey,
 // RequireTestingActor
 // ---------------------------------------------------------------------------
 
-bool RequireTestingActor(const JsonValue &InJson, const std::string &InKey,
+bool RequireTestingActor(const JSONValue &InJson, const std::string &InKey,
                          ETestingActor &OutValue, const std::string &InContext,
                          std::string &OutError)
 {
@@ -215,7 +215,7 @@ bool RequireTestingActor(const JsonValue &InJson, const std::string &InKey,
 // RequireChangeType
 // ---------------------------------------------------------------------------
 
-bool RequireChangeType(const JsonValue &InJson, const std::string &InKey,
+bool RequireChangeType(const JSONValue &InJson, const std::string &InKey,
                        EChangeType &OutValue, const std::string &InContext,
                        std::string &OutError)
 {
@@ -238,7 +238,7 @@ bool RequireChangeType(const JsonValue &InJson, const std::string &InKey,
 // OptionalChangeType — missing/empty leaves OutValue untouched
 // ---------------------------------------------------------------------------
 
-bool OptionalChangeType(const JsonValue &InJson, const std::string &InKey,
+bool OptionalChangeType(const JSONValue &InJson, const std::string &InKey,
                         EChangeType &OutValue, const std::string &InContext,
                         std::string &OutError)
 {
@@ -260,7 +260,7 @@ bool OptionalChangeType(const JsonValue &InJson, const std::string &InKey,
 // OptionalTestingActor — missing/empty leaves OutValue untouched
 // ---------------------------------------------------------------------------
 
-bool OptionalTestingActor(const JsonValue &InJson, const std::string &InKey,
+bool OptionalTestingActor(const JSONValue &InJson, const std::string &InKey,
                           ETestingActor &OutValue, const std::string &InContext,
                           std::string &OutError)
 {

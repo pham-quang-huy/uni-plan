@@ -8,7 +8,7 @@
 namespace UniPlan
 {
 
-inline std::string JsonEscape(const std::string &InValue)
+inline std::string JSONEscape(const std::string &InValue)
 {
     std::ostringstream Stream;
     for (const char Character : InValue)
@@ -38,22 +38,22 @@ inline std::string JsonEscape(const std::string &InValue)
     return Stream.str();
 }
 
-inline std::string JsonQuote(const std::string &InValue)
+inline std::string JSONQuote(const std::string &InValue)
 {
-    return "\"" + JsonEscape(InValue) + "\"";
+    return "\"" + JSONEscape(InValue) + "\"";
 }
 
-inline std::string JsonNullOrQuote(const std::string &InValue)
+inline std::string JSONNullOrQuote(const std::string &InValue)
 {
-    return InValue.empty() ? "null" : JsonQuote(InValue);
+    return InValue.empty() ? "null" : JSONQuote(InValue);
 }
 
 inline void PrintJsonHeader(const char *InSchema, const std::string &InUtc,
                             const std::string &InRoot)
 {
-    std::cout << "{\"schema\":" << JsonQuote(InSchema)
-              << ",\"generated_utc\":" << JsonQuote(InUtc)
-              << ",\"repo_root\":" << JsonQuote(InRoot) << ",";
+    std::cout << "{\"schema\":" << JSONQuote(InSchema)
+              << ",\"generated_utc\":" << JSONQuote(InUtc)
+              << ",\"repo_root\":" << JSONQuote(InRoot) << ",";
 }
 
 inline void PrintJsonSep(const size_t InIndex)
@@ -74,7 +74,7 @@ inline void PrintJsonStringArray(const char *InName,
         {
             std::cout << ",";
         }
-        std::cout << JsonQuote(InItems[Index]);
+        std::cout << JSONQuote(InItems[Index]);
     }
     std::cout << "]";
 }
@@ -93,7 +93,7 @@ inline void PrintJsonClose(const std::vector<std::string> &InWarnings)
 inline void EmitJsonField(const char *InName, const std::string &InValue,
                           bool InTrailingComma = true)
 {
-    std::cout << "\"" << InName << "\":" << JsonQuote(InValue);
+    std::cout << "\"" << InName << "\":" << JSONQuote(InValue);
     if (InTrailingComma)
     {
         std::cout << ",";
@@ -104,7 +104,7 @@ inline void EmitJsonFieldNullable(const char *InName,
                                   const std::string &InValue,
                                   bool InTrailingComma = true)
 {
-    std::cout << "\"" << InName << "\":" << JsonNullOrQuote(InValue);
+    std::cout << "\"" << InName << "\":" << JSONNullOrQuote(InValue);
     if (InTrailingComma)
     {
         std::cout << ",";

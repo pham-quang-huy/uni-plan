@@ -104,14 +104,14 @@ inline std::string GetUtcNow()
 {
     const auto Now = std::chrono::system_clock::now();
     const std::time_t Timestamp = std::chrono::system_clock::to_time_t(Now);
-    std::tm UtcTime{};
+    std::tm UTCTime{};
 #ifdef _WIN32
-    gmtime_s(&UtcTime, &Timestamp);
+    gmtime_s(&UTCTime, &Timestamp);
 #else
-    gmtime_r(&Timestamp, &UtcTime);
+    gmtime_r(&Timestamp, &UTCTime);
 #endif
     std::ostringstream Stream;
-    Stream << std::put_time(&UtcTime, "%Y-%m-%dT%H:%M:%SZ");
+    Stream << std::put_time(&UTCTime, "%Y-%m-%dT%H:%M:%SZ");
     return Stream.str();
 }
 

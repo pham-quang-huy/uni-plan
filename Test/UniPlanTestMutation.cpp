@@ -1,7 +1,7 @@
 #include "UniPlanTestFixture.h"
 
 #include "UniPlanForwardDecls.h"
-#include "UniPlanJsonIO.h"
+#include "UniPlanJSONIO.h"
 #include "UniPlanTypes.h"
 
 #include <gtest/gtest.h>
@@ -32,13 +32,11 @@ TEST_F(FBundleTestFixture, TopicSetStatusChangesBundle)
 TEST_F(FBundleTestFixture, TopicSetInvalidStatusFails)
 {
     CopyFixture("SampleTopic");
-    StartCapture();
-    const int Code = UniPlan::RunTopicSetCommand(
-        {"--topic", "SampleTopic", "--status", "garbage", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
-    StopCapture();
-    EXPECT_EQ(Code, 1);
+    EXPECT_THROW(UniPlan::RunTopicSetCommand(
+                     {"--topic", "SampleTopic", "--status", "garbage",
+                      "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
 }
 
 TEST_F(FBundleTestFixture, TopicSetNextActions)
@@ -314,14 +312,11 @@ TEST_F(FBundleTestFixture, PhaseAddRejectsInvalidStatus)
 {
     CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
                          UniPlan::EExecutionStatus::NotStarted, false);
-    StartCapture();
-    const int Code =
+    EXPECT_THROW(
         UniPlan::RunPhaseAddCommand({"--topic", "T", "--status", "bogus",
                                      "--repo-root", mRepoRoot.string()},
-                                    mRepoRoot.string());
-    StopCapture();
-    EXPECT_EQ(Code, 1);
-    EXPECT_NE(mCapturedStderr.find("Invalid status"), std::string::npos);
+                                    mRepoRoot.string()),
+        UniPlan::UsageError);
     UniPlan::FTopicBundle After;
     ASSERT_TRUE(ReloadBundle("T", After));
     EXPECT_EQ(After.mPhases.size(), 1u);
