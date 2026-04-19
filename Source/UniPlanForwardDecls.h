@@ -265,6 +265,7 @@ bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
                           FTopicBundle &OutBundle, std::string &OutError);
 std::vector<FTopicBundle> LoadAllBundles(const fs::path &InRepoRoot,
                                          std::vector<std::string> &OutWarnings);
+std::vector<BlockerItem> CollectBundleBlockers(const FTopicBundle &InBundle);
 int RunTopicCommand(const std::vector<std::string> &InArgs,
                     const std::string &InRepoRoot);
 int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,

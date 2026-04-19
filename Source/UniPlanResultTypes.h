@@ -112,14 +112,12 @@ struct ValidateCheck
 struct BlockerItem
 {
     std::string mTopicKey;
-    std::string mSourcePath;
-    std::string mKind;
-    std::string mStatus;
-    std::string mPhaseKey;
-    std::string mPriority;
-    std::string mAction;
-    std::string mOwner;
-    std::string mNotes;
+    std::string mSourcePath; // absolute path to the .Plan.json bundle
+    std::string mKind;       // "status", "text", or "status+text"
+    std::string mStatus;     // phase lifecycle status string
+    int mPhaseIndex = -1;
+    std::string mAction;     // the blocker text
+    std::string mNotes;      // phase scope (context for the blocker)
 };
 
 struct PhaseItem

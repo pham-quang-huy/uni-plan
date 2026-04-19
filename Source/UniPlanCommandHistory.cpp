@@ -551,39 +551,13 @@ static int RunBundleBlockersJson(const fs::path &InRepoRoot,
         Bundles = LoadAllBundles(InRepoRoot, Warnings);
     }
 
-    struct FBlockerEntry
-    {
-        std::string mTopic;
-        size_t mPhaseIndex;
-        std::string mScope;
-        std::string mBlockers;
-    };
-
-    auto HasRealBlocker = [](const std::string &InText) -> bool
-    {
-        if (InText.empty())
-            return false;
-        std::string Lower;
-        for (char C : InText)
-            Lower +=
-                static_cast<char>(std::tolower(static_cast<unsigned char>(C)));
-        return Lower != "none" && Lower != "none." && Lower != "n/a" &&
-               Lower != "-";
-    };
-
-    std::vector<FBlockerEntry> BlockerEntries;
+    std::vector<BlockerItem> BlockerEntries;
     for (const FTopicBundle &Bundle : Bundles)
     {
-        for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
-        {
-            const FPhaseRecord &Phase = Bundle.mPhases[I];
-            if (Phase.mLifecycle.mStatus == EExecutionStatus::Blocked ||
-                HasRealBlocker(Phase.mLifecycle.mBlockers))
-            {
-                BlockerEntries.push_back({Bundle.mTopicKey, I, Phase.mScope,
-                                          Phase.mLifecycle.mBlockers});
-            }
-        }
+        std::vector<BlockerItem> Emitted = CollectBundleBlockers(Bundle);
+        BlockerEntries.insert(BlockerEntries.end(),
+                              std::make_move_iterator(Emitted.begin()),
+                              std::make_move_iterator(Emitted.end()));
     }
 
     const std::string UTC = GetUtcNow();
@@ -594,10 +568,14 @@ static int RunBundleBlockersJson(const fs::path &InRepoRoot,
     {
         PrintJsonSep(I);
         std::cout << "{";
-        EmitJsonField("topic", BlockerEntries[I].mTopic);
-        EmitJsonFieldSizeT("phase_index", BlockerEntries[I].mPhaseIndex);
-        EmitJsonField("scope", BlockerEntries[I].mScope);
-        EmitJsonField("blockers", BlockerEntries[I].mBlockers, false);
+        EmitJsonField("topic", BlockerEntries[I].mTopicKey);
+        EmitJsonFieldSizeT(
+            "phase_index",
+            static_cast<size_t>(BlockerEntries[I].mPhaseIndex));
+        EmitJsonField("status", BlockerEntries[I].mStatus);
+        EmitJsonField("kind", BlockerEntries[I].mKind);
+        EmitJsonField("scope", BlockerEntries[I].mNotes);
+        EmitJsonField("blockers", BlockerEntries[I].mAction, false);
         std::cout << "}";
     }
     std::cout << "],";
@@ -631,39 +609,13 @@ static int RunBundleBlockersHuman(const fs::path &InRepoRoot,
         Bundles = LoadAllBundles(InRepoRoot, Warnings);
     }
 
-    struct FBlockerEntry
-    {
-        std::string mTopic;
-        size_t mPhaseIndex;
-        std::string mScope;
-        std::string mBlockers;
-    };
-
-    auto HasRealBlocker = [](const std::string &InText) -> bool
-    {
-        if (InText.empty())
-            return false;
-        std::string Lower;
-        for (char C : InText)
-            Lower +=
-                static_cast<char>(std::tolower(static_cast<unsigned char>(C)));
-        return Lower != "none" && Lower != "none." && Lower != "n/a" &&
-               Lower != "-";
-    };
-
-    std::vector<FBlockerEntry> BlockerEntries;
+    std::vector<BlockerItem> BlockerEntries;
     for (const FTopicBundle &Bundle : Bundles)
     {
-        for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
-        {
-            const FPhaseRecord &Phase = Bundle.mPhases[I];
-            if (Phase.mLifecycle.mStatus == EExecutionStatus::Blocked ||
-                HasRealBlocker(Phase.mLifecycle.mBlockers))
-            {
-                BlockerEntries.push_back({Bundle.mTopicKey, I, Phase.mScope,
-                                          Phase.mLifecycle.mBlockers});
-            }
-        }
+        std::vector<BlockerItem> Emitted = CollectBundleBlockers(Bundle);
+        BlockerEntries.insert(BlockerEntries.end(),
+                              std::make_move_iterator(Emitted.begin()),
+                              std::make_move_iterator(Emitted.end()));
     }
 
     std::cout << kColorBold << "Blockers" << kColorReset
@@ -676,14 +628,14 @@ static int RunBundleBlockersHuman(const fs::path &InRepoRoot,
     }
 
     HumanTable Table;
-    Table.mHeaders = {"Topic", "Phase", "Scope", "Blockers"};
-    for (const FBlockerEntry &E : BlockerEntries)
+    Table.mHeaders = {"Topic", "Phase", "Status", "Scope", "Blockers"};
+    for (const BlockerItem &E : BlockerEntries)
     {
-        std::string Scope = E.mScope;
+        std::string Scope = E.mNotes;
         if (Scope.size() > 40)
             Scope = Scope.substr(0, 37) + "...";
-        Table.AddRow(
-            {E.mTopic, std::to_string(E.mPhaseIndex), Scope, E.mBlockers});
+        Table.AddRow({E.mTopicKey, std::to_string(E.mPhaseIndex), E.mStatus,
+                      Scope, E.mAction});
     }
     Table.Print();
     return 0;

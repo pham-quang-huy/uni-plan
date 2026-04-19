@@ -469,6 +469,84 @@ TEST_F(FBundleTestFixture, BlockersMissingTopicFails)
     EXPECT_EQ(Code, 1);
 }
 
+// CollectBundleBlockers — single source of truth for blocker detection
+// (shared by the `uni-plan blockers` CLI command and the watch snapshot).
+// A phase is a blocker when status==Blocked, when blocker text is
+// non-placeholder, or both. The returned Kind field records which
+// branch fired.
+
+TEST_F(FBundleTestFixture, CollectBundleBlockersPhaseStatusBlockedIsDetected)
+{
+    UniPlan::FTopicBundle Bundle;
+    Bundle.mTopicKey = "T";
+    Bundle.mPhases.emplace_back();
+    Bundle.mPhases[0].mLifecycle.mStatus = UniPlan::EExecutionStatus::Blocked;
+    Bundle.mPhases[0].mLifecycle.mBlockers = "";
+
+    const auto Blockers = UniPlan::CollectBundleBlockers(Bundle);
+    ASSERT_EQ(Blockers.size(), 1u);
+    EXPECT_EQ(Blockers[0].mPhaseIndex, 0);
+    EXPECT_EQ(Blockers[0].mKind, "status");
+    EXPECT_EQ(Blockers[0].mTopicKey, "T");
+}
+
+TEST_F(FBundleTestFixture, CollectBundleBlockersBlockerTextIsDetected)
+{
+    UniPlan::FTopicBundle Bundle;
+    Bundle.mTopicKey = "T";
+    Bundle.mPhases.emplace_back();
+    Bundle.mPhases[0].mLifecycle.mStatus =
+        UniPlan::EExecutionStatus::InProgress;
+    Bundle.mPhases[0].mLifecycle.mBlockers = "Waiting on dependency X";
+
+    const auto Blockers = UniPlan::CollectBundleBlockers(Bundle);
+    ASSERT_EQ(Blockers.size(), 1u);
+    EXPECT_EQ(Blockers[0].mKind, "text");
+    EXPECT_EQ(Blockers[0].mAction, "Waiting on dependency X");
+}
+
+TEST_F(FBundleTestFixture, CollectBundleBlockersBothStatusAndTextTagsBoth)
+{
+    UniPlan::FTopicBundle Bundle;
+    Bundle.mTopicKey = "T";
+    Bundle.mPhases.emplace_back();
+    Bundle.mPhases[0].mLifecycle.mStatus = UniPlan::EExecutionStatus::Blocked;
+    Bundle.mPhases[0].mLifecycle.mBlockers = "Waiting on dep";
+
+    const auto Blockers = UniPlan::CollectBundleBlockers(Bundle);
+    ASSERT_EQ(Blockers.size(), 1u);
+    EXPECT_EQ(Blockers[0].mKind, "status+text");
+}
+
+TEST_F(FBundleTestFixture, CollectBundleBlockersPlaceholderTextIsIgnored)
+{
+    UniPlan::FTopicBundle Bundle;
+    Bundle.mTopicKey = "T";
+    for (const std::string &Placeholder :
+         {"", "None", "none.", "N/A", "n/a", "-", "NONE"})
+    {
+        UniPlan::FPhaseRecord Phase;
+        Phase.mLifecycle.mStatus = UniPlan::EExecutionStatus::InProgress;
+        Phase.mLifecycle.mBlockers = Placeholder;
+        Bundle.mPhases.push_back(std::move(Phase));
+    }
+
+    const auto Blockers = UniPlan::CollectBundleBlockers(Bundle);
+    EXPECT_EQ(Blockers.size(), 0u);
+}
+
+TEST_F(FBundleTestFixture, CollectBundleBlockersPreservesPhaseIndex)
+{
+    UniPlan::FTopicBundle Bundle;
+    Bundle.mTopicKey = "T";
+    Bundle.mPhases.resize(5);
+    Bundle.mPhases[3].mLifecycle.mStatus = UniPlan::EExecutionStatus::Blocked;
+
+    const auto Blockers = UniPlan::CollectBundleBlockers(Bundle);
+    ASSERT_EQ(Blockers.size(), 1u);
+    EXPECT_EQ(Blockers[0].mPhaseIndex, 3);
+}
+
 // ===================================================================
 // validate
 // ===================================================================

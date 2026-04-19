@@ -321,8 +321,8 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
             hbox(std::move(PhaseCol)) | (Selected ? bold : nothing),
             text(std::to_string(Plan.mPlaybookCount)) |
                 (Selected ? bold : nothing),
-            text(std::to_string(Plan.mBlockerCount)) |
-                (Plan.mBlockerCount > 0 ? color(Color::Red) : dim) |
+            text(std::to_string(Plan.mBlockers.size())) |
+                (Plan.mBlockers.empty() ? dim : color(Color::Red)) |
                 (Selected ? bold : nothing),
         });
         if (Selected)
@@ -584,8 +584,9 @@ Element BlockersPanel::Render(const std::vector<BlockerItem> &InBlockers) const
     }
 
     std::vector<std::vector<Element>> BlockerTableData;
-    BlockerTableData.push_back({text("Topic") | bold, text("Kind") | bold,
-                                text("Action") | bold | flex});
+    BlockerTableData.push_back({text("Topic") | bold, text("Phase") | bold,
+                                text("Status") | bold,
+                                text("Blocker") | bold | flex});
 
     const int MaxVisible = 10;
     const int Count = static_cast<int>(InBlockers.size());
@@ -596,7 +597,8 @@ Element BlockersPanel::Render(const std::vector<BlockerItem> &InBlockers) const
         const BlockerItem &Blocker = InBlockers[static_cast<size_t>(Index)];
         BlockerTableData.push_back({
             text(Blocker.mTopicKey),
-            text(Blocker.mKind),
+            text("P" + std::to_string(Blocker.mPhaseIndex)),
+            ColorStatus(Blocker.mStatus),
             text(Blocker.mAction) | dim | flex,
         });
     }
@@ -991,7 +993,12 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
     Element TasksContent;
     if (Tax.mTasks.empty())
     {
-        TasksContent = text("  (no task checklist defined)") | dim;
+        const std::string Hint =
+            Tax.mJobs.empty()
+                ? "  (phase has no job board yet)"
+                : "  (phase decomposes to job granularity only; no "
+                  "per-job tasks authored)";
+        TasksContent = text(Hint) | dim;
     }
     else
     {

@@ -93,19 +93,11 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
     SplitLines(InBundle.mMetadata.mGoals, Summary.mGoalStatements);
     SplitLines(InBundle.mMetadata.mNonGoals, Summary.mNonGoalStatements);
 
-    // Blocker count from phases
-    for (const FPhaseRecord &Phase : InBundle.mPhases)
-    {
-        if (Phase.mLifecycle.mStatus == EExecutionStatus::Blocked ||
-            (!Phase.mLifecycle.mBlockers.empty() &&
-             Phase.mLifecycle.mBlockers != "None" &&
-             Phase.mLifecycle.mBlockers != "none." &&
-             Phase.mLifecycle.mBlockers != "N/A" &&
-             Phase.mLifecycle.mBlockers != "-"))
-        {
-            Summary.mBlockerCount++;
-        }
-    }
+    // Blockers — single source of truth. Populate the per-plan list so
+    // the watch BLOCKERS panel and the per-plan blocker count come from
+    // the same data (count is derived via mBlockers.size(), not a
+    // separately-maintained integer).
+    Summary.mBlockers = CollectBundleBlockers(InBundle);
 
     return Summary;
 }
