@@ -13,6 +13,11 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 | Corpus-wide topic/phase counts, char sizes, manifest stats | `uni-plan validate` → `summary` block |
 | Enumerate every `file_manifest[]` entry (optionally missing-only) | `uni-plan manifest list [--topic <T>] [--phase <N>] [--missing-only]` |
 
+| Aggregate-query need | Command added in `v0.74.0` |
+| --- | --- |
+| Discover legacy V3 `.md` artifacts and write them into `legacy_sources[]` | `uni-plan legacy-scan [--topic <T>] [--dry-run]` |
+| Per-phase V3 ↔ V4 parity report (8-category bucket) | `uni-plan legacy-gap [--topic <T>] [--category <c>]` |
+
 This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and every `upl-plan-*` skill header.
 
 ## project_overview
@@ -22,7 +27,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.73.2`) |
+| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.74.0`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |

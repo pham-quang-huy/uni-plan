@@ -163,8 +163,17 @@ struct FPhaseSetOptions : BaseOptions
     int mPhaseIndex = -1;
     std::optional<EExecutionStatus> opStatus;
     std::string mDone;
+    // Explicit "set to empty" flag for prose fields. `--done <value>` is
+    // ignored when value is the empty string (a long-standing convention
+    // used to signal "no change"). When a caller genuinely needs to clear
+    // the field — e.g., reverting a not_started phase whose `done`
+    // carries a stale "Not started" placeholder — the matching `*-clear`
+    // flag below is the typed, explicit way.
+    bool mbDoneClear = false;
     std::string mRemaining;
+    bool mbRemainingClear = false;
     std::string mBlockers;
+    bool mbBlockersClear = false;
     std::string mContext; // agent_context
     // Explicit timestamp overrides — when present, these values win over
     // the auto-stamp that `phase set --status` normally emits. Intended
@@ -399,6 +408,12 @@ struct FLaneAddOptions : BaseOptions
     std::string mExitCriteria;
 };
 
+struct FChangelogRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+};
+
 struct FChangelogSetOptions : BaseOptions
 {
     std::string mTopic;
@@ -408,6 +423,25 @@ struct FChangelogSetOptions : BaseOptions
     std::string mChange;
     std::optional<EChangeType> opType;
     std::string mAffected;
+};
+
+// ---------------------------------------------------------------------------
+// Legacy-gap audit option structs (V3 <-> V4 parity)
+// ---------------------------------------------------------------------------
+
+// Options for `uni-plan legacy-gap`. Defaults to all topics, all categories.
+struct FLegacyGapOptions : BaseOptions
+{
+    std::string mTopic;                          // optional; empty = all topics
+    std::optional<EPhaseGapCategory> opCategory; // filter to single category
+};
+
+// Options for `uni-plan legacy-scan`. Writes `legacy_sources[]` onto the
+// matching topic / phase records by filename convention.
+struct FLegacyScanOptions : BaseOptions
+{
+    std::string mTopic;    // optional; empty = all topics
+    bool mbDryRun = false; // --dry-run: report matches, do not mutate bundles
 };
 
 } // namespace UniPlan

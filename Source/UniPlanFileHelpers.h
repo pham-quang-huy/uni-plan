@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UniPlanStringHelpers.h" // for Trim, used by LegacyMdContentLineCount
 #include "UniPlanTypes.h"
 
 #include <fstream>
@@ -46,6 +47,48 @@ inline bool ManifestPathExists(const fs::path &InRepoRoot,
     std::error_code EC;
     const bool bExists = fs::exists(Resolved, EC);
     return bExists && !EC;
+}
+
+// LegacyMdContentLineCount — count non-blank content lines in a V3 legacy
+// markdown file, excluding the leading archival banner block. The banner
+// is a run of blockquote lines (starting with ">") plus surrounding blank
+// lines at the very top of the file; once a non-blank non-blockquote line
+// is seen, all subsequent lines count (including blockquotes in the body).
+//
+// Returns 0 if the file cannot be opened. Shared between
+// `uni-plan legacy-scan` and `uni-plan legacy-gap` so the two commands
+// agree on LOC semantics.
+inline int LegacyMdContentLineCount(const std::string &InPath)
+{
+    std::ifstream Stream(InPath);
+    if (!Stream)
+    {
+        return 0;
+    }
+    std::string Line;
+    bool bBannerEnded = false;
+    int Count = 0;
+    while (std::getline(Stream, Line))
+    {
+        if (!bBannerEnded)
+        {
+            const std::string Trimmed = Trim(Line);
+            if (Trimmed.empty())
+            {
+                continue;
+            }
+            if (!Trimmed.empty() && Trimmed[0] == '>')
+            {
+                continue;
+            }
+            bBannerEnded = true;
+        }
+        if (!Trim(Line).empty())
+        {
+            ++Count;
+        }
+    }
+    return Count;
 }
 
 inline bool TryReadFileLines(const fs::path &InPath,

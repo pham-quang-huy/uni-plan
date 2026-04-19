@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdio>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -8,6 +9,13 @@
 namespace UniPlan
 {
 
+// JSONEscape — produce the RFC 8259 §7 escaped form of an arbitrary
+// std::string for embedding between JSON string double-quotes. Handles
+// the six named escapes (\, ", \n, \r, \t, \b, \f) and emits `\u00XX`
+// for every remaining control character (U+0000 through U+001F). Passing
+// raw control bytes through would produce syntactically invalid JSON,
+// so this helper is the single source of truth for escape behavior —
+// do not inline or re-implement in consumers.
 inline std::string JSONEscape(const std::string &InValue)
 {
     std::ostringstream Stream;
@@ -30,8 +38,25 @@ inline std::string JSONEscape(const std::string &InValue)
         case '\t':
             Stream << "\\t";
             break;
+        case '\b':
+            Stream << "\\b";
+            break;
+        case '\f':
+            Stream << "\\f";
+            break;
         default:
-            Stream << Character;
+            if (static_cast<unsigned char>(Character) < 0x20)
+            {
+                char Buffer[8];
+                std::snprintf(Buffer, sizeof(Buffer), "\\u%04x",
+                              static_cast<unsigned int>(
+                                  static_cast<unsigned char>(Character)));
+                Stream << Buffer;
+            }
+            else
+            {
+                Stream << Character;
+            }
             break;
         }
     }

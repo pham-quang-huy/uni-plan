@@ -212,6 +212,12 @@ int RunBundleChangelogCommand(const std::vector<std::string> &InArgs,
                                                InArgs.end());
         return RunChangelogSetCommand(SubArgs, InRepoRoot);
     }
+    if (!InArgs.empty() && InArgs[0] == "remove")
+    {
+        const std::vector<std::string> SubArgs(InArgs.begin() + 1,
+                                               InArgs.end());
+        return RunChangelogRemoveCommand(SubArgs, InRepoRoot);
+    }
 
     const FBundleChangelogOptions Options = ParseBundleChangelogOptions(InArgs);
     const fs::path RepoRoot = NormalizeRepoRootPath(

@@ -803,6 +803,57 @@ int RunChangelogSetCommand(const std::vector<std::string> &InArgs,
 }
 
 // ---------------------------------------------------------------------------
+// changelog remove — erase an existing changelog entry by index
+// ---------------------------------------------------------------------------
+//
+// Use case: dedup residuals, accidental duplicate entries emitted by bulk
+// mutations, or explicit repair of a bundle's audit trail. Shifts all
+// subsequent indices down by one.
+int RunChangelogRemoveCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot)
+{
+    const FChangelogRemoveOptions Options = ParseChangelogRemoveOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mIndex) >= Bundle.mChangeLogs.size())
+    {
+        std::cerr << "Changelog index out of range: " << Options.mIndex
+                  << " (size " << Bundle.mChangeLogs.size() << ")\n";
+        return 1;
+    }
+
+    const FChangeLogEntry Removed =
+        Bundle.mChangeLogs[static_cast<size_t>(Options.mIndex)];
+    Bundle.mChangeLogs.erase(Bundle.mChangeLogs.begin() +
+                             static_cast<ptrdiff_t>(Options.mIndex));
+
+    const std::string Target = MakeChangelogTarget(Options.mIndex);
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes = {{"change", {Removed.mChange, "(removed)"}}};
+
+    // Removing an audit entry is itself an audit event — surface the removed
+    // change text so the trail records *what* was dropped and at which index.
+    AppendAutoChangelog(Bundle, Target,
+                        Target + " removed: '" + Removed.mChange + "'");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // lane add — append a new lane to a phase
 // ---------------------------------------------------------------------------
 

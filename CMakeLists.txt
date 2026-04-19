@@ -48,6 +48,7 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanCommandSemanticQuery.cpp
     Source/UniPlanCommandTopic.cpp
     Source/UniPlanCommandPhase.cpp
+    Source/UniPlanCommandLegacyGap.cpp
 )
 
 target_include_directories(uni-plan-lib PUBLIC

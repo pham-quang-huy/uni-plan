@@ -110,17 +110,17 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
     // dependencies (typed vector) — mirrors validation_commands semantics.
     if (Options.mbDependencyClear || !Options.mDependencyAdd.empty())
     {
-        const std::string OldDesc =
-            std::to_string(Bundle.mMetadata.mDependencies.size()) + " entries";
+        const size_t OldCount = Bundle.mMetadata.mDependencies.size();
+        const std::string OldDesc = std::to_string(OldCount) + " entries";
         if (Options.mbDependencyClear)
             Bundle.mMetadata.mDependencies.clear();
         for (const FBundleReference &R : Options.mDependencyAdd)
             Bundle.mMetadata.mDependencies.push_back(R);
-        const std::string NewDesc =
-            std::to_string(Bundle.mMetadata.mDependencies.size()) + " entries";
+        const size_t NewCount = Bundle.mMetadata.mDependencies.size();
+        const std::string NewDesc = std::to_string(NewCount) + " entries";
         Changes.push_back({"dependencies", {OldDesc, NewDesc}});
         if (Desc.empty())
-            Desc = "Updated dependencies";
+            Desc = "Updated dependencies (" + OldDesc + " -> " + NewDesc + ")";
     }
 
     if (Changes.empty())
@@ -268,17 +268,38 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
         if (Desc.empty())
             Desc = Target + " updated done";
     }
+    else if (Options.mbDoneClear && !Phase.mLifecycle.mDone.empty())
+    {
+        Changes.push_back({"done", {Phase.mLifecycle.mDone, ""}});
+        Phase.mLifecycle.mDone.clear();
+        if (Desc.empty())
+            Desc = Target + " cleared done";
+    }
     if (!Options.mRemaining.empty())
     {
         Changes.push_back(
             {"remaining", {Phase.mLifecycle.mRemaining, Options.mRemaining}});
         Phase.mLifecycle.mRemaining = Options.mRemaining;
     }
+    else if (Options.mbRemainingClear && !Phase.mLifecycle.mRemaining.empty())
+    {
+        Changes.push_back({"remaining", {Phase.mLifecycle.mRemaining, ""}});
+        Phase.mLifecycle.mRemaining.clear();
+        if (Desc.empty())
+            Desc = Target + " cleared remaining";
+    }
     if (!Options.mBlockers.empty())
     {
         Changes.push_back(
             {"blockers", {Phase.mLifecycle.mBlockers, Options.mBlockers}});
         Phase.mLifecycle.mBlockers = Options.mBlockers;
+    }
+    else if (Options.mbBlockersClear && !Phase.mLifecycle.mBlockers.empty())
+    {
+        Changes.push_back({"blockers", {Phase.mLifecycle.mBlockers, ""}});
+        Phase.mLifecycle.mBlockers.clear();
+        if (Desc.empty())
+            Desc = Target + " cleared blockers";
     }
     if (!Options.mContext.empty())
     {
@@ -338,17 +359,18 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
     // dependencies (typed vector) — see FTopicSetCommand above for semantics.
     if (Options.mbDependencyClear || !Options.mDependencyAdd.empty())
     {
-        const std::string OldDesc =
-            std::to_string(Phase.mDesign.mDependencies.size()) + " entries";
+        const size_t OldCount = Phase.mDesign.mDependencies.size();
+        const std::string OldDesc = std::to_string(OldCount) + " entries";
         if (Options.mbDependencyClear)
             Phase.mDesign.mDependencies.clear();
         for (const FBundleReference &R : Options.mDependencyAdd)
             Phase.mDesign.mDependencies.push_back(R);
-        const std::string NewDesc =
-            std::to_string(Phase.mDesign.mDependencies.size()) + " entries";
+        const size_t NewCount = Phase.mDesign.mDependencies.size();
+        const std::string NewDesc = std::to_string(NewCount) + " entries";
         Changes.push_back({"dependencies", {OldDesc, NewDesc}});
         if (Desc.empty())
-            Desc = Target + " updated dependencies";
+            Desc = Target + " updated dependencies (" + OldDesc + " -> " +
+                   NewDesc + ")";
     }
 
     if (Changes.empty())

@@ -104,6 +104,10 @@ struct FPhaseRecord
     std::vector<FJobRecord> mJobs;
     std::vector<FTestingRecord> mTesting;
     std::vector<FFileManifestItem> mFileManifest;
+    // Legacy V3 artifacts that fed this phase. Populated by
+    // `uni-plan legacy-scan`, consumed by `uni-plan legacy-gap`.
+    // Empty vector means no known V3 heritage (native V4 phase).
+    std::vector<FLegacyMdSource> mLegacySources;
 };
 
 // ---------------------------------------------------------------------------
@@ -145,6 +149,11 @@ struct FTopicBundle
 
     std::vector<FChangeLogEntry> mChangeLogs;
     std::vector<FVerificationEntry> mVerifications;
+
+    // Topic-level legacy V3 artifacts (Plan.md, Impl.md, their sidecars).
+    // Per-phase legacy playbooks live on FPhaseRecord.mLegacySources.
+    // Populated by `uni-plan legacy-scan`, consumed by `uni-plan legacy-gap`.
+    std::vector<FLegacyMdSource> mLegacySources;
 
     // Runtime-only: path where this bundle was loaded from.
     // Not serialized to JSON. Set by TryLoadBundleByTopic and

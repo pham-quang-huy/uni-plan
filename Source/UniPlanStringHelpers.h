@@ -127,4 +127,8 @@ inline bool IsValidISOTimestampValue(const std::string &InValue)
     return std::regex_match(InValue, Pattern);
 }
 
+// LegacyMdContentLineCount lives in UniPlanFileHelpers.h — it reads from disk,
+// so it belongs with the other filesystem helpers rather than this
+// pure-string-operations header.
+
 } // namespace UniPlan

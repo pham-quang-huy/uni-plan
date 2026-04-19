@@ -1,3 +1,4 @@
+#include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanTopicTypes.h"
@@ -757,8 +758,59 @@ EvalValidationCommandFields(const std::vector<FTopicBundle> &InBundles,
 // V4 Bundle Validation — orchestrator
 // ---------------------------------------------------------------------------
 
+// Emits one `legacy_source_path_resolves` warning per topic- or phase-level
+// `legacy_sources[].path` that does not resolve on disk relative to
+// `InRepoRoot`. When `InRepoRoot` is empty (e.g. fixture-only tests),
+// skips the filesystem check entirely. Kept static-local because it
+// depends on filesystem state the other evaluators do not use.
+static void
+EvalLegacySourcePathResolves(const std::vector<FTopicBundle> &InBundles,
+                             const fs::path &InRepoRoot,
+                             std::vector<ValidateCheck> &OutChecks)
+{
+    if (InRepoRoot.empty())
+    {
+        return;
+    }
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mLegacySources.size(); ++I)
+        {
+            const FLegacyMdSource &S = B.mLegacySources[I];
+            if (S.mPath.empty() || ManifestPathExists(InRepoRoot, S.mPath))
+            {
+                continue;
+            }
+            Fail(OutChecks, "legacy_source_path_resolves",
+                 EValidationSeverity::Warning, B.mTopicKey,
+                 "legacy_sources[" + std::to_string(I) + "].path",
+                 "legacy source path does not resolve on disk (kind=" +
+                     std::string(ToString(S.mKind)) + "): " + S.mPath);
+        }
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &P = B.mPhases[PI];
+            for (size_t I = 0; I < P.mLegacySources.size(); ++I)
+            {
+                const FLegacyMdSource &S = P.mLegacySources[I];
+                if (S.mPath.empty() || ManifestPathExists(InRepoRoot, S.mPath))
+                {
+                    continue;
+                }
+                Fail(OutChecks, "legacy_source_path_resolves",
+                     EValidationSeverity::Warning, B.mTopicKey,
+                     "phases[" + std::to_string(PI) + "].legacy_sources[" +
+                         std::to_string(I) + "].path",
+                     "legacy source path does not resolve on disk (kind=" +
+                         std::string(ToString(S.mKind)) + "): " + S.mPath);
+            }
+        }
+    }
+}
+
 std::vector<ValidateCheck>
-ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
+ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
+                   const fs::path &InRepoRoot)
 {
     std::vector<ValidateCheck> Checks;
 
@@ -807,6 +859,7 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     EvalNoDuplicatePhaseField(InBundles, Checks);
     EvalNoHollowCompletedPhase(InBundles, Checks);
     EvalPathResolves(InBundles, Checks);
+    EvalLegacySourcePathResolves(InBundles, InRepoRoot, Checks);
 
     return Checks;
 }

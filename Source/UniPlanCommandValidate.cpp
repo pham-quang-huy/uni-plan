@@ -76,8 +76,8 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
     // topic-key registry, even under --topic filtering. Scoping is
     // applied to the emitted output below rather than to the loaded
     // bundle set.
-    std::vector<FTopicBundle> Bundles = LoadAllBundles(InRepoRoot,
-                                                       BundleWarnings);
+    std::vector<FTopicBundle> Bundles =
+        LoadAllBundles(InRepoRoot, BundleWarnings);
 
     if (!InOptions.mTopic.empty())
     {
@@ -109,7 +109,7 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
         }
     }
 
-    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // When --topic scopes the output, drop checks for other topics so
@@ -119,9 +119,7 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
     {
         Checks.erase(std::remove_if(Checks.begin(), Checks.end(),
                                     [&](const ValidateCheck &C)
-                                    {
-                                        return C.mTopic != InOptions.mTopic;
-                                    }),
+                                    { return C.mTopic != InOptions.mTopic; }),
                      Checks.end());
     }
 
@@ -288,8 +286,8 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
     // See RunBundleValidateJson for the full-load rationale: cross-topic
     // evaluators need the complete topic-key registry even under
     // --topic scope.
-    std::vector<FTopicBundle> Bundles = LoadAllBundles(InRepoRoot,
-                                                       BundleWarnings);
+    std::vector<FTopicBundle> Bundles =
+        LoadAllBundles(InRepoRoot, BundleWarnings);
 
     if (!InOptions.mTopic.empty())
     {
@@ -305,13 +303,12 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
         if (!bFound)
         {
             std::cerr << kColorRed << "FAIL" << kColorReset << " "
-                      << InOptions.mTopic
-                      << ": topic not found in repo\n";
+                      << InOptions.mTopic << ": topic not found in repo\n";
             return 1;
         }
     }
 
-    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // Filter checks to target topic when --topic scopes the output.
@@ -319,9 +316,7 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
     {
         Checks.erase(std::remove_if(Checks.begin(), Checks.end(),
                                     [&](const ValidateCheck &C)
-                                    {
-                                        return C.mTopic != InOptions.mTopic;
-                                    }),
+                                    { return C.mTopic != InOptions.mTopic; }),
                      Checks.end());
     }
 
@@ -344,8 +339,8 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
     const int TotalFailed = ErrorMajorCount + ErrorMinorCount + WarningCount;
     const size_t TargetCount =
         InOptions.mTopic.empty() ? Bundles.size() : size_t{1};
-    std::cout << kColorBold << "Validate" << kColorReset << "  "
-              << TargetCount << " bundles";
+    std::cout << kColorBold << "Validate" << kColorReset << "  " << TargetCount
+              << " bundles";
     if (TotalFailed == 0)
     {
         std::cout << "  " << kColorGreen << "PASS" << kColorReset << "\n";

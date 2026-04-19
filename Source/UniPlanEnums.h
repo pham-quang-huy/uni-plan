@@ -651,6 +651,215 @@ inline bool PlatformScopeFromString(const std::string &InValue,
 }
 
 // ---------------------------------------------------------------------------
+// ELegacyMdKind — kind of legacy V3 markdown artifact referenced by a V4
+// bundle or phase. Used by `phases[].legacy_sources[]` and the topic-level
+// `legacy_sources[]` to self-describe where each V4 record was migrated
+// from. Consumed by `uni-plan legacy-gap` to compute parity against live
+// V4 design material.
+//   Plan                         — <Topic>.Plan.md
+//   Implementation               — <Topic>.Impl.md
+//   Playbook                     — <Topic>.<PhaseKey>.Playbook.md
+//   PlanChangeLog                — <Topic>.Plan.ChangeLog.md
+//   PlanVerification             — <Topic>.Plan.Verification.md
+//   ImplementationChangeLog      — <Topic>.Impl.ChangeLog.md
+//   ImplementationVerification   — <Topic>.Impl.Verification.md
+//   PlaybookChangeLog            — <Topic>.<PhaseKey>.Playbook.ChangeLog.md
+//   PlaybookVerification         — <Topic>.<PhaseKey>.Playbook.Verification.md
+// ---------------------------------------------------------------------------
+
+enum class ELegacyMdKind : uint8_t
+{
+    Plan,
+    Implementation,
+    Playbook,
+    PlanChangeLog,
+    PlanVerification,
+    ImplementationChangeLog,
+    ImplementationVerification,
+    PlaybookChangeLog,
+    PlaybookVerification
+};
+
+inline const char *ToString(ELegacyMdKind InValue)
+{
+    switch (InValue)
+    {
+    case ELegacyMdKind::Plan:
+        return "plan";
+    case ELegacyMdKind::Implementation:
+        return "implementation";
+    case ELegacyMdKind::Playbook:
+        return "playbook";
+    case ELegacyMdKind::PlanChangeLog:
+        return "plan_changelog";
+    case ELegacyMdKind::PlanVerification:
+        return "plan_verification";
+    case ELegacyMdKind::ImplementationChangeLog:
+        return "implementation_changelog";
+    case ELegacyMdKind::ImplementationVerification:
+        return "implementation_verification";
+    case ELegacyMdKind::PlaybookChangeLog:
+        return "playbook_changelog";
+    case ELegacyMdKind::PlaybookVerification:
+        return "playbook_verification";
+    }
+    return "playbook";
+}
+
+inline bool LegacyMdKindFromString(const std::string &InValue,
+                                   ELegacyMdKind &OutValue)
+{
+    if (InValue == "plan")
+    {
+        OutValue = ELegacyMdKind::Plan;
+        return true;
+    }
+    if (InValue == "implementation")
+    {
+        OutValue = ELegacyMdKind::Implementation;
+        return true;
+    }
+    if (InValue == "playbook")
+    {
+        OutValue = ELegacyMdKind::Playbook;
+        return true;
+    }
+    if (InValue == "plan_changelog")
+    {
+        OutValue = ELegacyMdKind::PlanChangeLog;
+        return true;
+    }
+    if (InValue == "plan_verification")
+    {
+        OutValue = ELegacyMdKind::PlanVerification;
+        return true;
+    }
+    if (InValue == "implementation_changelog")
+    {
+        OutValue = ELegacyMdKind::ImplementationChangeLog;
+        return true;
+    }
+    if (InValue == "implementation_verification")
+    {
+        OutValue = ELegacyMdKind::ImplementationVerification;
+        return true;
+    }
+    if (InValue == "playbook_changelog")
+    {
+        OutValue = ELegacyMdKind::PlaybookChangeLog;
+        return true;
+    }
+    if (InValue == "playbook_verification")
+    {
+        OutValue = ELegacyMdKind::PlaybookVerification;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// EPhaseGapCategory — outcome of a per-phase V3↔V4 parity check, as
+// computed by `uni-plan legacy-gap`. Thresholds are documented next to
+// the resolver in UniPlanCommandLegacyGap.cpp. Agents choose rebuild
+// strategy based on this enum; the skill reference lives at
+// ~/.claude/skills/uni-plan-legacy-md-gap.
+//   LegacyRich         — legacy playbook >= 150 content LOC, V4 < 500 design
+//                        chars. Rebuild V4 from legacy (highest fidelity).
+//   LegacyRichMatched  — legacy >= 150 LOC, V4 >= 2000 chars. Verify no drift.
+//   LegacyThin         — legacy 50-149 LOC. Small uplift available.
+//   LegacyStub         — legacy < 50 LOC (file exists but near-empty).
+//                        Fall back to commit archaeology.
+//   LegacyAbsent       — no legacy playbook file exists for this phase.
+//   V4Only             — no legacy AND V4 already rich (>=2000 chars, >=3
+//   jobs). HollowBoth         — legacy < 50 LOC AND completed phase with V4 <
+//   500.
+//                        Status likely wrong; demote from completed.
+//   Drift              — reserved for future semantic-overlap detection.
+// ---------------------------------------------------------------------------
+
+enum class EPhaseGapCategory : uint8_t
+{
+    LegacyRich,
+    LegacyRichMatched,
+    LegacyThin,
+    LegacyStub,
+    LegacyAbsent,
+    V4Only,
+    HollowBoth,
+    Drift
+};
+
+inline const char *ToString(EPhaseGapCategory InValue)
+{
+    switch (InValue)
+    {
+    case EPhaseGapCategory::LegacyRich:
+        return "legacy_rich";
+    case EPhaseGapCategory::LegacyRichMatched:
+        return "legacy_rich_matched";
+    case EPhaseGapCategory::LegacyThin:
+        return "legacy_thin";
+    case EPhaseGapCategory::LegacyStub:
+        return "legacy_stub";
+    case EPhaseGapCategory::LegacyAbsent:
+        return "legacy_absent";
+    case EPhaseGapCategory::V4Only:
+        return "v4_only";
+    case EPhaseGapCategory::HollowBoth:
+        return "hollow_both";
+    case EPhaseGapCategory::Drift:
+        return "drift";
+    }
+    return "legacy_absent";
+}
+
+inline bool PhaseGapCategoryFromString(const std::string &InValue,
+                                       EPhaseGapCategory &OutValue)
+{
+    if (InValue == "legacy_rich")
+    {
+        OutValue = EPhaseGapCategory::LegacyRich;
+        return true;
+    }
+    if (InValue == "legacy_rich_matched")
+    {
+        OutValue = EPhaseGapCategory::LegacyRichMatched;
+        return true;
+    }
+    if (InValue == "legacy_thin")
+    {
+        OutValue = EPhaseGapCategory::LegacyThin;
+        return true;
+    }
+    if (InValue == "legacy_stub")
+    {
+        OutValue = EPhaseGapCategory::LegacyStub;
+        return true;
+    }
+    if (InValue == "legacy_absent")
+    {
+        OutValue = EPhaseGapCategory::LegacyAbsent;
+        return true;
+    }
+    if (InValue == "v4_only")
+    {
+        OutValue = EPhaseGapCategory::V4Only;
+        return true;
+    }
+    if (InValue == "hollow_both")
+    {
+        OutValue = EPhaseGapCategory::HollowBoth;
+        return true;
+    }
+    if (InValue == "drift")
+    {
+        OutValue = EPhaseGapCategory::Drift;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
 // EDependencyKind — kind of dependency reference in FBundleReference.
 //   Bundle     — another topic's `.Plan.json` (resolves against loaded bundles)
 //   Phase      — a specific phase in this or another topic

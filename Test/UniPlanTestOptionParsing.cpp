@@ -286,3 +286,125 @@ TEST(OptionParsing, UnknownOptionThrows)
         UniPlan::ParseTopicSetOptions({"--topic", "X", "--bogus", "val"}),
         UniPlan::UsageError);
 }
+
+// ===================================================================
+// Legacy gap + scan parsers (introduced in 0.74.0)
+// ===================================================================
+
+TEST(OptionParsing, LegacyGapEmptyIsAllTopicsAllCategories)
+{
+    const auto O = UniPlan::ParseLegacyGapOptions({});
+    EXPECT_TRUE(O.mTopic.empty());
+    EXPECT_FALSE(O.opCategory.has_value());
+}
+
+TEST(OptionParsing, LegacyGapTopicFilter)
+{
+    const auto O = UniPlan::ParseLegacyGapOptions({"--topic", "CycleRefactor"});
+    EXPECT_EQ(O.mTopic, "CycleRefactor");
+}
+
+TEST(OptionParsing, LegacyGapCategoryFilter)
+{
+    const auto O =
+        UniPlan::ParseLegacyGapOptions({"--category", "legacy_rich"});
+    ASSERT_TRUE(O.opCategory.has_value());
+    EXPECT_EQ(*O.opCategory, UniPlan::EPhaseGapCategory::LegacyRich);
+}
+
+TEST(OptionParsing, LegacyGapInvalidCategoryThrows)
+{
+    EXPECT_THROW(UniPlan::ParseLegacyGapOptions({"--category", "bogus"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, LegacyGapUnknownOptionThrows)
+{
+    EXPECT_THROW(UniPlan::ParseLegacyGapOptions({"--bogus", "val"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, LegacyScanEmptyIsAllTopicsNoDryRun)
+{
+    const auto O = UniPlan::ParseLegacyScanOptions({});
+    EXPECT_TRUE(O.mTopic.empty());
+    EXPECT_FALSE(O.mbDryRun);
+}
+
+TEST(OptionParsing, LegacyScanTopicAndDryRun)
+{
+    const auto O = UniPlan::ParseLegacyScanOptions(
+        {"--topic", "CycleRefactor", "--dry-run"});
+    EXPECT_EQ(O.mTopic, "CycleRefactor");
+    EXPECT_TRUE(O.mbDryRun);
+}
+
+TEST(OptionParsing, LegacyScanUnknownOptionThrows)
+{
+    EXPECT_THROW(UniPlan::ParseLegacyScanOptions({"--bogus"}),
+                 UniPlan::UsageError);
+}
+
+// ===================================================================
+// Enum round-trips for legacy types
+// ===================================================================
+
+TEST(LegacyEnums, LegacyMdKindRoundTrip)
+{
+    const UniPlan::ELegacyMdKind Kinds[] = {
+        UniPlan::ELegacyMdKind::Plan,
+        UniPlan::ELegacyMdKind::Implementation,
+        UniPlan::ELegacyMdKind::Playbook,
+        UniPlan::ELegacyMdKind::PlanChangeLog,
+        UniPlan::ELegacyMdKind::PlanVerification,
+        UniPlan::ELegacyMdKind::ImplementationChangeLog,
+        UniPlan::ELegacyMdKind::ImplementationVerification,
+        UniPlan::ELegacyMdKind::PlaybookChangeLog,
+        UniPlan::ELegacyMdKind::PlaybookVerification,
+    };
+    for (const UniPlan::ELegacyMdKind K : Kinds)
+    {
+        const std::string Str = UniPlan::ToString(K);
+        UniPlan::ELegacyMdKind Parsed = UniPlan::ELegacyMdKind::Plan;
+        ASSERT_TRUE(UniPlan::LegacyMdKindFromString(Str, Parsed))
+            << "round-trip failed for " << Str;
+        EXPECT_EQ(Parsed, K) << "mismatch on " << Str;
+    }
+}
+
+TEST(LegacyEnums, LegacyMdKindFromStringRejectsInvalid)
+{
+    UniPlan::ELegacyMdKind Out = UniPlan::ELegacyMdKind::Plan;
+    EXPECT_FALSE(UniPlan::LegacyMdKindFromString("not_a_kind", Out));
+    EXPECT_FALSE(UniPlan::LegacyMdKindFromString("", Out));
+}
+
+TEST(LegacyEnums, PhaseGapCategoryRoundTrip)
+{
+    const UniPlan::EPhaseGapCategory Cats[] = {
+        UniPlan::EPhaseGapCategory::LegacyRich,
+        UniPlan::EPhaseGapCategory::LegacyRichMatched,
+        UniPlan::EPhaseGapCategory::LegacyThin,
+        UniPlan::EPhaseGapCategory::LegacyStub,
+        UniPlan::EPhaseGapCategory::LegacyAbsent,
+        UniPlan::EPhaseGapCategory::V4Only,
+        UniPlan::EPhaseGapCategory::HollowBoth,
+        UniPlan::EPhaseGapCategory::Drift,
+    };
+    for (const UniPlan::EPhaseGapCategory C : Cats)
+    {
+        const std::string Str = UniPlan::ToString(C);
+        UniPlan::EPhaseGapCategory Parsed =
+            UniPlan::EPhaseGapCategory::LegacyAbsent;
+        ASSERT_TRUE(UniPlan::PhaseGapCategoryFromString(Str, Parsed))
+            << "round-trip failed for " << Str;
+        EXPECT_EQ(Parsed, C) << "mismatch on " << Str;
+    }
+}
+
+TEST(LegacyEnums, PhaseGapCategoryFromStringRejectsInvalid)
+{
+    UniPlan::EPhaseGapCategory Out = UniPlan::EPhaseGapCategory::LegacyAbsent;
+    EXPECT_FALSE(UniPlan::PhaseGapCategoryFromString("not_a_cat", Out));
+    EXPECT_FALSE(UniPlan::PhaseGapCategoryFromString("", Out));
+}

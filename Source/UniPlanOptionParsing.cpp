@@ -737,6 +737,21 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             Options.mDone = ConsumeValuedOption(Remaining, Index, "--done");
             continue;
         }
+        if (Token == "--done-clear")
+        {
+            Options.mbDoneClear = true;
+            continue;
+        }
+        if (Token == "--remaining-clear")
+        {
+            Options.mbRemainingClear = true;
+            continue;
+        }
+        if (Token == "--blockers-clear")
+        {
+            Options.mbBlockersClear = true;
+            continue;
+        }
         if (Token == "--started-at")
         {
             Options.mStartedAt =
@@ -2100,6 +2115,33 @@ ParseChangelogSetOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FChangelogRemoveOptions
+ParseChangelogRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FChangelogRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for changelog remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("changelog remove requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("changelog remove requires --index");
+    return Options;
+}
+
 FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens)
 {
     FLaneAddOptions Options;
@@ -2226,6 +2268,67 @@ ParsePhaseNormalizeOptions(const std::vector<std::string> &InTokens)
         throw UsageError("phase normalize requires --topic");
     if (Options.mPhaseIndex < 0)
         throw UsageError("phase normalize requires --phase");
+    return Options;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy gap + scan option parsers (introduced in 0.74.0)
+// ---------------------------------------------------------------------------
+
+FLegacyGapOptions
+ParseLegacyGapOptions(const std::vector<std::string> &InTokens)
+{
+    FLegacyGapOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--category")
+        {
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--category");
+            EPhaseGapCategory Cat = EPhaseGapCategory::LegacyAbsent;
+            if (!PhaseGapCategoryFromString(Raw, Cat))
+            {
+                throw UsageError(
+                    "legacy-gap --category: invalid value '" + Raw +
+                    "', expected one of: "
+                    "legacy_rich|legacy_rich_matched|legacy_thin|legacy_stub|"
+                    "legacy_absent|v4_only|hollow_both|drift");
+            }
+            Options.opCategory = Cat;
+            continue;
+        }
+        throw UsageError("Unknown option for legacy-gap: " + Token);
+    }
+    return Options;
+}
+
+FLegacyScanOptions
+ParseLegacyScanOptions(const std::vector<std::string> &InTokens)
+{
+    FLegacyScanOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--dry-run")
+        {
+            Options.mbDryRun = true;
+            continue;
+        }
+        throw UsageError("Unknown option for legacy-scan: " + Token);
+    }
     return Options;
 }
 

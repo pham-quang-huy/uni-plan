@@ -259,6 +259,23 @@ static JSONValue SerializeFileManifestItem(const FFileManifestItem &InItem)
     return Item;
 }
 
+static JSONValue SerializeLegacyMdSource(const FLegacyMdSource &InSource)
+{
+    JSONValue Source = JSONValue::object();
+    Source["kind"] = ToString(InSource.mKind);
+    Source["path"] = InSource.mPath;
+    return Source;
+}
+
+static JSONValue
+SerializeLegacyMdSourceArray(const std::vector<FLegacyMdSource> &InArray)
+{
+    JSONValue Arr = JSONValue::array();
+    for (const FLegacyMdSource &S : InArray)
+        Arr.push_back(SerializeLegacyMdSource(S));
+    return Arr;
+}
+
 static JSONValue SerializePhaseRecord(const FPhaseRecord &InPhase)
 {
     JSONValue Phase = JSONValue::object();
@@ -296,6 +313,10 @@ static JSONValue SerializePhaseRecord(const FPhaseRecord &InPhase)
     for (const FFileManifestItem &Item : InPhase.mFileManifest)
         Manifest.push_back(SerializeFileManifestItem(Item));
     Phase["file_manifest"] = std::move(Manifest);
+
+    // Legacy V3 source references for this phase (playbook + sidecars).
+    Phase["legacy_sources"] =
+        SerializeLegacyMdSourceArray(InPhase.mLegacySources);
 
     // Design material
     const FPhaseDesignMaterial &DM = InPhase.mDesign;
@@ -336,6 +357,10 @@ static JSONValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["locked_decisions"] = Meta.mLockedDecisions;
     Root["source_references"] = Meta.mSourceReferences;
     Root["dependencies"] = SerializeBundleReferenceArray(Meta.mDependencies);
+
+    // Topic-level legacy V3 artifacts (Plan.md, Impl.md, sidecars).
+    Root["legacy_sources"] =
+        SerializeLegacyMdSourceArray(InBundle.mLegacySources);
 
     // Phases (with inline tracking, index-based)
     JSONValue Phases = JSONValue::array();
@@ -486,6 +511,60 @@ static bool DeserializeFileManifestStrict(const JSONValue &InJson,
     return true;
 }
 
+// Backward-compatible deserializer: a missing or null `legacy_sources[]` key
+// is a successful read producing an empty vector. Existing bundles written
+// by uni-plan < 0.74.0 do not have this field, so forcing its presence
+// would break every loaded bundle.
+static bool DeserializeLegacyMdSources(const JSONValue &InParent,
+                                       const std::string &InKey,
+                                       std::vector<FLegacyMdSource> &OutArray,
+                                       const std::string &InContext,
+                                       std::string &OutError)
+{
+    if (!InParent.contains(InKey))
+    {
+        return true;
+    }
+    const JSONValue &Value = InParent[InKey];
+    if (Value.is_null())
+    {
+        return true;
+    }
+    if (!Value.is_array())
+    {
+        OutError = InContext + "." + InKey + ": expected array";
+        return false;
+    }
+    for (size_t Index = 0; Index < Value.size(); ++Index)
+    {
+        const JSONValue &Entry = Value[Index];
+        const std::string EntryCtx =
+            InContext + "." + InKey + "[" + std::to_string(Index) + "]";
+        if (!Entry.is_object())
+        {
+            OutError = EntryCtx + ": expected object";
+            return false;
+        }
+        FLegacyMdSource Source;
+        std::string KindStr;
+        if (!RequireString(Entry, "kind", KindStr, EntryCtx, OutError))
+        {
+            return false;
+        }
+        if (!LegacyMdKindFromString(KindStr, Source.mKind))
+        {
+            OutError = EntryCtx + ".kind: invalid value '" + KindStr + "'";
+            return false;
+        }
+        if (!RequireString(Entry, "path", Source.mPath, EntryCtx, OutError))
+        {
+            return false;
+        }
+        OutArray.push_back(std::move(Source));
+    }
+    return true;
+}
+
 static bool DeserializeChangeLogStrict(const JSONValue &InJson,
                                        FChangeLogEntry &OutEntry,
                                        const std::string &InContext,
@@ -621,6 +700,14 @@ static bool DeserializePhaseRecordStrict(const JSONValue &InJson,
         }
     }
 
+    // Optional — introduced in 0.74.0; backward-compat: absence = empty.
+    if (!DeserializeLegacyMdSources(InJson, "legacy_sources",
+                                    OutPhase.mLegacySources, InContext,
+                                    OutError))
+    {
+        return false;
+    }
+
     return true;
 }
 
@@ -679,6 +766,12 @@ static bool DeserializeTopicBundleV4(const JSONValue &InRoot,
     OptionalString(InRoot, "locked_decisions", Meta.mLockedDecisions);
     OptionalString(InRoot, "source_references", Meta.mSourceReferences);
     DeserializeBundleReferences(InRoot, "dependencies", Meta.mDependencies);
+    // Optional topic-level legacy sources (introduced in 0.74.0).
+    if (!DeserializeLegacyMdSources(InRoot, "legacy_sources",
+                                    OutBundle.mLegacySources, Ctx, OutError))
+    {
+        return false;
+    }
     OptionalString(InRoot, "next_actions", OutBundle.mNextActions);
 
     // Phases — strict validation per record

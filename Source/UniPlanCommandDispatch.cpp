@@ -132,6 +132,8 @@ void PrintUsage(std::ostream &Out)
            "[--since <date>]\n";
     Out << "  uni-plan blockers [--topic <T>]\n";
     Out << "  uni-plan validate [--topic <T>]\n";
+    Out << "  uni-plan legacy-scan [--topic <T>] [--dry-run]\n";
+    Out << "  uni-plan legacy-gap [--topic <T>] [--category <c>]\n";
     Out << "\n";
     Out << "Semantic lifecycle commands:\n";
     Out << "  uni-plan topic start --topic <T>\n";
@@ -184,6 +186,7 @@ void PrintUsage(std::ostream &Out)
     Out << "  uni-plan changelog set --topic <T> "
            "--index <N> [--phase <N|topic>] "
            "[--date <d>] [--change <t>] [--type <t>]\n";
+    Out << "  uni-plan changelog remove --topic <T> --index <N>\n";
     Out << "  uni-plan verification add --topic <T> "
            "--check <text> [--phase <N>] "
            "[--result <text>]\n";
@@ -301,11 +304,18 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  --reference             Design material only\n"
      "  --context <text>        Agent continuation prompt\n"
      "  --done <text>           Completed work summary\n"
+     "  --done-clear            Clear done field (for reverting a phase "
+     "whose\n"
+     "                          done text is stale placeholder prose)\n"
      "  --started-at <iso>      Explicit started_at override (set only, "
      "for migration/repair)\n"
      "  --completed-at <iso>    Explicit completed_at override (set only, "
      "for migration/repair)\n"
      "  --remaining <text>      Remaining work\n"
+     "  --remaining-clear       Clear remaining field\n"
+     "  --blockers-clear        Clear blockers field (prefer `phase "
+     "unblock` for\n"
+     "                          the normal blocked->in_progress flow)\n"
      "  --reason <text>         Block reason\n"
      "  --verification <text>   Verification note\n"
      "  --change <text>         Changelog entry (log only)\n"
@@ -429,6 +439,39 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "Examples:\n"
      "  uni-plan validate\n"
      "  uni-plan validate --topic MultiPlatforming\n"},
+    {"legacy-scan",
+     "Usage: uni-plan legacy-scan [--topic <topic>] [--dry-run]\n\n",
+     "Populate phases[].legacy_sources[] and topic-level legacy_sources[]\n"
+     "by discovering V3 .md artifacts on disk via filename convention.\n"
+     "Writes mutations back to each affected bundle unless --dry-run.\n\n",
+     nullptr,
+     "  --topic <topic>         Scan only this topic\n"
+     "  --dry-run               Report matches without mutating bundles\n",
+     kHumanTable,
+     "Examples:\n"
+     "  uni-plan legacy-scan --human\n"
+     "  uni-plan legacy-scan --topic CycleRefactor --dry-run\n"},
+    {"legacy-gap",
+     "Usage: uni-plan legacy-gap [--topic <topic>] [--category <c>]\n\n",
+     "Per-phase parity audit between V3 .md artifacts and V4 bundles.\n"
+     "Each phase is bucketed into one of 8 categories:\n"
+     "  legacy_rich          legacy >= 150 LOC, V4 < 500 chars (rebuild)\n"
+     "  legacy_rich_matched  legacy >= 150 LOC, V4 >= 2000 chars\n"
+     "  legacy_thin          legacy 50-149 LOC\n"
+     "  legacy_stub          legacy < 50 LOC\n"
+     "  legacy_absent        no legacy playbook\n"
+     "  v4_only              V4 is rich and no legacy\n"
+     "  hollow_both          legacy stub AND V4 hollow on a completed phase\n"
+     "  drift                reserved for future semantic-overlap "
+     "detection\n\n",
+     nullptr,
+     "  --topic <topic>         Audit only this topic\n"
+     "  --category <c>          Emit only rows matching this category\n",
+     kHumanTable,
+     "Examples:\n"
+     "  uni-plan legacy-gap --human\n"
+     "  uni-plan legacy-gap --topic CycleRefactor --human\n"
+     "  uni-plan legacy-gap --category legacy_rich --human\n"},
 };
 
 void PrintCommandUsage(std::ostream &Out, const std::string &InCommand)
@@ -575,6 +618,8 @@ int RunMain(const int InArgc, char *InArgv[])
             {"timeline", &RunBundleTimelineCommand},
             {"blockers", &RunBundleBlockersCommand},
             {"validate", &RunBundleValidateCommand},
+            {"legacy-scan", &RunLegacyScanCommand},
+            {"legacy-gap", &RunLegacyGapCommand},
             {"job", &DispatchJobCommand},
             {"task", &DispatchTaskCommand},
             {"lane", &DispatchLaneCommand},

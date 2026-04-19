@@ -102,6 +102,21 @@ struct FBundleReference
 };
 
 // ---------------------------------------------------------------------------
+// FLegacyMdSource — one legacy V3 markdown artifact that fed this V4
+// bundle or phase. Stored as `legacy_sources[]` on topic and per-phase
+// levels. Consumed by `uni-plan legacy-gap` for deterministic V3↔V4
+// parity auditing. Populated by `uni-plan legacy-scan` via filename
+// convention matching at migration time; hand-edits may add bespoke
+// entries. Empty vector means no known legacy heritage.
+// ---------------------------------------------------------------------------
+
+struct FLegacyMdSource
+{
+    ELegacyMdKind mKind = ELegacyMdKind::Playbook;
+    std::string mPath; // repo-relative
+};
+
+// ---------------------------------------------------------------------------
 // FPhaseTaxonomy — display-oriented taxonomy for watch mode panels.
 // Tasks are flat here for display convenience (flattened from
 // nested FJobRecord.mTasks).
