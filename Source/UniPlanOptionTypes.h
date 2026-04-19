@@ -199,6 +199,10 @@ struct FPhaseSetOptions : BaseOptions
     // Typed dependencies mutation (see FTopicSetOptions above).
     bool mbDependencyClear = false;
     std::vector<FBundleReference> mDependencyAdd;
+    // Semantic provenance stamp. Empty / unset = leave unchanged. Any
+    // value must round-trip through PhaseOriginFromString; parser
+    // enforces the allowed set at parse time (exit 2 on invalid).
+    std::optional<EPhaseOrigin> opOrigin;
 };
 
 struct FJobSetOptions : BaseOptions
@@ -426,22 +430,16 @@ struct FChangelogSetOptions : BaseOptions
 };
 
 // ---------------------------------------------------------------------------
-// Legacy-gap audit option structs (V3 <-> V4 parity)
+// Legacy-gap audit option struct (stateless V3 <-> V4 parity, 0.75.0+)
 // ---------------------------------------------------------------------------
 
 // Options for `uni-plan legacy-gap`. Defaults to all topics, all categories.
+// Stateless: discovers legacy .md files on disk at invoke time; reads no
+// path-based index from the bundle.
 struct FLegacyGapOptions : BaseOptions
 {
     std::string mTopic;                          // optional; empty = all topics
     std::optional<EPhaseGapCategory> opCategory; // filter to single category
-};
-
-// Options for `uni-plan legacy-scan`. Writes `legacy_sources[]` onto the
-// matching topic / phase records by filename convention.
-struct FLegacyScanOptions : BaseOptions
-{
-    std::string mTopic;    // optional; empty = all topics
-    bool mbDryRun = false; // --dry-run: report matches, do not mutate bundles
 };
 
 } // namespace UniPlan

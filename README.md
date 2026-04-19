@@ -13,10 +13,11 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 | Corpus-wide topic/phase counts, char sizes, manifest stats | `uni-plan validate` → `summary` block |
 | Enumerate every `file_manifest[]` entry (optionally missing-only) | `uni-plan manifest list [--topic <T>] [--phase <N>] [--missing-only]` |
 
-| Aggregate-query need | Command added in `v0.74.0` |
+| Aggregate-query need | Command added in `v0.75.0` (stateless V3 ↔ V4 audit) |
 | --- | --- |
-| Discover legacy V3 `.md` artifacts and write them into `legacy_sources[]` | `uni-plan legacy-scan [--topic <T>] [--dry-run]` |
 | Per-phase V3 ↔ V4 parity report (8-category bucket) | `uni-plan legacy-gap [--topic <T>] [--category <c>]` |
+
+> `legacy-gap` discovers V3 `.md` files on disk by filename convention at invoke time; bundles carry no path-based index. After the `.md` corpus is deleted every row becomes `legacy_absent` / `v4_only`, which is the correct steady state. Provenance is preserved via the durable `phases[].origin` enum (`native_v4` | `v3_migration`), not via stored file paths.
 
 This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and every `upl-plan-*` skill header.
 
@@ -27,7 +28,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.74.0`) |
+| Version source | [Source/UniPlanTypes.h](Source/UniPlanTypes.h) → `kCliVersion` (currently `0.75.0`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |

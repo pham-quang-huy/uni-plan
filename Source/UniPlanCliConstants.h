@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.74.0";
+static constexpr const char *kCliVersion = "0.75.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -110,11 +110,10 @@ static constexpr const char *kVerificationSchemaV2 = "uni-plan-verification-v2";
 
 static constexpr const char *kMutationSchema = "uni-plan-mutation-v1";
 
-// Legacy V3 ↔ V4 parity command schemas (introduced in v0.74.0).
+// Legacy-gap command schema (stateless V3 <-> V4 parity audit, 0.75.0+).
 // Always register a new output schema here rather than emitting the string
 // inline — the k*Schema constant is the single source of truth consumed by
 // PrintJsonHeader() and by schema-aware downstream tooling.
-static constexpr const char *kLegacyScanSchema = "uni-plan-legacy-scan-v1";
 static constexpr const char *kLegacyGapSchema = "uni-plan-legacy-gap-v1";
 
 // ---------------------------------------------------------------------------

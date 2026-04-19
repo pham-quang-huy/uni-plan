@@ -288,7 +288,7 @@ TEST(OptionParsing, UnknownOptionThrows)
 }
 
 // ===================================================================
-// Legacy gap + scan parsers (introduced in 0.74.0)
+// Legacy-gap parser (stateless V3 <-> V4 parity audit, 0.75.0+)
 // ===================================================================
 
 TEST(OptionParsing, LegacyGapEmptyIsAllTopicsAllCategories)
@@ -324,62 +324,43 @@ TEST(OptionParsing, LegacyGapUnknownOptionThrows)
                  UniPlan::UsageError);
 }
 
-TEST(OptionParsing, LegacyScanEmptyIsAllTopicsNoDryRun)
-{
-    const auto O = UniPlan::ParseLegacyScanOptions({});
-    EXPECT_TRUE(O.mTopic.empty());
-    EXPECT_FALSE(O.mbDryRun);
-}
-
-TEST(OptionParsing, LegacyScanTopicAndDryRun)
-{
-    const auto O = UniPlan::ParseLegacyScanOptions(
-        {"--topic", "CycleRefactor", "--dry-run"});
-    EXPECT_EQ(O.mTopic, "CycleRefactor");
-    EXPECT_TRUE(O.mbDryRun);
-}
-
-TEST(OptionParsing, LegacyScanUnknownOptionThrows)
-{
-    EXPECT_THROW(UniPlan::ParseLegacyScanOptions({"--bogus"}),
-                 UniPlan::UsageError);
-}
-
 // ===================================================================
-// Enum round-trips for legacy types
+// Enum round-trips
 // ===================================================================
 
-TEST(LegacyEnums, LegacyMdKindRoundTrip)
+TEST(PhaseEnums, PhaseOriginRoundTrip)
 {
-    const UniPlan::ELegacyMdKind Kinds[] = {
-        UniPlan::ELegacyMdKind::Plan,
-        UniPlan::ELegacyMdKind::Implementation,
-        UniPlan::ELegacyMdKind::Playbook,
-        UniPlan::ELegacyMdKind::PlanChangeLog,
-        UniPlan::ELegacyMdKind::PlanVerification,
-        UniPlan::ELegacyMdKind::ImplementationChangeLog,
-        UniPlan::ELegacyMdKind::ImplementationVerification,
-        UniPlan::ELegacyMdKind::PlaybookChangeLog,
-        UniPlan::ELegacyMdKind::PlaybookVerification,
+    const UniPlan::EPhaseOrigin Origins[] = {
+        UniPlan::EPhaseOrigin::NativeV4,
+        UniPlan::EPhaseOrigin::V3Migration,
     };
-    for (const UniPlan::ELegacyMdKind K : Kinds)
+    for (const UniPlan::EPhaseOrigin O : Origins)
     {
-        const std::string Str = UniPlan::ToString(K);
-        UniPlan::ELegacyMdKind Parsed = UniPlan::ELegacyMdKind::Plan;
-        ASSERT_TRUE(UniPlan::LegacyMdKindFromString(Str, Parsed))
+        const std::string Str = UniPlan::ToString(O);
+        UniPlan::EPhaseOrigin Parsed = UniPlan::EPhaseOrigin::NativeV4;
+        ASSERT_TRUE(UniPlan::PhaseOriginFromString(Str, Parsed))
             << "round-trip failed for " << Str;
-        EXPECT_EQ(Parsed, K) << "mismatch on " << Str;
+        EXPECT_EQ(Parsed, O) << "mismatch on " << Str;
     }
 }
 
-TEST(LegacyEnums, LegacyMdKindFromStringRejectsInvalid)
+TEST(PhaseEnums, PhaseOriginEmptyStringIsNativeV4)
 {
-    UniPlan::ELegacyMdKind Out = UniPlan::ELegacyMdKind::Plan;
-    EXPECT_FALSE(UniPlan::LegacyMdKindFromString("not_a_kind", Out));
-    EXPECT_FALSE(UniPlan::LegacyMdKindFromString("", Out));
+    // Empty-string path is the migration-friendly default used when a bundle
+    // has no `origin` key at all.
+    UniPlan::EPhaseOrigin Out = UniPlan::EPhaseOrigin::V3Migration;
+    ASSERT_TRUE(UniPlan::PhaseOriginFromString("", Out));
+    EXPECT_EQ(Out, UniPlan::EPhaseOrigin::NativeV4);
 }
 
-TEST(LegacyEnums, PhaseGapCategoryRoundTrip)
+TEST(PhaseEnums, PhaseOriginRejectsInvalid)
+{
+    UniPlan::EPhaseOrigin Out = UniPlan::EPhaseOrigin::NativeV4;
+    EXPECT_FALSE(UniPlan::PhaseOriginFromString("not_a_value", Out));
+    EXPECT_FALSE(UniPlan::PhaseOriginFromString("V3Migration", Out));
+}
+
+TEST(PhaseEnums, PhaseGapCategoryRoundTrip)
 {
     const UniPlan::EPhaseGapCategory Cats[] = {
         UniPlan::EPhaseGapCategory::LegacyRich,
@@ -402,7 +383,7 @@ TEST(LegacyEnums, PhaseGapCategoryRoundTrip)
     }
 }
 
-TEST(LegacyEnums, PhaseGapCategoryFromStringRejectsInvalid)
+TEST(PhaseEnums, PhaseGapCategoryFromStringRejectsInvalid)
 {
     UniPlan::EPhaseGapCategory Out = UniPlan::EPhaseGapCategory::LegacyAbsent;
     EXPECT_FALSE(UniPlan::PhaseGapCategoryFromString("not_a_cat", Out));

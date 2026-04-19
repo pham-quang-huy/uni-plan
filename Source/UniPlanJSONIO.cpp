@@ -259,23 +259,6 @@ static JSONValue SerializeFileManifestItem(const FFileManifestItem &InItem)
     return Item;
 }
 
-static JSONValue SerializeLegacyMdSource(const FLegacyMdSource &InSource)
-{
-    JSONValue Source = JSONValue::object();
-    Source["kind"] = ToString(InSource.mKind);
-    Source["path"] = InSource.mPath;
-    return Source;
-}
-
-static JSONValue
-SerializeLegacyMdSourceArray(const std::vector<FLegacyMdSource> &InArray)
-{
-    JSONValue Arr = JSONValue::array();
-    for (const FLegacyMdSource &S : InArray)
-        Arr.push_back(SerializeLegacyMdSource(S));
-    return Arr;
-}
-
 static JSONValue SerializePhaseRecord(const FPhaseRecord &InPhase)
 {
     JSONValue Phase = JSONValue::object();
@@ -314,9 +297,10 @@ static JSONValue SerializePhaseRecord(const FPhaseRecord &InPhase)
         Manifest.push_back(SerializeFileManifestItem(Item));
     Phase["file_manifest"] = std::move(Manifest);
 
-    // Legacy V3 source references for this phase (playbook + sidecars).
-    Phase["legacy_sources"] =
-        SerializeLegacyMdSourceArray(InPhase.mLegacySources);
+    // Semantic provenance stamp. Omitted only when NativeV4 AND caller
+    // wants backward-compatible bundle output; current policy is to
+    // always emit so downstream tools see a single canonical shape.
+    Phase["origin"] = ToString(InPhase.mOrigin);
 
     // Design material
     const FPhaseDesignMaterial &DM = InPhase.mDesign;
@@ -357,10 +341,6 @@ static JSONValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["locked_decisions"] = Meta.mLockedDecisions;
     Root["source_references"] = Meta.mSourceReferences;
     Root["dependencies"] = SerializeBundleReferenceArray(Meta.mDependencies);
-
-    // Topic-level legacy V3 artifacts (Plan.md, Impl.md, sidecars).
-    Root["legacy_sources"] =
-        SerializeLegacyMdSourceArray(InBundle.mLegacySources);
 
     // Phases (with inline tracking, index-based)
     JSONValue Phases = JSONValue::array();
@@ -511,56 +491,36 @@ static bool DeserializeFileManifestStrict(const JSONValue &InJson,
     return true;
 }
 
-// Backward-compatible deserializer: a missing or null `legacy_sources[]` key
-// is a successful read producing an empty vector. Existing bundles written
-// by uni-plan < 0.74.0 do not have this field, so forcing its presence
-// would break every loaded bundle.
-static bool DeserializeLegacyMdSources(const JSONValue &InParent,
-                                       const std::string &InKey,
-                                       std::vector<FLegacyMdSource> &OutArray,
-                                       const std::string &InContext,
-                                       std::string &OutError)
+// Backward-compatible deserializer for the `origin` enum field.
+// Pre-0.75.0 bundles have no `origin` key; absence → EPhaseOrigin::NativeV4.
+// An explicit unknown string value raises an error so migration typos don't
+// silently downgrade provenance.
+static bool DeserializePhaseOrigin(const JSONValue &InJson,
+                                   EPhaseOrigin &OutValue,
+                                   const std::string &InContext,
+                                   std::string &OutError)
 {
-    if (!InParent.contains(InKey))
+    OutValue = EPhaseOrigin::NativeV4;
+    if (!InJson.contains("origin"))
     {
         return true;
     }
-    const JSONValue &Value = InParent[InKey];
-    if (Value.is_null())
+    const JSONValue &V = InJson["origin"];
+    if (V.is_null())
     {
         return true;
     }
-    if (!Value.is_array())
+    if (!V.is_string())
     {
-        OutError = InContext + "." + InKey + ": expected array";
+        OutError = InContext + ".origin: expected string";
         return false;
     }
-    for (size_t Index = 0; Index < Value.size(); ++Index)
+    const std::string S = V.get<std::string>();
+    if (!PhaseOriginFromString(S, OutValue))
     {
-        const JSONValue &Entry = Value[Index];
-        const std::string EntryCtx =
-            InContext + "." + InKey + "[" + std::to_string(Index) + "]";
-        if (!Entry.is_object())
-        {
-            OutError = EntryCtx + ": expected object";
-            return false;
-        }
-        FLegacyMdSource Source;
-        std::string KindStr;
-        if (!RequireString(Entry, "kind", KindStr, EntryCtx, OutError))
-        {
-            return false;
-        }
-        if (!LegacyMdKindFromString(KindStr, Source.mKind))
-        {
-            OutError = EntryCtx + ".kind: invalid value '" + KindStr + "'";
-            return false;
-        }
-        if (!RequireString(Entry, "path", Source.mPath, EntryCtx, OutError))
-        {
-            return false;
-        }
-        OutArray.push_back(std::move(Source));
+        OutError = InContext + ".origin: invalid value '" + S +
+                   "', expected native_v4|v3_migration";
+        return false;
     }
     return true;
 }
@@ -700,10 +660,8 @@ static bool DeserializePhaseRecordStrict(const JSONValue &InJson,
         }
     }
 
-    // Optional — introduced in 0.74.0; backward-compat: absence = empty.
-    if (!DeserializeLegacyMdSources(InJson, "legacy_sources",
-                                    OutPhase.mLegacySources, InContext,
-                                    OutError))
+    // Optional — introduced in 0.75.0; backward-compat: absence = NativeV4.
+    if (!DeserializePhaseOrigin(InJson, OutPhase.mOrigin, InContext, OutError))
     {
         return false;
     }
@@ -766,12 +724,6 @@ static bool DeserializeTopicBundleV4(const JSONValue &InRoot,
     OptionalString(InRoot, "locked_decisions", Meta.mLockedDecisions);
     OptionalString(InRoot, "source_references", Meta.mSourceReferences);
     DeserializeBundleReferences(InRoot, "dependencies", Meta.mDependencies);
-    // Optional topic-level legacy sources (introduced in 0.74.0).
-    if (!DeserializeLegacyMdSources(InRoot, "legacy_sources",
-                                    OutBundle.mLegacySources, Ctx, OutError))
-    {
-        return false;
-    }
     OptionalString(InRoot, "next_actions", OutBundle.mNextActions);
 
     // Phases — strict validation per record

@@ -24,15 +24,31 @@ namespace UniPlan
 {
 
 // ---------------------------------------------------------------------------
-// Legacy gap + scan
+// legacy-gap
 //
-// Owns the two subcommands that together eliminate ad-hoc V3<->V4 parity
-// scripts:
-//   uni-plan legacy-scan  — populate `legacy_sources[]` via filename
-//                           convention discovery.
-//   uni-plan legacy-gap   — per-phase parity report, bucketed into
-//                           EPhaseGapCategory.
+// Stateless V3 ↔ V4 parity audit. Discovers legacy `.md` artifacts at
+// invoke time via filename convention, matches them against V4 bundle
+// phases, and buckets each phase into an `EPhaseGapCategory`. The
+// bundle carries no path-based legacy index — the semantic `origin`
+// stamp is sufficient provenance. When the legacy corpus is deleted,
+// every phase falls into `legacy_absent` / `v4_only`, which is the
+// correct steady state.
 // ---------------------------------------------------------------------------
+
+// Kind of legacy .md artifact discovered on disk. Used only inside
+// legacy-gap; does not appear in the bundle schema.
+enum class ELegacyArtifactKind : uint8_t
+{
+    Plan,
+    Implementation,
+    Playbook,
+    PlanChangeLog,
+    PlanVerification,
+    ImplementationChangeLog,
+    ImplementationVerification,
+    PlaybookChangeLog,
+    PlaybookVerification
+};
 
 static int ExtractPhaseNumericSuffix(const std::string &InPhaseKey)
 {
@@ -59,27 +75,28 @@ static int ExtractPhaseNumericSuffix(const std::string &InPhaseKey)
 struct FLegacyDiscoveryHit
 {
     fs::path mPath;
-    ELegacyMdKind mKind = ELegacyMdKind::Plan;
+    ELegacyArtifactKind mKind = ELegacyArtifactKind::Plan;
     bool mbPerPhase = false;
     std::string mPhaseKey;
 };
 
-static bool IsValidV3Directory(const fs::path &InPath, ELegacyMdKind InKind)
+static bool IsValidV3Directory(const fs::path &InPath,
+                               ELegacyArtifactKind InKind)
 {
     const std::string Parent = InPath.parent_path().filename().string();
     switch (InKind)
     {
-    case ELegacyMdKind::Plan:
-    case ELegacyMdKind::PlanChangeLog:
-    case ELegacyMdKind::PlanVerification:
+    case ELegacyArtifactKind::Plan:
+    case ELegacyArtifactKind::PlanChangeLog:
+    case ELegacyArtifactKind::PlanVerification:
         return Parent == "Plans";
-    case ELegacyMdKind::Implementation:
-    case ELegacyMdKind::ImplementationChangeLog:
-    case ELegacyMdKind::ImplementationVerification:
+    case ELegacyArtifactKind::Implementation:
+    case ELegacyArtifactKind::ImplementationChangeLog:
+    case ELegacyArtifactKind::ImplementationVerification:
         return Parent == "Implementation";
-    case ELegacyMdKind::Playbook:
-    case ELegacyMdKind::PlaybookChangeLog:
-    case ELegacyMdKind::PlaybookVerification:
+    case ELegacyArtifactKind::Playbook:
+    case ELegacyArtifactKind::PlaybookChangeLog:
+    case ELegacyArtifactKind::PlaybookVerification:
         return Parent == "Playbooks";
     }
     return false;
@@ -97,23 +114,25 @@ DiscoverLegacyArtifactsForTopic(const fs::path &InRepoRoot,
     struct FSuffixKind
     {
         const char *mSuffix;
-        ELegacyMdKind mKind;
+        ELegacyArtifactKind mKind;
         bool mbPerPhase;
     };
     static const FSuffixKind kTopicLevelSuffixes[] = {
-        {".Plan.ChangeLog.md", ELegacyMdKind::PlanChangeLog, false},
-        {".Plan.Verification.md", ELegacyMdKind::PlanVerification, false},
-        {".Impl.ChangeLog.md", ELegacyMdKind::ImplementationChangeLog, false},
-        {".Impl.Verification.md", ELegacyMdKind::ImplementationVerification,
+        {".Plan.ChangeLog.md", ELegacyArtifactKind::PlanChangeLog, false},
+        {".Plan.Verification.md", ELegacyArtifactKind::PlanVerification, false},
+        {".Impl.ChangeLog.md", ELegacyArtifactKind::ImplementationChangeLog,
          false},
-        {".Plan.md", ELegacyMdKind::Plan, false},
-        {".Impl.md", ELegacyMdKind::Implementation, false},
+        {".Impl.Verification.md",
+         ELegacyArtifactKind::ImplementationVerification, false},
+        {".Plan.md", ELegacyArtifactKind::Plan, false},
+        {".Impl.md", ELegacyArtifactKind::Implementation, false},
     };
     static const FSuffixKind kPerPhaseSuffixes[] = {
-        {".Playbook.ChangeLog.md", ELegacyMdKind::PlaybookChangeLog, true},
-        {".Playbook.Verification.md", ELegacyMdKind::PlaybookVerification,
+        {".Playbook.ChangeLog.md", ELegacyArtifactKind::PlaybookChangeLog,
          true},
-        {".Playbook.md", ELegacyMdKind::Playbook, true},
+        {".Playbook.Verification.md", ELegacyArtifactKind::PlaybookVerification,
+         true},
+        {".Playbook.md", ELegacyArtifactKind::Playbook, true},
     };
 
     std::error_code EC;
@@ -188,6 +207,10 @@ DiscoverLegacyArtifactsForTopic(const fs::path &InRepoRoot,
     return Hits;
 }
 
+// Map distinct phase keys (e.g. "CR0", "CR1", ...) to 0-based phase
+// indices. When every key terminates in a distinct integer < InPhaseCount
+// the suffix maps to the index directly; otherwise falls back to
+// lexicographic ordering truncated to InPhaseCount.
 static std::map<std::string, int>
 ResolvePhaseKeyToIndex(const std::vector<FLegacyDiscoveryHit> &InHits,
                        size_t InPhaseCount,
@@ -253,7 +276,7 @@ ResolvePhaseKeyToIndex(const std::vector<FLegacyDiscoveryHit> &InHits,
     if (UniqueKeys.size() > InPhaseCount)
     {
         OutWarnings.push_back(
-            "legacy-scan: " + std::to_string(UniqueKeys.size()) +
+            "legacy-gap: " + std::to_string(UniqueKeys.size()) +
             " distinct phase keys but only " + std::to_string(InPhaseCount) +
             " phases; truncating to first " + std::to_string(InPhaseCount));
     }
@@ -264,223 +287,10 @@ ResolvePhaseKeyToIndex(const std::vector<FLegacyDiscoveryHit> &InHits,
     return Result;
 }
 
-// Escape/quote helpers come from UniPlanJSONHelpers.h — do not re-implement.
-// All JSON emission goes through PrintJsonHeader / JSONQuote / JSONEscape so
-// control-char handling and schema-header shape stay consistent with the
-// rest of the CLI.
-
 // ---------------------------------------------------------------------------
-// legacy-scan
-// ---------------------------------------------------------------------------
-
-static void ApplyHitsToBundle(FTopicBundle &InOutBundle,
-                              const std::vector<FLegacyDiscoveryHit> &InHits,
-                              const fs::path &InRepoRoot, bool InDryRun,
-                              FLegacyScanReport &InOutReport,
-                              int &OutTopicWrites, int &OutPhaseWrites)
-{
-    OutTopicWrites = 0;
-    OutPhaseWrites = 0;
-
-    std::vector<FLegacyDiscoveryHit> TopicHits;
-    std::vector<FLegacyDiscoveryHit> PhaseHits;
-    for (const FLegacyDiscoveryHit &H : InHits)
-    {
-        if (H.mbPerPhase)
-        {
-            PhaseHits.push_back(H);
-        }
-        else
-        {
-            TopicHits.push_back(H);
-        }
-    }
-
-    std::sort(TopicHits.begin(), TopicHits.end(),
-              [](const FLegacyDiscoveryHit &A, const FLegacyDiscoveryHit &B)
-              { return A.mPath.string() < B.mPath.string(); });
-    std::vector<FLegacyMdSource> NewTopicSources;
-    for (const FLegacyDiscoveryHit &H : TopicHits)
-    {
-        FLegacyMdSource S;
-        S.mKind = H.mKind;
-        S.mPath = fs::relative(H.mPath, InRepoRoot).generic_string();
-        NewTopicSources.push_back(std::move(S));
-
-        FLegacyScanHit ReportHit;
-        ReportHit.mTopic = InOutBundle.mTopicKey;
-        ReportHit.mPhaseIndex = -1;
-        ReportHit.mKind = H.mKind;
-        ReportHit.mPath = fs::relative(H.mPath, InRepoRoot).generic_string();
-        ReportHit.mLoc = LegacyMdContentLineCount(H.mPath.string());
-        InOutReport.mHits.push_back(std::move(ReportHit));
-    }
-
-    const std::map<std::string, int> KeyToIndex = ResolvePhaseKeyToIndex(
-        PhaseHits, InOutBundle.mPhases.size(), InOutReport.mWarnings);
-
-    std::map<int, std::vector<FLegacyMdSource>> PhaseSources;
-    for (const FLegacyDiscoveryHit &H : PhaseHits)
-    {
-        auto It = KeyToIndex.find(H.mPhaseKey);
-        if (It == KeyToIndex.end())
-        {
-            continue;
-        }
-        const int PhaseIndex = It->second;
-        FLegacyMdSource S;
-        S.mKind = H.mKind;
-        S.mPath = fs::relative(H.mPath, InRepoRoot).generic_string();
-        PhaseSources[PhaseIndex].push_back(std::move(S));
-
-        FLegacyScanHit ReportHit;
-        ReportHit.mTopic = InOutBundle.mTopicKey;
-        ReportHit.mPhaseIndex = PhaseIndex;
-        ReportHit.mKind = H.mKind;
-        ReportHit.mPath = fs::relative(H.mPath, InRepoRoot).generic_string();
-        ReportHit.mLoc = LegacyMdContentLineCount(H.mPath.string());
-        InOutReport.mHits.push_back(std::move(ReportHit));
-    }
-
-    if (InDryRun)
-    {
-        OutTopicWrites = NewTopicSources.empty() ? 0 : 1;
-        for (const auto &Pair : PhaseSources)
-        {
-            (void)Pair;
-            ++OutPhaseWrites;
-        }
-        return;
-    }
-
-    if (!NewTopicSources.empty() || !InOutBundle.mLegacySources.empty())
-    {
-        std::sort(NewTopicSources.begin(), NewTopicSources.end(),
-                  [](const FLegacyMdSource &A, const FLegacyMdSource &B)
-                  { return A.mPath < B.mPath; });
-        InOutBundle.mLegacySources = std::move(NewTopicSources);
-        OutTopicWrites = 1;
-    }
-    for (auto &Pair : PhaseSources)
-    {
-        std::sort(Pair.second.begin(), Pair.second.end(),
-                  [](const FLegacyMdSource &A, const FLegacyMdSource &B)
-                  { return A.mPath < B.mPath; });
-        InOutBundle.mPhases[Pair.first].mLegacySources = std::move(Pair.second);
-        ++OutPhaseWrites;
-    }
-}
-
-int RunLegacyScanCommand(const std::vector<std::string> &InArgs,
-                         const std::string &InRepoRoot)
-{
-    FLegacyScanOptions Options = ParseLegacyScanOptions(InArgs);
-    const fs::path RepoRoot = Options.mRepoRoot.empty()
-                                  ? fs::path(InRepoRoot)
-                                  : fs::path(Options.mRepoRoot);
-
-    std::vector<std::string> BundleWarnings;
-    std::vector<FTopicBundle> Bundles =
-        LoadAllBundles(RepoRoot, BundleWarnings);
-
-    FLegacyScanReport Report;
-    Report.mGeneratedUtc = GetUtcNow();
-    Report.mRepoRoot = RepoRoot.string();
-    Report.mbDryRun = Options.mbDryRun;
-    Report.mWarnings = std::move(BundleWarnings);
-
-    for (FTopicBundle &B : Bundles)
-    {
-        if (!Options.mTopic.empty() && B.mTopicKey != Options.mTopic)
-        {
-            continue;
-        }
-        ++Report.mTopicsScanned;
-
-        const std::vector<FLegacyDiscoveryHit> Hits =
-            DiscoverLegacyArtifactsForTopic(RepoRoot, B.mTopicKey);
-        if (Hits.empty())
-        {
-            continue;
-        }
-        int TopicWrites = 0;
-        int PhaseWrites = 0;
-        ApplyHitsToBundle(B, Hits, RepoRoot, Options.mbDryRun, Report,
-                          TopicWrites, PhaseWrites);
-        if (TopicWrites > 0 || PhaseWrites > 0)
-        {
-            if (TopicWrites > 0)
-            {
-                ++Report.mTopicsMutated;
-            }
-            Report.mPhasesMutated += PhaseWrites;
-            if (!Options.mbDryRun)
-            {
-                std::string Error;
-                if (WriteBundleBack(B, RepoRoot, Error) != 0)
-                {
-                    Report.mWarnings.push_back("WriteBundleBack failed for " +
-                                               B.mTopicKey + ": " + Error);
-                }
-            }
-        }
-    }
-
-    if (Options.mbHuman)
-    {
-        PrintRepoInfo(RepoRoot);
-        std::cout << "\n"
-                  << kColorBold << "Legacy scan " << kColorReset
-                  << (Options.mbDryRun ? "(dry-run)" : "") << "\n";
-        std::cout << "  Topics scanned : " << Report.mTopicsScanned << "\n"
-                  << "  Topics mutated : " << Report.mTopicsMutated << "\n"
-                  << "  Phases mutated : " << Report.mPhasesMutated << "\n"
-                  << "  Hits total     : " << Report.mHits.size() << "\n";
-        if (!Report.mWarnings.empty())
-        {
-            std::cout << kColorYellow << "\nWarnings:" << kColorReset << "\n";
-            for (const std::string &W : Report.mWarnings)
-            {
-                std::cout << "  - " << W << "\n";
-            }
-        }
-        return 0;
-    }
-
-    PrintJsonHeader(kLegacyScanSchema, Report.mGeneratedUtc, Report.mRepoRoot);
-    EmitJsonFieldBool("dry_run", Report.mbDryRun);
-    EmitJsonFieldInt("topics_scanned", Report.mTopicsScanned);
-    EmitJsonFieldInt("topics_mutated", Report.mTopicsMutated);
-    EmitJsonFieldInt("phases_mutated", Report.mPhasesMutated);
-    std::cout << "\"hits\":[";
-    for (size_t I = 0; I < Report.mHits.size(); ++I)
-    {
-        PrintJsonSep(I);
-        const FLegacyScanHit &H = Report.mHits[I];
-        std::cout << "{";
-        EmitJsonField("topic", H.mTopic);
-        std::cout << "\"phase_index\":";
-        if (H.mPhaseIndex < 0)
-        {
-            std::cout << "null";
-        }
-        else
-        {
-            std::cout << H.mPhaseIndex;
-        }
-        std::cout << ",";
-        EmitJsonField("kind", ToString(H.mKind));
-        EmitJsonField("path", H.mPath);
-        EmitJsonFieldInt("legacy_loc", H.mLoc, false);
-        std::cout << "}";
-    }
-    std::cout << "],";
-    PrintJsonClose(Report.mWarnings);
-    return 0;
-}
-
-// ---------------------------------------------------------------------------
-// legacy-gap
+// Categorization thresholds — agents choose rebuild strategy based on the
+// resulting EPhaseGapCategory. Documented next to EPhaseGapCategory in
+// UniPlanEnums.h.
 // ---------------------------------------------------------------------------
 
 static constexpr int kLegacyRichMinLoc = 150;
@@ -541,7 +351,7 @@ static FPhaseGapRow
 BuildPhaseGapRow(const fs::path &InRepoRoot, const FTopicBundle &InBundle,
                  int InPhaseIndex,
                  const std::vector<FLegacyDiscoveryHit> &InDiscoveredHits,
-                 const std::map<std::string, int> &InFallbackKeyToIndex)
+                 const std::map<std::string, int> &InKeyToIndex)
 {
     FPhaseGapRow Row;
     Row.mTopic = InBundle.mTopicKey;
@@ -551,27 +361,17 @@ BuildPhaseGapRow(const fs::path &InRepoRoot, const FTopicBundle &InBundle,
     Row.mV4DesignChars = ComputeV4DesignChars(P);
     Row.mV4JobsCount = P.mJobs.size();
 
-    for (const FLegacyMdSource &S : P.mLegacySources)
-    {
-        if (S.mKind == ELegacyMdKind::Playbook)
-        {
-            Row.mLegacyPath = S.mPath;
-            const fs::path Resolved =
-                ResolveRepoRelativePath(InRepoRoot, S.mPath);
-            Row.mLegacyLoc = LegacyMdContentLineCount(Resolved.string());
-            Row.mCategory = CategorizePhase(Row.mLegacyLoc, Row.mV4DesignChars,
-                                            Row.mV4JobsCount, Row.mPhaseStatus);
-            return Row;
-        }
-    }
+    // Walk the discovered hits and find the first Playbook entry that
+    // resolves to this phase index via the key-to-index map. The bundle
+    // carries no path index — discovery is purely filesystem-driven.
     for (const FLegacyDiscoveryHit &H : InDiscoveredHits)
     {
-        if (!H.mbPerPhase || H.mKind != ELegacyMdKind::Playbook)
+        if (!H.mbPerPhase || H.mKind != ELegacyArtifactKind::Playbook)
         {
             continue;
         }
-        auto It = InFallbackKeyToIndex.find(H.mPhaseKey);
-        if (It == InFallbackKeyToIndex.end() || It->second != InPhaseIndex)
+        auto It = InKeyToIndex.find(H.mPhaseKey);
+        if (It == InKeyToIndex.end() || It->second != InPhaseIndex)
         {
             continue;
         }
@@ -612,14 +412,13 @@ int RunLegacyGapCommand(const std::vector<std::string> &InArgs,
         }
         const std::vector<FLegacyDiscoveryHit> DiscoveredHits =
             DiscoverLegacyArtifactsForTopic(RepoRoot, B.mTopicKey);
-        std::vector<std::string> UnusedWarnings;
-        const std::map<std::string, int> FallbackMap = ResolvePhaseKeyToIndex(
-            DiscoveredHits, B.mPhases.size(), UnusedWarnings);
+        const std::map<std::string, int> KeyToIndex = ResolvePhaseKeyToIndex(
+            DiscoveredHits, B.mPhases.size(), Report.mWarnings);
 
         for (size_t I = 0; I < B.mPhases.size(); ++I)
         {
             FPhaseGapRow Row = BuildPhaseGapRow(
-                RepoRoot, B, static_cast<int>(I), DiscoveredHits, FallbackMap);
+                RepoRoot, B, static_cast<int>(I), DiscoveredHits, KeyToIndex);
             if (Options.opCategory.has_value() &&
                 Row.mCategory != *Options.opCategory)
             {

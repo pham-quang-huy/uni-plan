@@ -651,107 +651,49 @@ inline bool PlatformScopeFromString(const std::string &InValue,
 }
 
 // ---------------------------------------------------------------------------
-// ELegacyMdKind — kind of legacy V3 markdown artifact referenced by a V4
-// bundle or phase. Used by `phases[].legacy_sources[]` and the topic-level
-// `legacy_sources[]` to self-describe where each V4 record was migrated
-// from. Consumed by `uni-plan legacy-gap` to compute parity against live
-// V4 design material.
-//   Plan                         — <Topic>.Plan.md
-//   Implementation               — <Topic>.Impl.md
-//   Playbook                     — <Topic>.<PhaseKey>.Playbook.md
-//   PlanChangeLog                — <Topic>.Plan.ChangeLog.md
-//   PlanVerification             — <Topic>.Plan.Verification.md
-//   ImplementationChangeLog      — <Topic>.Impl.ChangeLog.md
-//   ImplementationVerification   — <Topic>.Impl.Verification.md
-//   PlaybookChangeLog            — <Topic>.<PhaseKey>.Playbook.ChangeLog.md
-//   PlaybookVerification         — <Topic>.<PhaseKey>.Playbook.Verification.md
+// EPhaseOrigin — semantic provenance of a phase record. Durable once
+// stamped; independent of whether any legacy `.md` file exists on disk.
+// Preserves migration history even after the V3 corpus is deleted.
+//   NativeV4    — phase was authored directly against the V4 bundle
+//                 schema (no V3 migration pass).
+//   V3Migration — phase was produced by migrating a V3 markdown plan
+//                 (Plan.md + Impl.md + Playbook.md). Indicates agents
+//                 should expect `done`/`remaining` prose seeded from the
+//                 V3 tracker rather than the V4 authoring workflow.
+// Absence in JSON (backward-compat: bundles older than 0.75.0) maps to
+// NativeV4 — stamp v3_migration explicitly during migration or on read
+// of a bundle with known V3 heritage.
 // ---------------------------------------------------------------------------
 
-enum class ELegacyMdKind : uint8_t
+enum class EPhaseOrigin : uint8_t
 {
-    Plan,
-    Implementation,
-    Playbook,
-    PlanChangeLog,
-    PlanVerification,
-    ImplementationChangeLog,
-    ImplementationVerification,
-    PlaybookChangeLog,
-    PlaybookVerification
+    NativeV4,
+    V3Migration
 };
 
-inline const char *ToString(ELegacyMdKind InValue)
+inline const char *ToString(EPhaseOrigin InValue)
 {
     switch (InValue)
     {
-    case ELegacyMdKind::Plan:
-        return "plan";
-    case ELegacyMdKind::Implementation:
-        return "implementation";
-    case ELegacyMdKind::Playbook:
-        return "playbook";
-    case ELegacyMdKind::PlanChangeLog:
-        return "plan_changelog";
-    case ELegacyMdKind::PlanVerification:
-        return "plan_verification";
-    case ELegacyMdKind::ImplementationChangeLog:
-        return "implementation_changelog";
-    case ELegacyMdKind::ImplementationVerification:
-        return "implementation_verification";
-    case ELegacyMdKind::PlaybookChangeLog:
-        return "playbook_changelog";
-    case ELegacyMdKind::PlaybookVerification:
-        return "playbook_verification";
+    case EPhaseOrigin::NativeV4:
+        return "native_v4";
+    case EPhaseOrigin::V3Migration:
+        return "v3_migration";
     }
-    return "playbook";
+    return "native_v4";
 }
 
-inline bool LegacyMdKindFromString(const std::string &InValue,
-                                   ELegacyMdKind &OutValue)
+inline bool PhaseOriginFromString(const std::string &InValue,
+                                  EPhaseOrigin &OutValue)
 {
-    if (InValue == "plan")
+    if (InValue == "native_v4" || InValue.empty())
     {
-        OutValue = ELegacyMdKind::Plan;
+        OutValue = EPhaseOrigin::NativeV4;
         return true;
     }
-    if (InValue == "implementation")
+    if (InValue == "v3_migration")
     {
-        OutValue = ELegacyMdKind::Implementation;
-        return true;
-    }
-    if (InValue == "playbook")
-    {
-        OutValue = ELegacyMdKind::Playbook;
-        return true;
-    }
-    if (InValue == "plan_changelog")
-    {
-        OutValue = ELegacyMdKind::PlanChangeLog;
-        return true;
-    }
-    if (InValue == "plan_verification")
-    {
-        OutValue = ELegacyMdKind::PlanVerification;
-        return true;
-    }
-    if (InValue == "implementation_changelog")
-    {
-        OutValue = ELegacyMdKind::ImplementationChangeLog;
-        return true;
-    }
-    if (InValue == "implementation_verification")
-    {
-        OutValue = ELegacyMdKind::ImplementationVerification;
-        return true;
-    }
-    if (InValue == "playbook_changelog")
-    {
-        OutValue = ELegacyMdKind::PlaybookChangeLog;
-        return true;
-    }
-    if (InValue == "playbook_verification")
-    {
-        OutValue = ELegacyMdKind::PlaybookVerification;
+        OutValue = EPhaseOrigin::V3Migration;
         return true;
     }
     return false;

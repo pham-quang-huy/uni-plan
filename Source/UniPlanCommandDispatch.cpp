@@ -132,7 +132,6 @@ void PrintUsage(std::ostream &Out)
            "[--since <date>]\n";
     Out << "  uni-plan blockers [--topic <T>]\n";
     Out << "  uni-plan validate [--topic <T>]\n";
-    Out << "  uni-plan legacy-scan [--topic <T>] [--dry-run]\n";
     Out << "  uni-plan legacy-gap [--topic <T>] [--category <c>]\n";
     Out << "\n";
     Out << "Semantic lifecycle commands:\n";
@@ -336,14 +335,18 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  --dependency-add <spec> Add typed dependency; spec = "
      "'<kind>|<topic>|<phase>|<path>|<note>'\n"
      "                          <kind>: bundle | phase | governance "
-     "| external\n",
+     "| external\n"
+     "  --origin <value>        Stamp phase provenance: native_v4 or "
+     "v3_migration\n"
+     "                          (idempotent; empty = no change)\n",
      kHumanTable,
      "Examples:\n"
      "  uni-plan phase start --topic X --phase 6\n"
      "  uni-plan phase complete --topic X --phase 6 "
      "--done \"Implemented\"\n"
      "  uni-plan phase next --topic X --human\n"
-     "  uni-plan phase readiness --topic X --phase 6\n"},
+     "  uni-plan phase readiness --topic X --phase 6\n"
+     "  uni-plan phase set --topic X --phase 0 --origin v3_migration\n"},
     {"job",
      "Usage:\n"
      "  uni-plan job set --topic <topic> --phase <N> --job "
@@ -439,21 +442,17 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "Examples:\n"
      "  uni-plan validate\n"
      "  uni-plan validate --topic MultiPlatforming\n"},
-    {"legacy-scan",
-     "Usage: uni-plan legacy-scan [--topic <topic>] [--dry-run]\n\n",
-     "Populate phases[].legacy_sources[] and topic-level legacy_sources[]\n"
-     "by discovering V3 .md artifacts on disk via filename convention.\n"
-     "Writes mutations back to each affected bundle unless --dry-run.\n\n",
-     nullptr,
-     "  --topic <topic>         Scan only this topic\n"
-     "  --dry-run               Report matches without mutating bundles\n",
-     kHumanTable,
-     "Examples:\n"
-     "  uni-plan legacy-scan --human\n"
-     "  uni-plan legacy-scan --topic CycleRefactor --dry-run\n"},
     {"legacy-gap",
      "Usage: uni-plan legacy-gap [--topic <topic>] [--category <c>]\n\n",
-     "Per-phase parity audit between V3 .md artifacts and V4 bundles.\n"
+     "Stateless per-phase parity audit between V3 .md artifacts and V4 "
+     "bundles.\n"
+     "Discovers legacy .md files on disk at invoke time via filename "
+     "convention\n"
+     "(<Topic>.Plan.md, <Topic>.<PhaseKey>.Playbook.md, sidecars). Bundles "
+     "carry\n"
+     "no legacy path index — after the .md corpus is deleted every phase "
+     "falls\n"
+     "into legacy_absent / v4_only which is the correct steady state.\n\n"
      "Each phase is bucketed into one of 8 categories:\n"
      "  legacy_rich          legacy >= 150 LOC, V4 < 500 chars (rebuild)\n"
      "  legacy_rich_matched  legacy >= 150 LOC, V4 >= 2000 chars\n"
@@ -618,7 +617,6 @@ int RunMain(const int InArgc, char *InArgv[])
             {"timeline", &RunBundleTimelineCommand},
             {"blockers", &RunBundleBlockersCommand},
             {"validate", &RunBundleValidateCommand},
-            {"legacy-scan", &RunLegacyScanCommand},
             {"legacy-gap", &RunLegacyGapCommand},
             {"job", &DispatchJobCommand},
             {"task", &DispatchTaskCommand},

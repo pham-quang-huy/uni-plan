@@ -1,3 +1,4 @@
+#include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanStatusHelpers.h"
 #include "UniPlanStringHelpers.h"
@@ -72,6 +73,51 @@ std::string ConsumeValuedOption(const std::vector<std::string> &InTokens,
     }
     InOutIndex += 1;
     return InTokens[InOutIndex];
+}
+
+// TryConsumeStringOrFileOption — unified handler for the paired
+// `--<field>` (literal string value) and `--<field>-file <path>` (read
+// file contents raw, no shell expansion) option shape used across every
+// prose-setting mutation command.
+//
+// Returns true iff the token at InOutIndex matched either flag; on match
+// the value is stored into OutValue and the caller should `continue`.
+// Returns false when neither flag matched (caller moves on).
+//
+// The `-file` branch goes through TryReadFileToString, which slurps the
+// whole file verbatim — no trimming, no line processing, no shell
+// expansion. This is the single purpose of this helper: eliminate the
+// `--<field> "$(cat file)"` silent-corruption hazard for prose fields
+// that legitimately contain `$`, backticks, or double quotes.
+//
+// Empty-string semantics are preserved: a literal `--<field> ""` still
+// reads as "no change" downstream (the mutation commands' long-standing
+// convention). An empty file read via `--<field>-file empty.txt` also
+// yields an empty string, matching the literal-empty behavior.
+inline bool
+TryConsumeStringOrFileOption(const std::vector<std::string> &InTokens,
+                             size_t &InOutIndex, const char *InStringFlag,
+                             const char *InFileFlag, std::string &OutValue)
+{
+    const std::string &Token = InTokens[InOutIndex];
+    if (Token == InStringFlag)
+    {
+        OutValue = ConsumeValuedOption(InTokens, InOutIndex, InStringFlag);
+        return true;
+    }
+    if (Token == InFileFlag)
+    {
+        const std::string Path =
+            ConsumeValuedOption(InTokens, InOutIndex, InFileFlag);
+        std::string Error;
+        if (!TryReadFileToString(fs::path(Path), OutValue, Error))
+        {
+            throw UsageError(std::string(InFileFlag) + " '" + Path +
+                             "': " + Error);
+        }
+        return true;
+    }
+    return false;
 }
 
 bool ContainsHelpFlag(const std::vector<std::string> &InTokens)
@@ -522,46 +568,30 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
             Options.opStatus = Value;
             continue;
         }
-        if (Token == "--next-actions")
-        {
-            Options.mNextActions =
-                ConsumeValuedOption(Remaining, Index, "--next-actions");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--next-actions",
+                                         "--next-actions-file",
+                                         Options.mNextActions))
             continue;
-        }
-        if (Token == "--summary")
-        {
-            Options.mSummary =
-                ConsumeValuedOption(Remaining, Index, "--summary");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--summary",
+                                         "--summary-file", Options.mSummary))
             continue;
-        }
-        if (Token == "--goals")
-        {
-            Options.mGoals = ConsumeValuedOption(Remaining, Index, "--goals");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--goals",
+                                         "--goals-file", Options.mGoals))
             continue;
-        }
-        if (Token == "--non-goals")
-        {
-            Options.mNonGoals =
-                ConsumeValuedOption(Remaining, Index, "--non-goals");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--non-goals",
+                                         "--non-goals-file", Options.mNonGoals))
             continue;
-        }
-        if (Token == "--risks")
-        {
-            Options.mRisks = ConsumeValuedOption(Remaining, Index, "--risks");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--risks",
+                                         "--risks-file", Options.mRisks))
             continue;
-        }
-        if (Token == "--acceptance-criteria")
-        {
-            Options.mAcceptanceCriteria =
-                ConsumeValuedOption(Remaining, Index, "--acceptance-criteria");
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--acceptance-criteria",
+                "--acceptance-criteria-file", Options.mAcceptanceCriteria))
             continue;
-        }
-        if (Token == "--problem-statement")
-        {
-            Options.mProblemStatement =
-                ConsumeValuedOption(Remaining, Index, "--problem-statement");
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--problem-statement",
+                "--problem-statement-file", Options.mProblemStatement))
             continue;
-        }
         if (Token == "--validation-clear")
         {
             Options.mbValidationClear = true;
@@ -604,30 +634,22 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
             Options.mValidationAdd.push_back(std::move(C));
             continue;
         }
-        if (Token == "--baseline-audit")
-        {
-            Options.mBaselineAudit =
-                ConsumeValuedOption(Remaining, Index, "--baseline-audit");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--baseline-audit",
+                                         "--baseline-audit-file",
+                                         Options.mBaselineAudit))
             continue;
-        }
-        if (Token == "--execution-strategy")
-        {
-            Options.mExecutionStrategy =
-                ConsumeValuedOption(Remaining, Index, "--execution-strategy");
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--execution-strategy",
+                "--execution-strategy-file", Options.mExecutionStrategy))
             continue;
-        }
-        if (Token == "--locked-decisions")
-        {
-            Options.mLockedDecisions =
-                ConsumeValuedOption(Remaining, Index, "--locked-decisions");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--locked-decisions",
+                                         "--locked-decisions-file",
+                                         Options.mLockedDecisions))
             continue;
-        }
-        if (Token == "--source-references")
-        {
-            Options.mSourceReferences =
-                ConsumeValuedOption(Remaining, Index, "--source-references");
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--source-references",
+                "--source-references-file", Options.mSourceReferences))
             continue;
-        }
         if (Token == "--dependency-clear")
         {
             Options.mbDependencyClear = true;
@@ -732,11 +754,9 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             Options.opStatus = Value;
             continue;
         }
-        if (Token == "--done")
-        {
-            Options.mDone = ConsumeValuedOption(Remaining, Index, "--done");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--done",
+                                         "--done-file", Options.mDone))
             continue;
-        }
         if (Token == "--done-clear")
         {
             Options.mbDoneClear = true;
@@ -783,76 +803,69 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             }
             continue;
         }
-        if (Token == "--remaining")
+        if (Token == "--origin")
         {
-            Options.mRemaining =
-                ConsumeValuedOption(Remaining, Index, "--remaining");
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--origin");
+            EPhaseOrigin Parsed = EPhaseOrigin::NativeV4;
+            if (!PhaseOriginFromString(Raw, Parsed))
+            {
+                throw UsageError("Invalid --origin value: '" + Raw +
+                                 "', expected native_v4 or v3_migration");
+            }
+            // Empty string maps to NativeV4 inside PhaseOriginFromString,
+            // but empty `--origin ""` should mean "no change" the same way
+            // other prose flags do. Gate on Raw so the caller can
+            // distinguish "unset" from an explicit native_v4 stamp.
+            if (!Raw.empty())
+            {
+                Options.opOrigin = Parsed;
+            }
             continue;
         }
-        if (Token == "--blockers")
-        {
-            Options.mBlockers =
-                ConsumeValuedOption(Remaining, Index, "--blockers");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--remaining",
+                                         "--remaining-file",
+                                         Options.mRemaining))
             continue;
-        }
-        if (Token == "--context")
-        {
-            Options.mContext =
-                ConsumeValuedOption(Remaining, Index, "--context");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--blockers",
+                                         "--blockers-file", Options.mBlockers))
             continue;
-        }
-        if (Token == "--scope")
-        {
-            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--context",
+                                         "--context-file", Options.mContext))
             continue;
-        }
-        if (Token == "--output")
-        {
-            Options.mOutput = ConsumeValuedOption(Remaining, Index, "--output");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--scope",
+                                         "--scope-file", Options.mScope))
             continue;
-        }
-        if (Token == "--investigation")
-        {
-            Options.mInvestigation =
-                ConsumeValuedOption(Remaining, Index, "--investigation");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--output",
+                                         "--output-file", Options.mOutput))
             continue;
-        }
-        if (Token == "--code-entity-contract")
-        {
-            Options.mCodeEntityContract =
-                ConsumeValuedOption(Remaining, Index, "--code-entity-contract");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--investigation",
+                                         "--investigation-file",
+                                         Options.mInvestigation))
             continue;
-        }
-        if (Token == "--code-snippets")
-        {
-            Options.mCodeSnippets =
-                ConsumeValuedOption(Remaining, Index, "--code-snippets");
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--code-entity-contract",
+                "--code-entity-contract-file", Options.mCodeEntityContract))
             continue;
-        }
-        if (Token == "--best-practices")
-        {
-            Options.mBestPractices =
-                ConsumeValuedOption(Remaining, Index, "--best-practices");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--code-snippets",
+                                         "--code-snippets-file",
+                                         Options.mCodeSnippets))
             continue;
-        }
-        if (Token == "--multi-platforming")
-        {
-            Options.mMultiPlatforming =
-                ConsumeValuedOption(Remaining, Index, "--multi-platforming");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--best-practices",
+                                         "--best-practices-file",
+                                         Options.mBestPractices))
             continue;
-        }
-        if (Token == "--readiness-gate")
-        {
-            Options.mReadinessGate =
-                ConsumeValuedOption(Remaining, Index, "--readiness-gate");
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--multi-platforming",
+                "--multi-platforming-file", Options.mMultiPlatforming))
             continue;
-        }
-        if (Token == "--handoff")
-        {
-            Options.mHandoff =
-                ConsumeValuedOption(Remaining, Index, "--handoff");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--readiness-gate",
+                                         "--readiness-gate-file",
+                                         Options.mReadinessGate))
             continue;
-        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--handoff",
+                                         "--handoff-file", Options.mHandoff))
+            continue;
         if (Token == "--validation-clear")
         {
             Options.mbValidationClear = true;
@@ -1002,22 +1015,16 @@ FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens)
             Options.opStatus = Value;
             continue;
         }
-        if (Token == "--scope")
-        {
-            Options.mScope = ConsumeValuedOption(Remaining, Index, "--scope");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--scope",
+                                         "--scope-file", Options.mScope))
             continue;
-        }
-        if (Token == "--output")
-        {
-            Options.mOutput = ConsumeValuedOption(Remaining, Index, "--output");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--output",
+                                         "--output-file", Options.mOutput))
             continue;
-        }
-        if (Token == "--exit-criteria")
-        {
-            Options.mExitCriteria =
-                ConsumeValuedOption(Remaining, Index, "--exit-criteria");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--exit-criteria",
+                                         "--exit-criteria-file",
+                                         Options.mExitCriteria))
             continue;
-        }
         if (Token == "--lane")
         {
             ParseRequiredIntIndex(Remaining, Index, "--lane",
@@ -1083,17 +1090,12 @@ FTaskSetOptions ParseTaskSetOptions(const std::vector<std::string> &InTokens)
             Options.opStatus = Value;
             continue;
         }
-        if (Token == "--evidence")
-        {
-            Options.mEvidence =
-                ConsumeValuedOption(Remaining, Index, "--evidence");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--evidence",
+                                         "--evidence-file", Options.mEvidence))
             continue;
-        }
-        if (Token == "--notes")
-        {
-            Options.mNotes = ConsumeValuedOption(Remaining, Index, "--notes");
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--notes",
+                                         "--notes-file", Options.mNotes))
             continue;
-        }
         throw UsageError("Unknown option for task set: " + Token);
     }
     if (Options.mTopic.empty())
@@ -2272,7 +2274,7 @@ ParsePhaseNormalizeOptions(const std::vector<std::string> &InTokens)
 }
 
 // ---------------------------------------------------------------------------
-// Legacy gap + scan option parsers (introduced in 0.74.0)
+// Legacy-gap option parser (stateless V3 <-> V4 parity audit)
 // ---------------------------------------------------------------------------
 
 FLegacyGapOptions
@@ -2305,29 +2307,6 @@ ParseLegacyGapOptions(const std::vector<std::string> &InTokens)
             continue;
         }
         throw UsageError("Unknown option for legacy-gap: " + Token);
-    }
-    return Options;
-}
-
-FLegacyScanOptions
-ParseLegacyScanOptions(const std::vector<std::string> &InTokens)
-{
-    FLegacyScanOptions Options;
-    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
-    for (size_t Index = 0; Index < Remaining.size(); ++Index)
-    {
-        const std::string &Token = Remaining[Index];
-        if (Token == "--topic")
-        {
-            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
-            continue;
-        }
-        if (Token == "--dry-run")
-        {
-            Options.mbDryRun = true;
-            continue;
-        }
-        throw UsageError("Unknown option for legacy-scan: " + Token);
     }
     return Options;
 }

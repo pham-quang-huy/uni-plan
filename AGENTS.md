@@ -168,7 +168,7 @@ uni-plan/
 
 ## cli_semver_discipline
 
-uni-plan is still **pre-1.0** (currently `0.74.0`) and under active
+uni-plan is still **pre-1.0** (currently `0.75.0`) and under active
 development. The command surface, mutation target path format,
 validator output schema, and auto-changelog `affected` contract are all
 subject to change. There is no stability commitment until we explicitly
@@ -203,27 +203,43 @@ Two new flags on `phase set`, intended for migration/repair passes that need to 
 
 Transitioning a phase to `status=completed` when `started_at` is empty now **requires** `--started-at <iso>` to be supplied explicitly; otherwise the command fails with `UsageError` (exit 2). This enforces the Data Fix Gate — the CLI will not fabricate a historical start time from `completed_at` or "now". The normal execution path (`phase start` / `phase set --status in_progress` then `phase complete` / `phase set --status completed`) already stamps `started_at` at the in_progress transition, so this gate only fires when callers skip straight from `not_started` to `completed`. The new `completed_phase_timestamp_required` structural-warning flags any persisted phase that already violates the invariant — `completed` phases need both timestamps, `in_progress`/`blocked` phases need at least `started_at`.
 
-### v0.74.0 behavior note — legacy gap + scan + schema `legacy_sources[]`
+### v0.75.0 behavior note — legacy-gap stateless + `phases[].origin` stamp
 
-Two new subcommands eliminate ad-hoc scripting for V3 ↔ V4 parity audits:
+The v0.74.0 `legacy_sources[]` schema field (both topic-level and per-phase) has been **removed**. Storing repo-relative paths to transient V3 `.md` files is the wrong durability class: once the legacy markdown corpus is deleted, every stored path becomes dangling. The replacement splits that concern in two:
 
-- `uni-plan legacy-scan [--topic <T>] [--dry-run] [--human]` — discovers V3 `.md` artifacts by filename convention (`<Topic>.Plan.md`, `<Topic>.Impl.md`, `<Topic>.<PhaseKey>.Playbook.md`, and their `.ChangeLog.md` / `.Verification.md` sidecars). For each match, writes a structured `FLegacyMdSource` entry into the bundle's topic-level `legacy_sources[]` or the matching `phases[N].legacy_sources[]`. Phase keys are resolved by numeric-suffix-direct mapping (handles umbrella topics like `MemeFactoryAutomation.P0..P10` correctly) with a natural-number-order fallback. Writes mutations through `WriteBundleBack` — never raw JSON.
+1. **Semantic provenance — `phases[].origin`** (new optional field):
+   - Enum `EPhaseOrigin { NativeV4, V3Migration }` serialized as `"native_v4"` / `"v3_migration"`.
+   - Durable once stamped; filesystem-independent. Records *whether* the phase was migrated from V3, not *what file* it came from.
+   - Absence on read maps to `NativeV4` for backward compatibility with pre-0.75.0 bundles. Serialization always emits the value so downstream tools see one canonical shape.
+   - Stamp via `uni-plan phase set --topic <T> --phase <N>` once a phase-level `--origin <value>` flag lands; for now, migrations can hand-stamp via bundle mutation during initial creation.
 
-- `uni-plan legacy-gap [--topic <T>] [--category <c>] [--human|--json]` — per-phase parity report. Each row buckets the phase into one of `EPhaseGapCategory`: `legacy_rich | legacy_rich_matched | legacy_thin | legacy_stub | legacy_absent | v4_only | hollow_both | drift`. Thresholds are versioned constants in `UniPlanCommandLegacyGap.cpp`:
-  - `legacy_rich`: legacy ≥150 LOC AND V4 design_chars < 500
-  - `legacy_rich_matched`: legacy ≥150 LOC AND V4 design_chars ≥ 2000
-  - `legacy_thin`: legacy 50–149 LOC
-  - `legacy_stub`: legacy <50 LOC
-  - `legacy_absent`: no legacy playbook
-  - `v4_only`: no legacy AND V4 ≥2000 chars AND ≥3 jobs
-  - `hollow_both`: legacy <50 LOC AND completed phase with V4 <500 chars
-  - `drift`: reserved for future semantic-overlap detection
+2. **Filesystem-driven parity audit — `uni-plan legacy-gap` is now stateless**:
+   - Discovers V3 `.md` artifacts by filename convention (`<Topic>.Plan.md`, `<Topic>.Impl.md`, `<Topic>.<PhaseKey>.Playbook.md`, and their `.ChangeLog.md` / `.Verification.md` sidecars) **at invoke time**, not from a stored bundle index.
+   - Same per-phase `EPhaseGapCategory` output as before: `legacy_rich | legacy_rich_matched | legacy_thin | legacy_stub | legacy_absent | v4_only | hollow_both | drift`. Thresholds are unchanged (versioned constants in `UniPlanCommandLegacyGap.cpp`):
+     - `legacy_rich`: legacy ≥150 LOC AND V4 design_chars < 500
+     - `legacy_rich_matched`: legacy ≥150 LOC AND V4 design_chars ≥ 2000
+     - `legacy_thin`: legacy 50–149 LOC
+     - `legacy_stub`: legacy <50 LOC
+     - `legacy_absent`: no legacy playbook
+     - `v4_only`: no legacy AND V4 ≥2000 chars AND ≥3 jobs
+     - `hollow_both`: legacy <50 LOC AND completed phase with V4 <500 chars
+     - `drift`: reserved for future semantic-overlap detection
+   - After the legacy corpus is deleted, every row falls into `legacy_absent` / `v4_only` — the correct steady state.
+   - Relies on `LegacyMdContentLineCount` in `UniPlanFileHelpers.h`, which strips the 10-line V3 archival banner (`> **ARCHIVAL — V3 legacy markdown artifact.**`) from each file before counting.
 
-Both commands rely on `LegacyMdContentLineCount` in `UniPlanStringHelpers.h`, which strips the 10-line V3 archival banner (`> **ARCHIVAL — V3 legacy markdown artifact.**`) from the top of each file before counting.
+**Removed in 0.75.0**:
+- `uni-plan legacy-scan` subcommand (both the writer and the dry-run variant)
+- `legacy_source_path_resolves` validator
+- Topic-level `legacy_sources[]` and per-phase `phases[N].legacy_sources[]` schema fields
+- `$defs/legacy_md_source` schema definition (the `{kind, path}` record)
+- `ELegacyMdKind` enum and `FLegacyMdSource` type
+- `FLegacyScanOptions` / `FLegacyScanReport` / `FLegacyScanHit`
+- `ParseLegacyScanOptions` parser and `RunLegacyScanCommand` handler
+- `ValidateAllBundles` second parameter (`const fs::path &InRepoRoot`) — signature reverts to `ValidateAllBundles(const std::vector<FTopicBundle>&)`
 
-Schema: `phases[N].legacy_sources[]` and top-level `legacy_sources[]` arrays of `{kind, path}` are now optional V4 fields. `kind` is one of `plan | implementation | playbook | plan_changelog | plan_verification | implementation_changelog | implementation_verification | playbook_changelog | playbook_verification`. Bundles written by uni-plan < 0.74.0 have no `legacy_sources[]` and deserialize with empty vectors (backward-compatible). Serialization always emits the array (empty `[]` when unset).
+Breaking for callers: any bundle serialized by 0.74.0 that carries `legacy_sources[]` arrays will have those silently dropped on the next 0.75.0 round-trip (deserializer does not recognize the key). Any CI that depended on `legacy-scan` or `legacy_source_path_resolves` must migrate.
 
-Validator: `legacy_source_path_resolves` (Warning) flags any `legacy_sources[].path` that does not resolve on disk relative to the repo root. `ValidateAllBundles` now takes an optional second parameter `const fs::path &InRepoRoot = {}`; when empty, filesystem-dependent checks are skipped.
+Kept unchanged: `uni-plan legacy-gap`, `EPhaseGapCategory`, `FPhaseGapRow`, `FLegacyGapReport`, `FLegacyGapOptions`, `ParseLegacyGapOptions`, `RunLegacyGapCommand`, `LegacyMdContentLineCount` helper.
 
 ## documentation_rules
 
@@ -332,7 +348,6 @@ V3-era vocabulary/filename/CLI drift checks (`v3_terminology_free`, `legacy_cli_
 | `no_hollow_completed_phase` | Warning | A phase with `status=completed` but no execution evidence: empty `jobs[]`, empty `testing[]`, empty `file_manifest[]`, and both `code_snippets` and `investigation` empty. Catches governance lies where `completed` is claimed without substance. |
 | `topic_fields_not_identical` | Warning | Two topic-level prose fields are byte-identical non-empty strings (≥20 chars) — topic-level parallel of `no_duplicate_phase_field`; catches migration-stamp artifacts that reuse one template across `summary`/`goals`/`non_goals`/etc. (added v0.73.0) |
 | `no_degenerate_dependency_entry` | ErrorMinor | Dependency row has all three of `topic`, `path`, `note` empty, OR `bundle`/`phase` kind is missing its required `topic` key, OR `governance`/`external` kind is missing its required `path`. Flags rows that survived a mutation but carry no information. (added Warning in v0.73.0, promoted to ErrorMinor in v0.73.1) |
-| `legacy_source_path_resolves` | Warning | An entry in `legacy_sources[]` (topic or per-phase) has a `path` that does not resolve on disk relative to the repo root. Flags dangling references after files are moved or deleted. Skipped when the validator runs without a repo-root (fixture-only tests). (added v0.74.0) |
 
 ### `--strict` flag
 
@@ -374,8 +389,7 @@ uni-plan timeline --topic <T> [--phase <N>] [--since <date>] [--human]
 uni-plan blockers [--topic <T>] [--human]
 uni-plan validate [--topic <T>] [--strict] [--human]
 
-# Legacy V3 ↔ V4 parity (v0.74.0+)
-uni-plan legacy-scan [--topic <T>] [--dry-run] [--human]         # populate legacy_sources[] via filename convention
+# Legacy V3 ↔ V4 parity (v0.75.0: stateless — discovers .md files at invoke time)
 uni-plan legacy-gap  [--topic <T>] [--category <c>] [--human]    # per-phase parity report, 8 categories
 ```
 

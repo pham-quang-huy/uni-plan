@@ -149,11 +149,9 @@ ParseChangelogSetOptions(const std::vector<std::string> &InTokens);
 FChangelogRemoveOptions
 ParseChangelogRemoveOptions(const std::vector<std::string> &InTokens);
 
-// Legacy gap + scan parsers (introduced in 0.74.0)
+// Legacy-gap option parser (stateless V3 <-> V4 parity audit, 0.75.0+)
 FLegacyGapOptions
 ParseLegacyGapOptions(const std::vector<std::string> &InTokens);
-FLegacyScanOptions
-ParseLegacyScanOptions(const std::vector<std::string> &InTokens);
 
 // From UniPlanOutputHuman.cpp
 int RunCacheInfoHuman(const CacheInfoResult &InResult);
@@ -206,12 +204,8 @@ std::string NormalizeHeaderKey(const std::string &InValue);
 // From DocValidation.cpp
 LintResult BuildLintResult(const std::string &InRepoRoot,
                            const bool InQuiet = false);
-// Second parameter (new in 0.74.0) enables filesystem-based checks such as
-// `legacy_source_path_resolves`. Default-constructed path disables those
-// checks — the bundle-only structural/content rules run unchanged.
 std::vector<ValidateCheck>
-ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
-                   const fs::path &InRepoRoot = {});
+ValidateAllBundles(const std::vector<FTopicBundle> &InBundles);
 
 // Shared validation helper — emits a failure entry with the given id,
 // severity, topic, path, and detail. Defined in UniPlanValidation.cpp;
@@ -366,12 +360,10 @@ int RunChangelogSetCommand(const std::vector<std::string> &InArgs,
 int RunChangelogRemoveCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot);
 
-// Semantic commands — Tier 6: Legacy gap + scan (introduced in 0.74.0).
-// legacy-scan populates legacy_sources[] via filename convention;
-// legacy-gap reports per-phase parity between V3 .md artifacts and V4
-// bundles. Both return 0 on success.
-int RunLegacyScanCommand(const std::vector<std::string> &InArgs,
-                         const std::string &InRepoRoot);
+// Semantic commands — Tier 6: Legacy-gap (stateless V3 <-> V4 parity audit,
+// 0.75.0+). Discovers .md artifacts on disk at invoke time via filename
+// convention; reports per-phase parity without reading anything from the
+// bundle beyond V4 design-material chars. Returns 0 on success.
 int RunLegacyGapCommand(const std::vector<std::string> &InArgs,
                         const std::string &InRepoRoot);
 

@@ -5,6 +5,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -55,9 +56,8 @@ inline bool ManifestPathExists(const fs::path &InRepoRoot,
 // lines at the very top of the file; once a non-blank non-blockquote line
 // is seen, all subsequent lines count (including blockquotes in the body).
 //
-// Returns 0 if the file cannot be opened. Shared between
-// `uni-plan legacy-scan` and `uni-plan legacy-gap` so the two commands
-// agree on LOC semantics.
+// Returns 0 if the file cannot be opened. Consumed by
+// `uni-plan legacy-gap` (stateless V3 ↔ V4 parity audit, 0.75.0+).
 inline int LegacyMdContentLineCount(const std::string &InPath)
 {
     std::ifstream Stream(InPath);
@@ -111,6 +111,35 @@ inline bool TryReadFileLines(const fs::path &InPath,
         OutError = "File read failure.";
         return false;
     }
+    return true;
+}
+
+// TryReadFileToString — slurp the entire file into OutContents, preserving
+// every byte (including trailing newlines and any shell-metachars — no
+// interpretation, no expansion). Used by the `--<field>-file <path>` option
+// family to bypass shell-double-quote expansion hazards that $VAR / $(…) /
+// backtick content would otherwise trigger on a --<field> "<string>" path.
+//
+// Opens the file in binary mode so CR/LF are preserved verbatim. Returns
+// true on success. On failure sets OutError to a short diagnostic and
+// leaves OutContents untouched.
+inline bool TryReadFileToString(const fs::path &InPath,
+                                std::string &OutContents, std::string &OutError)
+{
+    std::ifstream Input(InPath, std::ios::binary);
+    if (!Input.is_open())
+    {
+        OutError = "unable to open file";
+        return false;
+    }
+    std::ostringstream Buffer;
+    Buffer << Input.rdbuf();
+    if (Input.bad())
+    {
+        OutError = "file read failure";
+        return false;
+    }
+    OutContents = Buffer.str();
     return true;
 }
 

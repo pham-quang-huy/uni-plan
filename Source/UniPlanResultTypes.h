@@ -155,7 +155,7 @@ struct FCommandHelpEntry
 };
 
 // ---------------------------------------------------------------------------
-// Legacy-gap result types (per-phase V3 <-> V4 parity)
+// Legacy-gap result types (stateless per-phase V3 <-> V4 parity, 0.75.0+)
 // ---------------------------------------------------------------------------
 
 // FPhaseGapRow — one phase's parity status row. Consumed by both JSON and
@@ -179,33 +179,6 @@ struct FLegacyGapReport
     std::string mRepoRoot;
     int mBundleCount = 0;
     std::vector<FPhaseGapRow> mRows;
-    std::vector<std::string> mWarnings;
-};
-
-// ---------------------------------------------------------------------------
-// Legacy-scan result types (filename-convention discovery)
-// ---------------------------------------------------------------------------
-
-// FLegacyScanHit — one legacy markdown file discovered for a topic or phase.
-struct FLegacyScanHit
-{
-    std::string mTopic;
-    int mPhaseIndex = -1; // -1 = topic-level source
-    ELegacyMdKind mKind = ELegacyMdKind::Playbook;
-    std::string mPath; // repo-relative
-    int mLoc = 0;      // content LOC, banner-stripped
-};
-
-// FLegacyScanReport — outcome of one `uni-plan legacy-scan` invocation.
-struct FLegacyScanReport
-{
-    std::string mGeneratedUtc;
-    std::string mRepoRoot;
-    bool mbDryRun = false;
-    std::vector<FLegacyScanHit> mHits;
-    int mTopicsScanned = 0;
-    int mTopicsMutated = 0;
-    int mPhasesMutated = 0;
     std::vector<std::string> mWarnings;
 };
 

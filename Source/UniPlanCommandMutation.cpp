@@ -372,6 +372,18 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
             Desc = Target + " updated dependencies (" + OldDesc + " -> " +
                    NewDesc + ")";
     }
+    // origin (durable provenance stamp). Only records a change when the
+    // enum value actually differs from the current stamp; idempotent
+    // `--origin <same>` calls emit no Change row.
+    if (Options.opOrigin.has_value() && Phase.mOrigin != *Options.opOrigin)
+    {
+        const std::string Old = ToString(Phase.mOrigin);
+        const std::string New = ToString(*Options.opOrigin);
+        Changes.push_back({"origin", {Old, New}});
+        Phase.mOrigin = *Options.opOrigin;
+        if (Desc.empty())
+            Desc = Target + " stamped origin=" + New;
+    }
 
     if (Changes.empty())
     {

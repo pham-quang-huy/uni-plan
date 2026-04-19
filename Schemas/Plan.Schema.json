@@ -74,11 +74,6 @@
       "type": "string",
       "description": "Prioritized immediate next steps"
     },
-    "legacy_sources": {
-      "type": "array",
-      "description": "Topic-level legacy V3 markdown sources (Plan.md, Impl.md, sidecars). Populated by 'uni-plan legacy-scan', consumed by 'uni-plan legacy-gap'. Absence means no known V3 heritage.",
-      "items": { "$ref": "#/$defs/legacy_md_source" }
-    },
     "phases": {
       "type": "array",
       "description": "Ordered array of phases. Index IS identity (phase 0 = first element).",
@@ -194,10 +189,10 @@
           "description": "Target file manifest for the phase",
           "items": { "$ref": "#/$defs/file_manifest_item" }
         },
-        "legacy_sources": {
-          "type": "array",
-          "description": "Per-phase legacy V3 markdown sources (Playbook.md and sidecars). Populated by 'uni-plan legacy-scan'.",
-          "items": { "$ref": "#/$defs/legacy_md_source" }
+        "origin": {
+          "type": "string",
+          "enum": ["native_v4", "v3_migration"],
+          "description": "Semantic provenance stamp. 'v3_migration' records phases produced by migrating a V3 markdown plan; 'native_v4' records phases authored directly against the V4 schema. Durable once stamped; filesystem-independent. Absence on read maps to 'native_v4' for backward compatibility with pre-0.75.0 bundles."
         }
       }
     },
@@ -307,32 +302,6 @@
           "enum": ["create", "modify", "delete"]
         },
         "description": { "type": "string" }
-      }
-    },
-    "legacy_md_source": {
-      "type": "object",
-      "description": "One legacy V3 markdown artifact that fed this V4 record. Identified by kind and repo-relative path. Used by 'uni-plan legacy-gap' for V3<->V4 parity auditing.",
-      "required": ["kind", "path"],
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "plan",
-            "implementation",
-            "playbook",
-            "plan_changelog",
-            "plan_verification",
-            "implementation_changelog",
-            "implementation_verification",
-            "playbook_changelog",
-            "playbook_verification"
-          ],
-          "description": "Artifact kind. Topic-level sources use plan/implementation and their sidecars; per-phase sources use playbook and its sidecars."
-        },
-        "path": {
-          "type": "string",
-          "description": "Repo-relative path to the .md file. Validator 'legacy_source_path_resolves' flags dangling entries."
-        }
       }
     },
     "changelog_entry": {
