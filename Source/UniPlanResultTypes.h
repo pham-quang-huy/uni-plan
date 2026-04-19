@@ -158,6 +158,36 @@ struct PhaseItem
     size_t mV4DesignChars = 0; // ComputePhaseDesignChars(FPhaseRecord)
 };
 
+// Per-subcommand help entry (v0.85.0). Each FCommandHelpEntry carries an
+// optional array of these so `<cmd> <sub> --help` can print targeted
+// help for a specific subcommand instead of the pooled group block.
+//
+// mModes         — optional block for mutually exclusive modes
+//                  (e.g. phase get's --brief/--design/--execution).
+// mOutputSchema  — optional schema name constant (e.g. kPhaseGetSchema)
+//                  surfaced so agents can learn the response contract
+//                  without running the command.
+// mbIsProseCommand — true appends the shared kFileFlagFooter for
+//                  commands that accept `--<field>-file <path>` flags.
+// mbSupportsHuman  — true appends kHumanTable / kHumanList / similar
+//                  for commands with a --human renderer.
+struct FSubcommandHelpEntry
+{
+    const char *mName;
+    const char *mUsageLine;
+    const char *mDescription;
+    const char *mRequiredOptions; // nullable
+    const char *mSpecificOptions; // nullable
+    const char *mModes;           // nullable
+    const char *mOutputSchema;    // nullable
+    const char *mExamples;
+    bool mbIsProseCommand = false;
+    bool mbSupportsHuman = false;
+};
+
+// Per-command help entry. Groups (topic, phase, ...) carry a subcommand
+// array; single-command groups (validate, timeline, ...) leave
+// mpSubcommands null and populate the leaf fields directly.
 struct FCommandHelpEntry
 {
     const char *mName;
@@ -167,6 +197,10 @@ struct FCommandHelpEntry
     const char *mSpecificOptions;
     const char *mHumanLabel;
     const char *mExamples;
+    // Added v0.85.0. Existing 7-field aggregate initializers continue to
+    // compile — trailing fields zero-init to {nullptr, 0}.
+    const FSubcommandHelpEntry *mpSubcommands = nullptr;
+    size_t mSubcommandCount = 0;
 };
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+#include "UniPlanCommandHelp.h"
 #include "UniPlanEnums.h"
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
@@ -178,9 +179,7 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
                                      InOptions.mSections.end());
     const bool bAll = Want.empty();
     const auto Wants = [&](const char *InName) -> bool
-    {
-        return bAll || Want.count(InName) > 0;
-    };
+    { return bAll || Want.count(InName) > 0; };
 
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kTopicGetSchema, UTC, InRepoRoot.string());
@@ -265,9 +264,7 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
                                      InOptions.mSections.end());
     const bool bAll = Want.empty();
     const auto Wants = [&](const char *InName) -> bool
-    {
-        return bAll || Want.count(InName) > 0;
-    };
+    { return bAll || Want.count(InName) > 0; };
 
     std::cout << kColorBold << Bundle.mTopicKey << kColorReset
               << "  status=" << ColorizeStatus(ToString(Bundle.mStatus))
@@ -367,14 +364,25 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
 int RunTopicCommand(const std::vector<std::string> &InArgs,
                     const std::string &InRepoRoot)
 {
-    if (InArgs.empty() || ContainsHelpFlag(InArgs))
+    // 3-prologue --help handling (v0.85.0). See DispatchSubcommand<N> in
+    // UniPlanCommandDispatch.cpp for the canonical pattern this mirrors.
+    if (InArgs.empty())
     {
-        throw UsageError("topic requires a subcommand: list, get, set, "
-                         "start, complete, block, status");
+        PrintCommandUsage(std::cout, "topic");
+        return 0;
     }
-
     const std::string Sub = InArgs[0];
+    if (Sub == "--help" || Sub == "-h")
+    {
+        PrintCommandUsage(std::cout, "topic");
+        return 0;
+    }
     const std::vector<std::string> SubArgs(InArgs.begin() + 1, InArgs.end());
+    if (ContainsHelpFlag(SubArgs))
+    {
+        PrintCommandUsage(std::cout, "topic", Sub);
+        return 0;
+    }
 
     if (Sub == "list")
     {

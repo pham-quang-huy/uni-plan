@@ -26,6 +26,7 @@ endif()
 
 add_library(uni-plan-lib OBJECT
     Source/UniPlanCommandDispatch.cpp
+    Source/UniPlanCommandHelp.cpp
     Source/UniPlanRuntime.cpp
     Source/UniPlanParsing.cpp
     Source/UniPlanCache.cpp
@@ -112,6 +113,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestEvidence.cpp
         Test/UniPlanTestEntity.cpp
         Test/UniPlanTestValidationContent.cpp
+        Test/UniPlanTestHelp.cpp
     )
 
     target_link_libraries(uni-plan-tests PRIVATE

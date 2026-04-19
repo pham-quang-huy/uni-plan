@@ -1,3 +1,4 @@
+#include "UniPlanCommandHelp.h"
 #include "UniPlanEnums.h"
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
@@ -199,6 +200,27 @@ static int RunBundleChangelogHuman(const fs::path &InRepoRoot,
 int RunBundleChangelogCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot)
 {
+    // 3-prologue --help handling (v0.85.0). changelog's "default"
+    // subcommand is the query (no subcommand token), so an explicit
+    // --help at the group level triggers group help; per-subcommand
+    // --help (changelog add/set/remove --help) also routes here.
+    if (!InArgs.empty() && (InArgs[0] == "--help" || InArgs[0] == "-h"))
+    {
+        PrintCommandUsage(std::cout, "changelog");
+        return 0;
+    }
+    if (!InArgs.empty() &&
+        (InArgs[0] == "add" || InArgs[0] == "set" || InArgs[0] == "remove"))
+    {
+        const std::string Sub = InArgs[0];
+        const std::vector<std::string> SubArgs(InArgs.begin() + 1,
+                                               InArgs.end());
+        if (ContainsHelpFlag(SubArgs))
+        {
+            PrintCommandUsage(std::cout, "changelog", Sub);
+            return 0;
+        }
+    }
     // Check for "add" subcommand
     if (!InArgs.empty() && InArgs[0] == "add")
     {
@@ -340,6 +362,23 @@ RunBundleVerificationHuman(const fs::path &InRepoRoot,
 int RunBundleVerificationCommand(const std::vector<std::string> &InArgs,
                                  const std::string &InRepoRoot)
 {
+    // 3-prologue --help handling (v0.85.0). Mirrors changelog above.
+    if (!InArgs.empty() && (InArgs[0] == "--help" || InArgs[0] == "-h"))
+    {
+        PrintCommandUsage(std::cout, "verification");
+        return 0;
+    }
+    if (!InArgs.empty() && (InArgs[0] == "add" || InArgs[0] == "set"))
+    {
+        const std::string Sub = InArgs[0];
+        const std::vector<std::string> SubArgs(InArgs.begin() + 1,
+                                               InArgs.end());
+        if (ContainsHelpFlag(SubArgs))
+        {
+            PrintCommandUsage(std::cout, "verification", Sub);
+            return 0;
+        }
+    }
     // Check for "add" subcommand
     if (!InArgs.empty() && InArgs[0] == "add")
     {
@@ -517,6 +556,11 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
 int RunBundleTimelineCommand(const std::vector<std::string> &InArgs,
                              const std::string &InRepoRoot)
 {
+    if (ContainsHelpFlag(InArgs))
+    {
+        PrintCommandUsage(std::cout, "timeline");
+        return 0;
+    }
     const FBundleTimelineOptions Options = ParseBundleTimelineOptions(InArgs);
     const fs::path RepoRoot = NormalizeRepoRootPath(
         Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
@@ -569,9 +613,8 @@ static int RunBundleBlockersJson(const fs::path &InRepoRoot,
         PrintJsonSep(I);
         std::cout << "{";
         EmitJsonField("topic", BlockerEntries[I].mTopicKey);
-        EmitJsonFieldSizeT(
-            "phase_index",
-            static_cast<size_t>(BlockerEntries[I].mPhaseIndex));
+        EmitJsonFieldSizeT("phase_index",
+                           static_cast<size_t>(BlockerEntries[I].mPhaseIndex));
         EmitJsonField("status", BlockerEntries[I].mStatus);
         EmitJsonField("kind", BlockerEntries[I].mKind);
         EmitJsonField("scope", BlockerEntries[I].mNotes);
@@ -648,6 +691,11 @@ static int RunBundleBlockersHuman(const fs::path &InRepoRoot,
 int RunBundleBlockersCommand(const std::vector<std::string> &InArgs,
                              const std::string &InRepoRoot)
 {
+    if (ContainsHelpFlag(InArgs))
+    {
+        PrintCommandUsage(std::cout, "blockers");
+        return 0;
+    }
     const FBundleBlockersOptions Options = ParseBundleBlockersOptions(InArgs);
     const fs::path RepoRoot = NormalizeRepoRootPath(
         Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
@@ -655,6 +703,5 @@ int RunBundleBlockersCommand(const std::vector<std::string> &InArgs,
         return RunBundleBlockersHuman(RepoRoot, Options);
     return RunBundleBlockersJson(RepoRoot, Options);
 }
-
 
 } // namespace UniPlan

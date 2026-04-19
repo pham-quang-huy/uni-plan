@@ -1,3 +1,4 @@
+#include "UniPlanCommandHelp.h"
 #include "UniPlanEnums.h"
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
@@ -456,8 +457,7 @@ static int RunBundlePhaseGetBatchJson(const fs::path &InRepoRoot,
     // Bounds-check each requested index before emitting anything.
     for (const int Idx : InOptions.mPhaseIndices)
     {
-        if (Idx < 0 ||
-            static_cast<size_t>(Idx) >= Bundle.mPhases.size())
+        if (Idx < 0 || static_cast<size_t>(Idx) >= Bundle.mPhases.size())
         {
             std::cerr << "Phase index " << Idx << " out of range (0.."
                       << Bundle.mPhases.size() - 1 << ")\n";
@@ -471,8 +471,7 @@ static int RunBundlePhaseGetBatchJson(const fs::path &InRepoRoot,
     std::cout << "\"phases\":[";
     for (size_t N = 0; N < InOptions.mPhaseIndices.size(); ++N)
     {
-        const size_t PI =
-            static_cast<size_t>(InOptions.mPhaseIndices[N]);
+        const size_t PI = static_cast<size_t>(InOptions.mPhaseIndices[N]);
         // Capture the per-phase field stream to trim the trailing comma
         // left by the shared emitter before wrapping in `{...}`.
         std::ostringstream Buffer;
@@ -501,15 +500,14 @@ static int RunBundlePhaseGetBatchJson(const fs::path &InRepoRoot,
 // Emit per-phase human rendering for a single phase index. Extracted
 // v0.84.0 so the batch path (`--phases 1,3,5`) can reuse the same per-
 // phase output with a visible separator between entries.
-static void EmitPhaseGetHuman(const FTopicBundle &InBundle,
-                              size_t InPhaseIndex,
+static void EmitPhaseGetHuman(const FTopicBundle &InBundle, size_t InPhaseIndex,
                               const FPhaseGetOptions &InOptions)
 {
     const FPhaseRecord &Phase = InBundle.mPhases[InPhaseIndex];
 
     const size_t DesignChars = ComputePhaseDesignChars(Phase);
-    std::cout << kColorBold << InBundle.mTopicKey << " phases["
-              << InPhaseIndex << "]" << kColorReset << "  status="
+    std::cout << kColorBold << InBundle.mTopicKey << " phases[" << InPhaseIndex
+              << "]" << kColorReset << "  status="
               << ColorizeStatus(ToString(Phase.mLifecycle.mStatus))
               << "  design=" << ColorizeDesignChars(DesignChars) << " "
               << kColorDim << "(" << GetDesignDepthLabel(DesignChars) << ")"
@@ -680,8 +678,7 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
         // any output, then render each with a visible separator.
         for (const int Idx : InOptions.mPhaseIndices)
         {
-            if (Idx < 0 ||
-                static_cast<size_t>(Idx) >= Bundle.mPhases.size())
+            if (Idx < 0 || static_cast<size_t>(Idx) >= Bundle.mPhases.size())
             {
                 std::cerr << "Phase index " << Idx << " out of range (0.."
                           << Bundle.mPhases.size() - 1 << ")\n";
@@ -691,12 +688,11 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
         for (size_t N = 0; N < InOptions.mPhaseIndices.size(); ++N)
         {
             if (N > 0)
-                std::cout << kColorDim
-                          << "--------------------------------\n\n"
+                std::cout << kColorDim << "--------------------------------\n\n"
                           << kColorReset;
-            EmitPhaseGetHuman(
-                Bundle, static_cast<size_t>(InOptions.mPhaseIndices[N]),
-                InOptions);
+            EmitPhaseGetHuman(Bundle,
+                              static_cast<size_t>(InOptions.mPhaseIndices[N]),
+                              InOptions);
         }
         return 0;
     }
@@ -709,8 +705,8 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
                   << " out of range (0.." << Bundle.mPhases.size() - 1 << ")\n";
         return 1;
     }
-    EmitPhaseGetHuman(Bundle,
-                      static_cast<size_t>(InOptions.mPhaseIndex), InOptions);
+    EmitPhaseGetHuman(Bundle, static_cast<size_t>(InOptions.mPhaseIndex),
+                      InOptions);
     return 0;
 }
 
@@ -721,16 +717,25 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
 int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
                           const std::string &InRepoRoot)
 {
-    if (InArgs.empty() || ContainsHelpFlag(InArgs))
+    // 3-prologue --help handling (v0.85.0). See DispatchSubcommand<N> in
+    // UniPlanCommandDispatch.cpp for the canonical pattern this mirrors.
+    if (InArgs.empty())
     {
-        throw UsageError("phase requires a subcommand: list, get, set, add, "
-                         "remove, start, complete, block, unblock, progress, "
-                         "complete-jobs, log, verify, next, readiness, "
-                         "wave-status");
+        PrintCommandUsage(std::cout, "phase");
+        return 0;
     }
-
     const std::string Sub = InArgs[0];
+    if (Sub == "--help" || Sub == "-h")
+    {
+        PrintCommandUsage(std::cout, "phase");
+        return 0;
+    }
     const std::vector<std::string> SubArgs(InArgs.begin() + 1, InArgs.end());
+    if (ContainsHelpFlag(SubArgs))
+    {
+        PrintCommandUsage(std::cout, "phase", Sub);
+        return 0;
+    }
 
     if (Sub == "list")
     {

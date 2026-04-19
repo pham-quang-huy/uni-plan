@@ -1,3 +1,4 @@
+#include "UniPlanCommandHelp.h"
 #include "UniPlanCommandMutationCommon.h"
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
@@ -153,6 +154,11 @@ BuildPhaseGapRow(const fs::path &InRepoRoot, const FTopicBundle &InBundle,
 int RunLegacyGapCommand(const std::vector<std::string> &InArgs,
                         const std::string &InRepoRoot)
 {
+    if (ContainsHelpFlag(InArgs))
+    {
+        PrintCommandUsage(std::cout, "legacy-gap");
+        return 0;
+    }
     FLegacyGapOptions Options = ParseLegacyGapOptions(InArgs);
     const fs::path RepoRoot = Options.mRepoRoot.empty()
                                   ? fs::path(InRepoRoot)

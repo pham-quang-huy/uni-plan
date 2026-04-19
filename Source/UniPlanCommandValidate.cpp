@@ -1,3 +1,4 @@
+#include "UniPlanCommandHelp.h"
 #include "UniPlanEnums.h"
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
@@ -415,6 +416,11 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
 int RunBundleValidateCommand(const std::vector<std::string> &InArgs,
                              const std::string &InRepoRoot)
 {
+    if (ContainsHelpFlag(InArgs))
+    {
+        PrintCommandUsage(std::cout, "validate");
+        return 0;
+    }
     const FBundleValidateOptions Options = ParseBundleValidateOptions(InArgs);
     const fs::path RepoRoot = NormalizeRepoRootPath(
         Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
