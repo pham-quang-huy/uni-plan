@@ -198,6 +198,150 @@ TEST(HelpRouting, UnknownSubcommandStillErrors)
                  UniPlan::UsageError);
 }
 
+// Content scoping — subcommand leaves carry ONLY their flags, not the
+// pooled group flags from siblings. This regression test guards
+// against the v0.85.0 Commit 2 bleed cleanup being undone.
+TEST(HelpContent, PhaseGetCarriesModesNotSetOnlyFlags)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "phase", "get");
+    const std::string S = Out.str();
+    // Present: get-only flags / modes
+    EXPECT_NE(S.find("--brief"), std::string::npos);
+    EXPECT_NE(S.find("--design"), std::string::npos);
+    EXPECT_NE(S.find("--execution"), std::string::npos);
+    EXPECT_NE(S.find("--phases"), std::string::npos);
+    // Absent: set-only flags must NOT bleed in
+    EXPECT_EQ(S.find("--done-clear"), std::string::npos);
+    EXPECT_EQ(S.find("--investigation"), std::string::npos);
+    EXPECT_EQ(S.find("--origin"), std::string::npos);
+    EXPECT_EQ(S.find("--started-at"), std::string::npos);
+}
+
+TEST(HelpContent, PhaseSetCarriesMutationFlagsNotGetModes)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "phase", "set");
+    const std::string S = Out.str();
+    // Present: set-only flags
+    EXPECT_NE(S.find("--done-clear"), std::string::npos);
+    EXPECT_NE(S.find("--investigation"), std::string::npos);
+    EXPECT_NE(S.find("--origin"), std::string::npos);
+    EXPECT_NE(S.find("--started-at"), std::string::npos);
+    // Absent: get-only modes must NOT bleed in
+    EXPECT_EQ(S.find("--brief"), std::string::npos);
+    EXPECT_EQ(S.find("--execution"), std::string::npos);
+    EXPECT_EQ(S.find("--phases"), std::string::npos);
+}
+
+TEST(HelpContent, PhaseDriftDocumentsFourKindsAndSchema)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "phase", "drift");
+    const std::string S = Out.str();
+    EXPECT_NE(S.find("status_lag_lane"), std::string::npos);
+    EXPECT_NE(S.find("status_lag_done"), std::string::npos);
+    EXPECT_NE(S.find("status_lag_timestamp"), std::string::npos);
+    EXPECT_NE(S.find("completion_lag_lane"), std::string::npos);
+    EXPECT_NE(S.find("uni-plan-phase-drift-v1"), std::string::npos);
+}
+
+TEST(HelpContent, TopicGetDocumentsSectionsFlagAndValidNames)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "topic", "get");
+    const std::string S = Out.str();
+    EXPECT_NE(S.find("--sections"), std::string::npos);
+    // Spot-check a few of the 14 valid section names
+    EXPECT_NE(S.find("summary"), std::string::npos);
+    EXPECT_NE(S.find("acceptance_criteria"), std::string::npos);
+    EXPECT_NE(S.find("source_references"), std::string::npos);
+    EXPECT_NE(S.find("phases"), std::string::npos);
+}
+
+TEST(HelpContent, TopicGetIsScopedAwayFromTopicSetFlags)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "topic", "get");
+    const std::string S = Out.str();
+    // topic set-only flags — must NOT appear on topic get
+    EXPECT_EQ(S.find("--acceptance-criteria"), std::string::npos);
+    EXPECT_EQ(S.find("--dependency-add"), std::string::npos);
+    EXPECT_EQ(S.find("--baseline-audit"), std::string::npos);
+}
+
+TEST(HelpContent, ChangelogAddDocumentsAffectedFlag)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "changelog", "add");
+    const std::string S = Out.str();
+    EXPECT_NE(S.find("--affected"), std::string::npos);
+    EXPECT_NE(S.find("feat"), std::string::npos);
+    EXPECT_NE(S.find("refactor"), std::string::npos);
+}
+
+TEST(HelpContent, VerificationAddDocumentsDetailFlag)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "verification", "add");
+    const std::string S = Out.str();
+    EXPECT_NE(S.find("--detail"), std::string::npos);
+    EXPECT_NE(S.find("--check"), std::string::npos);
+    EXPECT_NE(S.find("--result"), std::string::npos);
+}
+
+// Schema-name coupling: every query subcommand's help must mention the
+// actual k*Schema constant string so an accidental rename in
+// UniPlanCliConstants.h trips a test failure.
+TEST(HelpContent, QuerySubcommandsCiteSchemaConstants)
+{
+    struct FCase
+    {
+        const char *mGroup;
+        const char *mSub;
+        const char *mExpectedSchema;
+    };
+    const FCase Cases[] = {
+        {"topic", "list", "uni-plan-topic-list-v1"},
+        {"topic", "get", "uni-plan-topic-get-v1"},
+        {"phase", "list", "uni-plan-phase-list-v2"},
+        {"phase", "get", "uni-plan-phase-get-v1"},
+        {"phase", "get", "uni-plan-phase-get-v2"},
+        {"phase", "drift", "uni-plan-phase-drift-v1"},
+        {"changelog", "query", "uni-plan-changelog-v2"},
+        {"verification", "query", "uni-plan-verification-v2"},
+    };
+    for (const FCase &C : Cases)
+    {
+        std::ostringstream Out;
+        UniPlan::PrintCommandUsage(Out, C.mGroup, C.mSub);
+        const std::string S = Out.str();
+        EXPECT_NE(S.find(C.mExpectedSchema), std::string::npos)
+            << "case: " << C.mGroup << " " << C.mSub
+            << " missing schema: " << C.mExpectedSchema;
+    }
+}
+
+// Every leaf emits the Exit codes block — agents rely on this for
+// error handling.
+TEST(HelpContent, EveryLeafEmitsExitCodes)
+{
+    const char *const kLeaves[][2] = {
+        {"topic", "list"},  {"topic", "get"},     {"topic", "set"},
+        {"phase", "list"},  {"phase", "get"},     {"phase", "set"},
+        {"phase", "drift"}, {"changelog", "add"}, {"verification", "add"},
+        {"job", "set"},     {"task", "set"},
+    };
+    for (const auto &C : kLeaves)
+    {
+        std::ostringstream Out;
+        UniPlan::PrintCommandUsage(Out, C[0], C[1]);
+        const std::string S = Out.str();
+        EXPECT_NE(S.find("Exit codes:"), std::string::npos)
+            << "leaf: " << C[0] << " " << C[1];
+    }
+}
+
 // Direct smoke test of PrintCommandUsage — covers every current
 // kCommandHelp name to guard against an entry being accidentally
 // dropped from the registry.
