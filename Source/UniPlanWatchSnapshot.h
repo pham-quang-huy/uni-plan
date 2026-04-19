@@ -9,13 +9,15 @@
 namespace UniPlan
 {
 
+// V4-native counters only. The V3-era fields (mPlaybookCount,
+// mImplementationCount, mSidecarCount, mPairCount) were removed in
+// v0.80.0 — they were ghost fields never populated after the
+// .md → .Plan.json migration, and the INVENTORY panel that read them
+// always displayed 0. A V4 bundle is the single source of truth, so
+// mPlanCount (bundle count) is the canonical inventory measure.
 struct FWatchInventoryCounters
 {
     int mPlanCount = 0;
-    int mPlaybookCount = 0;
-    int mImplementationCount = 0;
-    int mSidecarCount = 0;
-    int mPairCount = 0;
     int mActivePlanCount = 0;
     int mNonActivePlanCount = 0;
 };
@@ -73,7 +75,6 @@ struct FWatchPlanSummary
     int mPhaseInProgress = 0;
     int mPhaseNotStarted = 0;
     int mPhaseBlocked = 0;
-    int mPlaybookCount = 0;
     std::vector<PhaseItem> mPhases;
     std::vector<BlockerItem> mBlockers;
     std::vector<std::string> mSummaryLines;

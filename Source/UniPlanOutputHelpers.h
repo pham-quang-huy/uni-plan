@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UniPlanTopicTypes.h" // kPhaseHollowChars, kPhaseRichMinChars
 #include "UniPlanTypes.h"
 
 #include <algorithm>
@@ -47,6 +48,35 @@ inline std::string ColorizeStatus(const std::string &InStatus)
         return Colorize(kColorYellow, InStatus);
     }
     return InStatus;
+}
+
+// Render a design-char count as a colored human-mode cell, using the
+// shared hollow / thin / rich thresholds. Same color scheme as the
+// watch TUI `Design` column so phase list, phase get, topic status, and
+// the watch dashboard all agree visually on authored-plan depth.
+//   < kPhaseHollowChars    — red    ("hollow", phase needs more authoring)
+//   [hollow, rich) chars   — yellow ("thin", executable but sparse)
+//   ≥ kPhaseRichMinChars   — green  ("rich", properly detailed)
+inline std::string ColorizeDesignChars(size_t InChars)
+{
+    const char *Color = kColorGreen;
+    if (InChars < kPhaseHollowChars)
+        Color = kColorRed;
+    else if (InChars < kPhaseRichMinChars)
+        Color = kColorYellow;
+    return Colorize(Color, std::to_string(InChars));
+}
+
+// One-word category label for the same thresholds. Useful in compact
+// single-phase views (e.g. `phase get --human`) where a word reads
+// clearer than a raw number.
+inline const char *GetDesignDepthLabel(size_t InChars)
+{
+    if (InChars < kPhaseHollowChars)
+        return "hollow";
+    if (InChars < kPhaseRichMinChars)
+        return "thin";
+    return "rich";
 }
 
 inline void PrintHumanWarnings(const std::vector<std::string> &InWarnings)

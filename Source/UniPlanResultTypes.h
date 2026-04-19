@@ -116,24 +116,30 @@ struct BlockerItem
     std::string mKind;       // "status", "text", or "status+text"
     std::string mStatus;     // phase lifecycle status string
     int mPhaseIndex = -1;
-    std::string mAction;     // the blocker text
-    std::string mNotes;      // phase scope (context for the blocker)
+    std::string mAction; // the blocker text
+    std::string mNotes;  // phase scope (context for the blocker)
 };
 
 // PhaseItem — display-oriented projection of a single FPhaseRecord for the
 // watch TUI. Mirrors the V4 typed phase-field model directly (mScope,
 // mOutput, mDone, mRemaining) — no key/value bag and no V3 fuzzy-match
 // heuristics. Populated by BuildPlanSummaryFromBundle from FPhaseRecord.
+//
+// `mV4DesignChars` drives the PHASE DETAIL `Design` column. It is the
+// same signal as `legacy-gap`'s `v4_design_chars` — the single unified
+// measure of "how much plan has been authored for this phase" across
+// V4 and migration tooling. See `ComputePhaseDesignChars` in
+// UniPlanTopicTypes.h.
 struct PhaseItem
 {
     std::string mPhaseKey; // stringified zero-based phase index
     std::string mStatusRaw;
     EExecutionStatus mStatus = EExecutionStatus::NotStarted;
-    std::string mPlaybookPath; // optional legacy .md playbook, if any
     std::string mScope;
     std::string mOutput;
     std::string mDone;
     std::string mRemaining;
+    size_t mV4DesignChars = 0; // ComputePhaseDesignChars(FPhaseRecord)
 };
 
 struct FCommandHelpEntry

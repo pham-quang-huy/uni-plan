@@ -246,14 +246,17 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
             EmitJsonField("status", ToString(P.mLifecycle.mStatus));
             EmitJsonFieldSizeT("scope_chars", P.mScope.size());
             EmitJsonFieldSizeT("output_chars", P.mOutput.size());
-            const size_t DesignChars = P.mDesign.mInvestigation.size() +
-                                       P.mDesign.mCodeEntityContract.size() +
-                                       P.mDesign.mCodeSnippets.size() +
-                                       P.mDesign.mBestPractices.size() +
-                                       P.mDesign.mHandoff.size() +
-                                       P.mDesign.mReadinessGate.size() +
-                                       P.mDesign.mMultiPlatforming.size();
-            EmitJsonFieldSizeT("design_chars", DesignChars);
+            // Unified design-depth measure (v0.80.0): same signal used
+            // by `legacy-gap` (`v4_design_chars`) and the watch TUI
+            // `Design` column. Shared helper in UniPlanTopicTypes.h.
+            // Includes scope + output + every design-material field so
+            // agents can filter "hollow" phases consistently across
+            // commands: `design_chars < 4000` (≈ 50 lines) is the
+            // hollow threshold everywhere. Prior v0.79.0 computation
+            // excluded scope + output and produced a smaller number —
+            // the v0.80.0 sync raises reported values slightly but
+            // aligns the semantic.
+            EmitJsonFieldSizeT("design_chars", ComputePhaseDesignChars(P));
             EmitJsonFieldSizeT("jobs_count", P.mJobs.size());
             EmitJsonFieldSizeT("testing_count", P.mTesting.size());
             EmitJsonFieldSizeT("file_manifest_count", P.mFileManifest.size());

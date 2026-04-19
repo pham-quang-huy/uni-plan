@@ -158,4 +158,43 @@ struct FTopicBundle
     std::string mBundlePath;
 };
 
+// ---------------------------------------------------------------------------
+// Phase-level computed helpers.
+// ---------------------------------------------------------------------------
+
+// Total char count of all authored prose on a phase: scope + output +
+// every design material field. Mirrors `v4_design_chars` from the
+// `legacy-gap` schema — a single honest measure of "how much plan has
+// been authored for this phase." Used by the watch TUI to drive the
+// PHASE DETAIL `Design` column and by `legacy-gap` to categorize
+// phases along the hollow / thin / rich spectrum.
+inline size_t ComputePhaseDesignChars(const FPhaseRecord &InPhase)
+{
+    const FPhaseDesignMaterial &Design = InPhase.mDesign;
+    return InPhase.mScope.size() + InPhase.mOutput.size() +
+           Design.mInvestigation.size() + Design.mCodeEntityContract.size() +
+           Design.mCodeSnippets.size() + Design.mBestPractices.size() +
+           Design.mHandoff.size() + Design.mReadinessGate.size() +
+           Design.mMultiPlatforming.size();
+}
+
+// Phase-depth thresholds — char-based measures of "how much plan has
+// been authored." Calibrated against the V3 corpus convention that a
+// proper Playbook.md was 200–400 lines of content; at ~80 chars/line
+// that's 16000–32000 chars. The chars-form and LOC-form thresholds
+// are kept in lockstep (80 chars ≈ 1 line) so V3 LOC and V4 chars
+// classify phases into the same hollow / thin / rich buckets.
+//
+//   < kPhaseHollowChars     — hollow: not enough plan to execute
+//   [hollow, rich) chars    — thin:   executable but sparse
+//   ≥ kPhaseRichMinChars    — rich:   properly detailed playbook
+//
+// Bumped in v0.80.0 from the prior 500 / 2000 values, which mapped to
+// only ~6 / ~25 lines and classified even bare-skeleton phases as
+// "has a plan." The new thresholds match the V3 Playbook.md discipline
+// that required 200+ lines of content for a phase to be considered
+// authored.
+static constexpr size_t kPhaseHollowChars = 4000;   // ≈ 50 lines
+static constexpr size_t kPhaseRichMinChars = 16000; // ≈ 200 lines
+
 } // namespace UniPlan

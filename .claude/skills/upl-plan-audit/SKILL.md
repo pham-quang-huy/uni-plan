@@ -86,18 +86,41 @@ uni-plan blockers --human
 
 ### Cross-topic aggregate queries (v0.71.0+)
 
-Use `uni-plan validate` (default JSON) to answer aggregate questions in one call — never `json.load` against `.Plan.json`. The `summary` section carries per-topic `phase_count` / `status_distribution` and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of 7 design fields), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`.
+Use `uni-plan validate` (default JSON) to answer aggregate questions in one call — never `json.load` against `.Plan.json`. The `summary` section carries per-topic `phase_count` / `status_distribution` and per-phase `scope_chars`, `output_chars`, `design_chars` (v0.81.0+: unified measure = scope + output + all design material, same `ComputePhaseDesignChars` as `legacy-gap` and the watch `Design` column), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`.
 
 ```bash
 # Topic count
 uni-plan validate --strict | jq '.summary.topic_count'
 
-# Thin-but-completed phases (design_chars < 500 AND status=completed)
-uni-plan validate --strict | jq '[.summary.topics[].phases[] | select(.design_chars < 500 and .status == "completed")] | length'
+# Hollow-but-completed phases (design_chars < 4000 AND status=completed).
+# 4000 chars ≈ 50 lines; matches kPhaseHollowChars and legacy-gap bucketing.
+# Equivalent to the `no_hollow_completed_phase` warning (v0.82.0+ fires
+# on exactly this predicate plus empty jobs/testing/manifest).
+uni-plan validate --strict | jq '[.summary.topics[].phases[] | select(.design_chars < 4000 and .status == "completed")] | length'
 
 # All manifest paths that don't resolve on disk
 uni-plan manifest list --missing-only | jq '.entries[] | {topic, phase_index, file_path}'
 ```
+
+### Corpus-wide depth overview (v0.82.0+)
+
+`uni-plan topic status` and `phase list` / `phase get` now surface per-phase design-depth directly — no jq needed for the common case:
+
+```bash
+# "Phase Design Depth" table in human output: hollow/thin/rich counts
+# across every phase of every bundle. High hollow:total ratio = corpus
+# carries migration or authoring debt.
+uni-plan topic status --human
+
+# Per-phase `Design` column (color-coded red hollow / yellow thin /
+# green rich). Useful for spotting thin phases in an active topic.
+uni-plan phase list --topic <T> --human
+
+# Single-phase depth label shown in the header
+uni-plan phase get --topic <T> --phase <N> --human   # "design=<chars> (bucket)"
+```
+
+JSON consumers: `topic status` emits a `phase_depth: {total, hollow, thin, rich}` object; `phase list` emits `design_chars` on every phase entry; `phase get` emits `design_chars` at top level in every mode (brief / reference / full / execution).
 
 ## Verdict
 

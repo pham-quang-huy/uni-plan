@@ -969,15 +969,25 @@ void EvalNoDuplicatePhaseField(const std::vector<FTopicBundle> &InBundles,
 
 // no_hollow_completed_phase (Warning) — a phase is marked `completed` but
 // has no execution evidence: no jobs, no testing records, no file manifest
-// entries, and no substantive design prose (code_snippets + investigation
-// both empty). This is the signature of a migration script that copied the
+// entries, AND insufficient design prose
+// (`ComputePhaseDesignChars < kPhaseHollowChars`, i.e. < 4000 chars ≈ 50
+// lines). This is the signature of a migration script that copied the
 // `status=completed` marker from a legacy tracker without harvesting the
 // underlying execution content, or of a post-hoc phase entry that was
 // marked done without ever being filled in.
 //
-// Structural — looks only at array sizes and string emptiness. Does not
-// enumerate any vocabulary or prose patterns. Exempts phases whose scope
-// is itself a stub (<20 chars) because those are signaled by other checks.
+// Structural — looks only at array sizes and a unified char-count measure
+// (same `ComputePhaseDesignChars` used by `legacy-gap` and the watch TUI
+// `Design` column, so all three tools agree on what "hollow" means).
+//
+// v0.82.0 tightened this check from the prior v0.79.0 / v0.80.0 rule that
+// only inspected two specific design fields for emptiness
+// (`code_snippets` and `investigation`). The old rule let trivially-
+// filled phases pass — e.g. a completed phase with "TBD" in one of those
+// fields and nothing else. The chars-threshold form catches those
+// honestly: a phase must carry ≥ 4000 chars of authored prose across
+// scope/output/design to escape the check on the prose side, OR must
+// have any non-empty jobs/testing/manifest array on the execution side.
 void EvalNoHollowCompletedPhase(const std::vector<FTopicBundle> &InBundles,
                                 std::vector<ValidateCheck> &OutChecks)
 {
@@ -994,16 +1004,15 @@ void EvalNoHollowCompletedPhase(const std::vector<FTopicBundle> &InBundles,
                 continue;
             if (!Phase.mFileManifest.empty())
                 continue;
-            if (!Phase.mDesign.mCodeSnippets.empty())
-                continue;
-            if (!Phase.mDesign.mInvestigation.empty())
+            if (ComputePhaseDesignChars(Phase) >= kPhaseHollowChars)
                 continue;
             Fail(OutChecks, "no_hollow_completed_phase",
                  EValidationSeverity::Warning, B.mTopicKey,
                  "phases[" + std::to_string(PI) + "]",
                  "completed but has no jobs, no testing records, no file "
-                 "manifest, and no design prose "
-                 "(code_snippets + investigation both empty)");
+                 "manifest, and design prose totals < " +
+                     std::to_string(kPhaseHollowChars) +
+                     " chars (hollow threshold)");
         }
     }
 }

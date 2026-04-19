@@ -110,13 +110,11 @@ struct FBundleReference
 struct FPhaseTaxonomy
 {
     int mPhaseIndex = -1;
-    std::string mPlaybookPath;
     std::vector<FLaneRecord> mLanes;
     std::vector<FJobRecord> mJobs;
     std::vector<FTaskRecord> mTasks; // flattened for display
     std::vector<FFileManifestItem> mFileManifest;
     int mWaveCount = 0;
-    int mPlaybookLineCount = 0;
 };
 
 } // namespace UniPlan

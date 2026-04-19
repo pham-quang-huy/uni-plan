@@ -1,10 +1,11 @@
 #include "UniPlanWatchSnapshot.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
-#include "UniPlanLegacyDiscovery.h"
+#include "UniPlanTopicTypes.h" // ComputePhaseDesignChars
 #include "UniPlanTypes.h"
 
 #include <chrono>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -25,8 +26,7 @@ static void SplitLines(const std::string &InText,
 }
 
 static FWatchPlanSummary
-BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
-                           const fs::path &InRepoRoot)
+BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
 {
     FWatchPlanSummary Summary;
     Summary.mTopicKey = InBundle.mTopicKey;
@@ -34,41 +34,11 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
     Summary.mPlanStatus = ToString(InBundle.mStatus);
     Summary.mPhaseCount = static_cast<int>(InBundle.mPhases.size());
 
-    // Stateless legacy discovery — the bundle never references .md paths,
-    // but the watch TUI surfaces per-phase playbook availability in the
-    // `PB` / `PBLines` columns as a convenience for agents cross-checking
-    // rebuild fidelity against the V3 corpus (see legacy-gap for the same
-    // semantics in CLI form).
-    const std::vector<FLegacyDiscoveryHit> LegacyHits =
-        DiscoverLegacyArtifactsForTopic(InRepoRoot, InBundle.mTopicKey);
-    std::vector<std::string> LegacyWarnings;
-    const std::map<std::string, int> PhaseKeyToIndex = ResolvePhaseKeyToIndex(
-        LegacyHits, InBundle.mPhases.size(), LegacyWarnings);
-    // Per-phase playbook hit (nullptr if none discovered for that phase).
-    std::vector<const FLegacyDiscoveryHit *> PlaybookByPhase(
-        InBundle.mPhases.size(), nullptr);
-    for (const FLegacyDiscoveryHit &Hit : LegacyHits)
-    {
-        if (Hit.mKind != ELegacyArtifactKind::Playbook)
-        {
-            continue;
-        }
-        const auto It = PhaseKeyToIndex.find(Hit.mPhaseKey);
-        if (It == PhaseKeyToIndex.end())
-        {
-            continue;
-        }
-        const size_t Index = static_cast<size_t>(It->second);
-        if (Index < PlaybookByPhase.size())
-        {
-            PlaybookByPhase[Index] = &Hit;
-        }
-    }
-
-    // Build PhaseItem list from bundle phases. Typed projection — every
-    // column the watch TUI shows maps 1:1 onto a V4 phase field, so the
-    // panel reads typed members directly (no key/value bag, no fuzzy
-    // string matching).
+    // Build PhaseItem list from bundle phases. Pure V4 projection — every
+    // column the watch TUI shows reads typed members off FPhaseRecord.
+    // `mV4DesignChars` feeds the PHASE DETAIL `Design` column; see
+    // `ComputePhaseDesignChars` (UniPlanTopicTypes.h) for the measure,
+    // which matches `legacy-gap`'s `v4_design_chars`.
     for (size_t I = 0; I < InBundle.mPhases.size(); ++I)
     {
         const FPhaseRecord &Phase = InBundle.mPhases[I];
@@ -80,13 +50,7 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
         Item.mOutput = Phase.mOutput;
         Item.mDone = Phase.mLifecycle.mDone;
         Item.mRemaining = Phase.mLifecycle.mRemaining;
-        // Legacy playbook path — optional, purely informational. When the
-        // V3 corpus has been deleted this stays empty and the TUI
-        // correctly shows the missing-playbook marker.
-        if (PlaybookByPhase[I] != nullptr)
-        {
-            Item.mPlaybookPath = PlaybookByPhase[I]->mPath.string();
-        }
+        Item.mV4DesignChars = ComputePhaseDesignChars(Phase);
         Summary.mPhases.push_back(std::move(Item));
 
         switch (Phase.mLifecycle.mStatus)
@@ -106,18 +70,14 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
         }
     }
 
-    // Build execution taxonomy directly from bundle phases. A taxonomy
-    // entry is emitted for every phase that has EITHER bundle-native
-    // jobs/lanes OR a discovered legacy playbook — the latter allows the
-    // `PBLines` column to render a line count even when the V4 bundle
-    // has no execution decomposition yet.
+    // Execution taxonomy — one entry per phase with bundle-native
+    // jobs/lanes. V3 legacy .md discovery was removed in v0.80.0 along
+    // with the PB / PBLines columns that depended on it; `legacy-gap`
+    // remains the canonical CLI for per-phase V3 ↔ V4 parity audits.
     for (size_t I = 0; I < InBundle.mPhases.size(); ++I)
     {
         const FPhaseRecord &Phase = InBundle.mPhases[I];
-        const bool bHasBundleExecution =
-            !Phase.mJobs.empty() || !Phase.mLanes.empty();
-        const bool bHasLegacyPlaybook = PlaybookByPhase[I] != nullptr;
-        if (!bHasBundleExecution && !bHasLegacyPlaybook)
+        if (Phase.mJobs.empty() && Phase.mLanes.empty())
         {
             continue;
         }
@@ -127,12 +87,6 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle,
         Taxonomy.mLanes = Phase.mLanes;
         Taxonomy.mJobs = Phase.mJobs;
         Taxonomy.mFileManifest = Phase.mFileManifest;
-        if (bHasLegacyPlaybook)
-        {
-            Taxonomy.mPlaybookPath = PlaybookByPhase[I]->mPath.string();
-            Taxonomy.mPlaybookLineCount =
-                CountLegacyContentLines(PlaybookByPhase[I]->mPath);
-        }
 
         for (const FJobRecord &Job : Phase.mJobs)
         {
@@ -185,8 +139,7 @@ FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
     // 2. Build plan summaries from bundles
     for (const FTopicBundle &Bundle : Bundles)
     {
-        FWatchPlanSummary Summary =
-            BuildPlanSummaryFromBundle(Bundle, RepoRoot);
+        FWatchPlanSummary Summary = BuildPlanSummaryFromBundle(Bundle);
 
         if (Bundle.mStatus == ETopicStatus::InProgress)
             Snapshot.mActivePlans.push_back(std::move(Summary));

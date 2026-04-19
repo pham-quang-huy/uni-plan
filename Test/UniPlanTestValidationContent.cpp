@@ -531,6 +531,69 @@ TEST_F(FBundleTestFixture, NoHollowCompletedPhaseIgnoresNotStartedPhase)
     EXPECT_EQ(CountIssuesWithId(Json, "no_hollow_completed_phase"), 0);
 }
 
+// Regression guard for the v0.82.0 threshold tightening: a completed
+// phase with trivial filler in a design field (e.g. "TBD" in
+// code_snippets) used to pass under the old binary-emptiness check
+// because `code_snippets` was non-empty. The chars-threshold form
+// correctly flags it as hollow since total design chars < 4000.
+TEST_F(FBundleTestFixture, NoHollowCompletedPhaseFlagsTrivialFillerDesign)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::Completed, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mJobs.clear();
+    Bundle.mPhases[0].mTesting.clear();
+    Bundle.mPhases[0].mFileManifest.clear();
+    // Trivial filler in design — non-empty, but well below kPhaseHollowChars.
+    Bundle.mPhases[0].mDesign.mCodeSnippets = "TBD";
+    Bundle.mPhases[0].mDesign.mInvestigation.clear();
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "no_hollow_completed_phase");
+    ASSERT_FALSE(Issue.empty())
+        << "Trivial-filler completed phase should flag as hollow under the "
+           "chars-threshold check";
+    EXPECT_EQ(Issue["severity"], "warning");
+    EXPECT_EQ(Issue["path"], "phases[0]");
+}
+
+// Conversely: a completed phase with substantial design prose
+// (>= kPhaseHollowChars) but still no jobs/testing/manifest should pass,
+// because the design prose alone demonstrates authored content.
+TEST_F(FBundleTestFixture, NoHollowCompletedPhasePassesOnRichDesignOnly)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::Completed, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mJobs.clear();
+    Bundle.mPhases[0].mTesting.clear();
+    Bundle.mPhases[0].mFileManifest.clear();
+    // Pad investigation so design_chars >= kPhaseHollowChars (4000).
+    // scope/output already carry some content from the fixture; pad
+    // investigation past the threshold to be safe.
+    Bundle.mPhases[0].mDesign.mInvestigation = std::string(5000, 'x');
+    Bundle.mPhases[0].mDesign.mCodeSnippets.clear();
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_hollow_completed_phase"), 0)
+        << "Rich-design completed phase (>= 4000 design chars) should not "
+           "flag as hollow even with empty jobs/testing/manifest";
+}
+
 // -------------------------------------------------------------------
 // topic_ref_integrity — `<X>.Plan.json` must resolve
 // -------------------------------------------------------------------

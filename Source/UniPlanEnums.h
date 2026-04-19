@@ -702,21 +702,27 @@ inline bool PhaseOriginFromString(const std::string &InValue,
 // ---------------------------------------------------------------------------
 // EPhaseGapCategory — outcome of a per-phase V3↔V4 parity check, as
 // computed by `uni-plan legacy-gap`. Thresholds are documented next to
-// the resolver in UniPlanCommandLegacyGap.cpp. Agents choose rebuild
-// strategy based on this enum; the skill reference lives at
-// ~/.claude/skills/uni-plan-legacy-md-gap.
-//   LegacyRich         — legacy playbook >= 150 content LOC, V4 < 500 design
-//                        chars. Rebuild V4 from legacy (highest fidelity).
-//   LegacyRichMatched  — legacy >= 150 LOC, V4 >= 2000 chars. Verify no drift.
-//   LegacyThin         — legacy 50-149 LOC. Small uplift available.
+// the resolver in UniPlanCommandLegacyGap.cpp and derive from
+// `kPhaseHollowChars` / `kPhaseRichMinChars` in UniPlanTopicTypes.h
+// (4000 / 16000 chars, calibrated at 80 chars/line to match the V3
+// Playbook.md convention of 200+ lines for a proper playbook).
+//   LegacyRich         — legacy playbook >= 200 content LOC, V4 < 4000
+//                        design chars. Rebuild V4 from legacy.
+//   LegacyRichMatched  — legacy >= 200 LOC, V4 >= 16000 chars. Verify
+//                        no drift.
+//   LegacyThin         — legacy 50-199 LOC. Small uplift available.
 //   LegacyStub         — legacy < 50 LOC (file exists but near-empty).
 //                        Fall back to commit archaeology.
 //   LegacyAbsent       — no legacy playbook file exists for this phase.
-//   V4Only             — no legacy AND V4 already rich (>=2000 chars, >=3
-//   jobs). HollowBoth         — legacy < 50 LOC AND completed phase with V4 <
-//   500.
-//                        Status likely wrong; demote from completed.
+//   V4Only             — no legacy AND V4 already rich (>=16000 chars,
+//                        >=3 jobs).
+//   HollowBoth         — legacy < 50 LOC AND completed phase with V4
+//                        < 4000 chars. Status likely wrong; demote
+//                        from completed.
 //   Drift              — reserved for future semantic-overlap detection.
+//
+// Thresholds bumped in v0.80.0 alongside removal of the watch PB
+// column; prior 50 / 150 LOC and 500 / 2000 chars were too loose.
 // ---------------------------------------------------------------------------
 
 enum class EPhaseGapCategory : uint8_t

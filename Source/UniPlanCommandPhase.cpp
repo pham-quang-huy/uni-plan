@@ -71,7 +71,12 @@ static int RunBundlePhaseListJson(const fs::path &InRepoRoot,
         size_t TaskCount = 0;
         for (const FJobRecord &J : Phase.mJobs)
             TaskCount += J.mTasks.size();
-        EmitJsonFieldSizeT("task_count", TaskCount, false);
+        EmitJsonFieldSizeT("task_count", TaskCount);
+        // Unified design-depth measure (same `ComputePhaseDesignChars`
+        // used by `legacy-gap.v4_design_chars`, `validate.summary.
+        // design_chars`, and the watch TUI `Design` column).
+        EmitJsonFieldSizeT("design_chars", ComputePhaseDesignChars(Phase),
+                           false);
         std::cout << "}";
     }
     std::cout << "],";
@@ -103,7 +108,10 @@ static int RunBundlePhaseListHuman(const fs::path &InRepoRoot,
     std::cout << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Index", "Status", "Jobs", "Tasks", "Scope"};
+    // `Design` = `ComputePhaseDesignChars(Phase)` — same measure used by
+    // watch TUI, legacy-gap, and validate. Colored by hollow / thin /
+    // rich thresholds (see ColorizeDesignChars).
+    Table.mHeaders = {"Index", "Status", "Jobs", "Tasks", "Design", "Scope"};
     for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
     {
         const FPhaseRecord &Phase = Bundle.mPhases[I];
@@ -116,9 +124,11 @@ static int RunBundlePhaseListHuman(const fs::path &InRepoRoot,
         std::string Scope = Phase.mScope;
         if (Scope.size() > 60)
             Scope = Scope.substr(0, 57) + "...";
+        const size_t DesignChars = ComputePhaseDesignChars(Phase);
         Table.AddRow({std::to_string(I), ColorizeStatus(Status),
                       std::to_string(Phase.mJobs.size()),
                       std::to_string(TaskCount),
+                      ColorizeDesignChars(DesignChars),
                       kColorDim + Scope + kColorReset});
     }
     Table.Print();
@@ -208,6 +218,10 @@ static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
     EmitJsonField("topic", Bundle.mTopicKey);
     EmitJsonFieldInt("phase_index", InOptions.mPhaseIndex);
     EmitJsonField("status", ToString(Phase.mLifecycle.mStatus));
+    // Unified design-depth measure — surfaced at top level of every
+    // `phase get` mode (brief / reference / full / execution) so agents
+    // can gate readiness checks without a second command round-trip.
+    EmitJsonFieldSizeT("design_chars", ComputePhaseDesignChars(Phase));
     EmitJsonFieldNullable("scope", Phase.mScope);
 
     // --brief: compact view for session resume (~500 tokens)
@@ -406,9 +420,13 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
     const FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(InOptions.mPhaseIndex)];
 
+    const size_t DesignChars = ComputePhaseDesignChars(Phase);
     std::cout << kColorBold << Bundle.mTopicKey << " phases["
               << InOptions.mPhaseIndex << "]" << kColorReset << "  status="
-              << ColorizeStatus(ToString(Phase.mLifecycle.mStatus)) << "\n\n";
+              << ColorizeStatus(ToString(Phase.mLifecycle.mStatus))
+              << "  design=" << ColorizeDesignChars(DesignChars) << " "
+              << kColorDim << "(" << GetDesignDepthLabel(DesignChars) << ")"
+              << kColorReset << "\n\n";
 
     auto PrintField = [](const char *InLabel, const std::string &InVal)
     {
@@ -641,6 +659,5 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
                      "complete, block, unblock, progress, complete-jobs, "
                      "log, verify, next, readiness, wave-status");
 }
-
 
 } // namespace UniPlan

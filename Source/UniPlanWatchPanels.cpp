@@ -1,5 +1,6 @@
 #include "UniPlanWatchPanels.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanTopicTypes.h" // kPhaseHollowChars, ComputePhaseDesignChars
 #include "UniPlanTypes.h"
 
 #include <ftxui/dom/elements.hpp>
@@ -63,21 +64,35 @@ static Element PhaseProgressBar(int InDone, int InTotal)
     return hbox(std::move(Bar));
 }
 
-static constexpr int kPBLinesGlobalMax = 500;
-static constexpr int kPBLinesBarWidth = 10;
+// Render the V4 design-char count as the PHASE DETAIL `Design` column.
+// Thresholds come from UniPlanTopicTypes.h (`kPhaseHollowChars` = 4000,
+// `kPhaseRichMinChars` = 16000, calibrated at ~80 chars/line to match
+// the V3 Playbook.md convention of 200+ lines for a proper playbook).
+// Color coding:
+//   • < kPhaseHollowChars   → dim red ("hollow", phase needs more authoring)
+//   • [hollow, rich)        → yellow  ("thin", executable but sparse)
+//   • ≥ kPhaseRichMinChars  → green   ("rich", properly detailed)
+// Empty (= 0) renders as "-" to distinguish "no content" from
+// "some content but short".
+static constexpr int kDesignBarWidth = 10;
 
-static Element PBLinesBar(int InLines)
+static Element DesignCharsBar(size_t InChars)
 {
-    if (InLines <= 0)
+    if (InChars == 0)
     {
         return text("-") | dim;
     }
+    // Scale fill against kPhaseRichMinChars so the bar fills at the
+    // "rich" threshold; values above still render at full width.
     const int Filled = std::min(
-        kPBLinesBarWidth, (InLines * kPBLinesBarWidth + kPBLinesGlobalMax - 1) /
-                              kPBLinesGlobalMax);
-    const int Empty = kPBLinesBarWidth - Filled;
-    const auto BarColor =
-        (InLines > kPBLinesGlobalMax) ? color(Color::Red) : color(Color::Cyan);
+        kDesignBarWidth,
+        static_cast<int>((InChars * kDesignBarWidth + kPhaseRichMinChars - 1) /
+                         kPhaseRichMinChars));
+    const int Empty = kDesignBarWidth - Filled;
+    const auto BarColor = (InChars < kPhaseHollowChars) ? color(Color::Red)
+                          : (InChars < kPhaseRichMinChars)
+                              ? color(Color::Yellow)
+                              : color(Color::Green);
     Elements Bar;
     for (int Index = 0; Index < Filled; ++Index)
     {
@@ -87,7 +102,7 @@ static Element PBLinesBar(int InLines)
     {
         Bar.push_back(text("\xe2\x96\x91") | dim);
     }
-    Bar.push_back(text(" " + std::to_string(InLines)));
+    Bar.push_back(text(" " + std::to_string(InChars)));
     return hbox(std::move(Bar));
 }
 
@@ -126,17 +141,14 @@ static Elements PadGridRow(Elements InCells)
 
 Element InventoryPanel::Render(const FWatchInventoryCounters &InCounters) const
 {
+    // V4-native counters only. The V3-era rows (Playbooks, Impls, Pairs,
+    // Sidecars) that lived here were ghost fields — never populated
+    // after the .md→bundle migration — and were always 0 in every repo.
+    // Removed rather than retrofit: a V4 bundle is the single source of
+    // truth, so aggregate topic/phase counts are the honest signal.
     std::vector<std::vector<Element>> Data;
     Data.push_back(
         {text("Plans") | dim, text(std::to_string(InCounters.mPlanCount))});
-    Data.push_back({text("Playbooks") | dim,
-                    text(std::to_string(InCounters.mPlaybookCount))});
-    Data.push_back({text("Impls") | dim,
-                    text(std::to_string(InCounters.mImplementationCount))});
-    Data.push_back(
-        {text("Pairs") | dim, text(std::to_string(InCounters.mPairCount))});
-    Data.push_back({text("Sidecars") | dim,
-                    text(std::to_string(InCounters.mSidecarCount))});
 
     auto InvTable = Table(std::move(Data));
 
@@ -285,7 +297,7 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
     std::vector<std::vector<Element>> ActiveTableData;
     ActiveTableData.push_back({text("Topic") | bold | flex,
                                text("Status") | bold, text("Phases") | bold,
-                               text("PB") | bold, text("BLK") | bold});
+                               text("BLK") | bold});
     int SelectedActiveRow = -1;
 
     for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
@@ -319,8 +331,6 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
             text(Marker + Plan.mTopicKey) | flex | (Selected ? bold : nothing),
             ColorStatus(Plan.mPlanStatus) | (Selected ? bold : nothing),
             hbox(std::move(PhaseCol)) | (Selected ? bold : nothing),
-            text(std::to_string(Plan.mPlaybookCount)) |
-                (Selected ? bold : nothing),
             text(std::to_string(Plan.mBlockers.size())) |
                 (Plan.mBlockers.empty() ? dim : color(Color::Red)) |
                 (Selected ? bold : nothing),
@@ -379,8 +389,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
     GridRows.push_back(PadGridRow({
         text("Phase") | bold | size(WIDTH, EQUAL, 14),
         text("Status") | bold | size(WIDTH, EQUAL, 14),
-        text("PB") | bold | size(WIDTH, EQUAL, 4),
-        text("PBLines") | bold | size(WIDTH, EQUAL, 16),
+        text("Design") | bold | size(WIDTH, EQUAL, 16),
         text("Taxonomy") | bold | size(WIDTH, EQUAL, 30),
         text("Scope") | bold | flex,
         text("Output") | bold | flex,
@@ -411,19 +420,10 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         const bool Selected = (Index == InSelectedPhaseIndex);
         const std::string Marker;
 
-        const bool HasPlaybook = !Phase.mPlaybookPath.empty();
-        const std::string PlaybookMarker =
-            HasPlaybook ? "\xe2\x9c\x93" : "\xe2\x9c\x97";
-        const auto PlaybookColor =
-            HasPlaybook ? color(Color::Green) : color(Color::Red);
-
         // Typed fields from FPhaseRecord — no fuzzy key matching.
         const std::string &Desc = Phase.mScope;
         const std::string &Output = Phase.mOutput;
 
-        // Playbook line count
-        std::string PBLines = "-";
-        int PBLinesInt = 0;
         // Taxonomy summary
         std::string TaxSummary = "-";
 
@@ -431,8 +431,6 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         {
             if (Tax.mPhaseIndex == Index)
             {
-                PBLines = std::to_string(Tax.mPlaybookLineCount);
-                PBLinesInt = Tax.mPlaybookLineCount;
 
                 int LD = 0, LA = 0, LT = 0;
                 for (const FLaneRecord &L : Tax.mLanes)
@@ -506,8 +504,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         Elements RowCells = PadGridRow({
             text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 14),
             ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 14),
-            text(PlaybookMarker) | PlaybookColor | size(WIDTH, EQUAL, 4),
-            PBLinesBar(PBLinesInt) | size(WIDTH, EQUAL, 16),
+            DesignCharsBar(Phase.mV4DesignChars) | size(WIDTH, EQUAL, 16),
             text(TaxSummary) | dim | size(WIDTH, EQUAL, 30),
             text(Desc) | dim | flex,
             text(Output) | dim | flex,
@@ -614,12 +611,6 @@ CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
         }
     }
     const int VisibleEnd = std::min(ScrollOffset + MaxVisible, Count);
-
-    std::vector<std::vector<Element>> ActiveTableData;
-    ActiveTableData.push_back({text("Topic") | bold | flex,
-                               text("Status") | bold, text("Phases") | bold,
-                               text("PB") | bold, text("BLK") | bold});
-    int SelectedActiveRow = -1;
 
     std::vector<std::vector<Element>> NonActiveTableData;
     NonActiveTableData.push_back(
@@ -1522,10 +1513,7 @@ Element WatchStatusBar::Render(const std::string &InVersion,
     return hbox({
         text(" Poll #" + std::to_string(InTick)) | bold,
         text("  |  Last: " + std::to_string(InPollMs) + "ms") | dim,
-        text("  |  Plans: " + std::to_string(InCounters.mPlanCount) +
-             "  Playbooks: " + std::to_string(InCounters.mPlaybookCount) +
-             "  Impls: " + std::to_string(InCounters.mImplementationCount)) |
-            dim,
+        text("  |  Plans: " + std::to_string(InCounters.mPlanCount)) | dim,
         filler(),
         text("q=quit  a/A=plan  n/N=non-active  p/P=phase  w/W=wave  l/L=lane  "
              "f/F=files  s=schema  i=impl  r=refresh") |

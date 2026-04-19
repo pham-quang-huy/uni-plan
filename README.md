@@ -148,6 +148,86 @@ Full grammar (options, flags, every subcommand) lives in [CLAUDE.md](CLAUDE.md) 
 
 Default output is JSON with two top-level sections — `issues[]` and `summary` — so agents can consume any command without raw file reads.
 
+## playbook_is_phase_record
+
+> Target: a V4 `phases[N]` record **is** the per-phase playbook. No separate file, no separate doc, no separate schema — one typed record per phase lives inside the topic bundle. Do not look for a `Playbook.md` to edit; mutate the phase record via the CLI.
+
+V3 had three per-topic `.md` files plus one extra file per phase:
+
+| V3 file | Scope | Purpose |
+| --- | --- | --- |
+| `<Topic>.Plan.md` | topic | Summary, goals/non-goals, per-phase scope/output/status table |
+| `<Topic>.Impl.md` | topic | Cross-phase implementation notes |
+| `<Topic>.<PhaseKey>.Playbook.md` | **per phase** | Investigation, code snippets, lane/wave/job board, task checklist, file manifest, testing |
+
+V4 dissolves all of the above into a single `<Topic>.Plan.json` bundle. The per-phase playbook content maps to typed slots under `phases[N]`:
+
+| V3 Playbook.md content | V4 phase field |
+| --- | --- |
+| Investigation / prior-state research | `phases[N].design.investigation` |
+| Code entity contract (files, APIs touched) | `phases[N].design.code_entity_contract` |
+| Code snippets / representative examples | `phases[N].design.code_snippets` |
+| Best practices / constraints | `phases[N].design.best_practices` |
+| Handoff notes to the next phase | `phases[N].design.handoff` |
+| Readiness gate (preconditions to start) | `phases[N].design.readiness_gate` |
+| Multi-platform notes | `phases[N].design.multi_platforming` |
+| Upstream dependencies | `phases[N].design.dependencies[]` (typed `FBundleReference`) |
+| Validation commands | `phases[N].design.validation_commands[]` |
+| Wave / lane / job board | `phases[N].lanes[]` + `phases[N].jobs[]` (each job carries `wave` + `lane` coordinates) |
+| Per-job task checklist | `phases[N].jobs[M].tasks[]` |
+| Target file manifest | `phases[N].file_manifest[]` |
+| Testing steps / evidence | `phases[N].testing[]` |
+| Per-phase changelog | `bundle.changelogs[]` filtered by `phase == N` |
+| Per-phase verification | `bundle.verifications[]` filtered by `phase == N` |
+
+V3 `Plan.md`'s per-phase section — scope/output/status — maps to `phases[N].{scope, output, lifecycle}`. V3 `Impl.md` dissolves into per-phase `design.investigation` / `design.code_snippets` plus plan-level `metadata.{execution_strategy, baseline_audit}`.
+
+**`phases[N]` is strictly larger than a V3 playbook.** In addition to the playbook-equivalent fields above, it carries the governance slice (`scope`, `output`, `lifecycle` with `status` / `done` / `remaining` / `blockers` / `started_at` / `completed_at`) and the semantic-provenance stamp (`origin: native_v4 | v3_migration`, new in `v0.75.0`). So the precise relationship is **playbook ⊂ phase-record**, not playbook = phase-record.
+
+### authoring_a_playbook_in_v4
+
+> Target: "write the playbook for phase N" means mutate the phase record's design + execution-taxonomy slots via the CLI. Never create a `.Playbook.md` file.
+
+```bash
+# 1) Design material — pure prose fields. Use --<field>-file for any value that
+#    may contain $VAR, backticks, or quotes (see patch_one_word_of_a_long_prose_field).
+uni-plan phase set --topic A --phase N \
+  --investigation-file /tmp/investigation.txt \
+  --code-entity-contract-file /tmp/contract.txt \
+  --code-snippets-file /tmp/snippets.txt \
+  --best-practices-file /tmp/practices.txt \
+  --handoff-file /tmp/handoff.txt \
+  --readiness-gate-file /tmp/readiness.txt
+
+# 2) Execution taxonomy — lanes, jobs, tasks, file manifest.
+uni-plan lane add --topic A --phase N --scope "Backend wiring"
+uni-plan job set --topic A --phase N --job 0 \
+  --lane 0 --wave 0 --scope "Add POST /items endpoint" \
+  --output "POST /items returns 201 with created id"
+uni-plan task set --topic A --phase N --job 0 --task 0 \
+  --evidence-file /tmp/task0_evidence.txt
+uni-plan manifest add --topic A --phase N \
+  --file src/api/items.ts --action create --description "New endpoint handler"
+
+# 3) Validation commands — runnable checks that prove the phase is done.
+uni-plan phase set --topic A --phase N \
+  --validation-commands-file /tmp/validation_cmds.txt
+```
+
+### watch_design_column
+
+The `uni-plan watch` TUI's PHASE DETAIL panel surfaces playbook depth in the `Design` column — total char count of `phases[N].scope + output + design.*` (same measure as `legacy-gap`'s `v4_design_chars`, computed by `ComputePhaseDesignChars` in `UniPlanTopicTypes.h`). Color coded against shared thresholds:
+
+- `< 4000 chars` (≈ 50 lines) — **hollow**, dim red. Not yet authored to an executable level.
+- `4000–15999` chars — **thin**, yellow. Executable but sparse.
+- `≥ 16000 chars` (≈ 200 lines) — **rich**, green. Properly detailed playbook.
+
+Thresholds (`kPhaseHollowChars = 4000`, `kPhaseRichMinChars = 16000`) are calibrated at ~80 chars per line to match the V3 Playbook.md convention that a proper per-phase playbook was 200+ lines of content. The same constants drive `legacy-gap`'s 8-category bucketing so watch and CLI agree on "authored" vs "hollow."
+
+The prior `PB` / `PBLines` columns were **removed in v0.80.0**. `PB` as a ✓/✗ indicator was uninformative by construction: once the depth rules gave ✓ to any phase with jobs, lanes, substantial design, or a residual legacy `.md`, nearly every authored phase flipped ✓, so the column couldn't discriminate. The `Design` column replaces it with the direct honest measurement.
+
+Cross-reference the per-phase V3↔V4 parity bucket via `uni-plan legacy-gap [--topic <T>]`; it classifies each phase into `legacy_rich` / `legacy_thin` / `legacy_stub` / `legacy_absent` / `legacy_rich_matched` / `v4_only` / `hollow_both` / `drift` and is the canonical command for driving the final migration pass.
+
 ## primary_use_cases
 
 > Target: canonical agent recipes for the most common plan-governance actions. Every recipe is CLI-only — no raw JSON edits, no file opens.

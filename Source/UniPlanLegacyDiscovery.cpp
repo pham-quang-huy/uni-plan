@@ -1,9 +1,13 @@
 // UniPlanLegacyDiscovery.cpp — stateless filesystem discovery of legacy
 // V3 markdown artifacts. See `UniPlanLegacyDiscovery.h` for rationale.
 //
-// Implementations are consumed by:
+// Sole consumer as of v0.80.0:
 //   * `UniPlanCommandLegacyGap.cpp`  (per-phase parity audit)
-//   * `UniPlanWatchSnapshot.cpp`     (PB/PBLines columns in the TUI)
+//
+// Watch mode dropped its legacy-discovery use in v0.80.0 along with
+// the PB / PBLines columns; the V4 bundle is the single source of
+// truth for the watch TUI and `legacy-gap` is the CLI for auditing
+// any remaining V3 .md corpus.
 
 #include "UniPlanLegacyDiscovery.h"
 

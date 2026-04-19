@@ -215,14 +215,14 @@ The v0.74.0 `legacy_sources[]` schema field (both topic-level and per-phase) has
 
 2. **Filesystem-driven parity audit — `uni-plan legacy-gap` is now stateless**:
    - Discovers V3 `.md` artifacts by filename convention (`<Topic>.Plan.md`, `<Topic>.Impl.md`, `<Topic>.<PhaseKey>.Playbook.md`, and their `.ChangeLog.md` / `.Verification.md` sidecars) **at invoke time**, not from a stored bundle index.
-   - Same per-phase `EPhaseGapCategory` output as before: `legacy_rich | legacy_rich_matched | legacy_thin | legacy_stub | legacy_absent | v4_only | hollow_both | drift`. Thresholds are unchanged (versioned constants in `UniPlanCommandLegacyGap.cpp`):
-     - `legacy_rich`: legacy ≥150 LOC AND V4 design_chars < 500
-     - `legacy_rich_matched`: legacy ≥150 LOC AND V4 design_chars ≥ 2000
-     - `legacy_thin`: legacy 50–149 LOC
+   - Same per-phase `EPhaseGapCategory` output as before: `legacy_rich | legacy_rich_matched | legacy_thin | legacy_stub | legacy_absent | v4_only | hollow_both | drift`. Thresholds were bumped in **v0.80.0** to match V3 Playbook.md discipline (200+ lines for a proper playbook, ~80 chars/line → 16000+ V4 chars). Shared constants: `kPhaseHollowChars = 4000` / `kPhaseRichMinChars = 16000` in `UniPlanTopicTypes.h`.
+     - `legacy_rich`: legacy ≥200 LOC AND V4 design_chars < 4000
+     - `legacy_rich_matched`: legacy ≥200 LOC AND V4 design_chars ≥ 16000
+     - `legacy_thin`: legacy 50–199 LOC
      - `legacy_stub`: legacy <50 LOC
      - `legacy_absent`: no legacy playbook
-     - `v4_only`: no legacy AND V4 ≥2000 chars AND ≥3 jobs
-     - `hollow_both`: legacy <50 LOC AND completed phase with V4 <500 chars
+     - `v4_only`: no legacy AND V4 ≥16000 chars AND ≥3 jobs
+     - `hollow_both`: legacy <50 LOC AND completed phase with V4 <4000 chars
      - `drift`: reserved for future semantic-overlap detection
    - After the legacy corpus is deleted, every row falls into `legacy_absent` / `v4_only` — the correct steady state.
    - Relies on `LegacyMdContentLineCount` in `UniPlanFileHelpers.h`, which strips the 10-line V3 archival banner (`> **ARCHIVAL — V3 legacy markdown artifact.**`) from each file before counting.
@@ -370,7 +370,7 @@ V3-era vocabulary/filename/CLI drift checks (`v3_terminology_free`, `legacy_cli_
 | `no_unresolved_marker` | Warning | `TODO`/`FIXME`/`XXX`/`HACK`/`???` in prescriptive prose and completed-phase evidence/lifecycle |
 | `no_duplicate_changelog` | Warning | Same `(phase, change)` tuple recorded ≥2 times |
 | `no_duplicate_phase_field` | Warning | Two phases of the same bundle share byte-identical non-empty content (≥20 chars) in a prescriptive or lifecycle field (`scope`, `output`, `done`, `remaining`, `handoff`, `readiness_gate`, `investigation`, `code_entity_contract`, `code_snippets`, `best_practices`) — signature of a migration script that stamped the same template across many phases |
-| `no_hollow_completed_phase` | Warning | A phase with `status=completed` but no execution evidence: empty `jobs[]`, empty `testing[]`, empty `file_manifest[]`, and both `code_snippets` and `investigation` empty. Catches governance lies where `completed` is claimed without substance. |
+| `no_hollow_completed_phase` | Warning | A phase with `status=completed`, empty `jobs[]` / `testing[]` / `file_manifest[]`, AND `ComputePhaseDesignChars < kPhaseHollowChars` (4000, ≈ 50 lines). Catches governance lies where `completed` is claimed without substance. v0.82.0 tightened this from the prior binary-emptiness check on `code_snippets`/`investigation` to the unified chars threshold so trivial filler (e.g. `"TBD"`) no longer escapes detection. |
 | `topic_fields_not_identical` | Warning | Two topic-level prose fields are byte-identical non-empty strings (≥20 chars) — topic-level parallel of `no_duplicate_phase_field`; catches migration-stamp artifacts that reuse one template across `summary`/`goals`/`non_goals`/etc. (added v0.73.0) |
 | `no_degenerate_dependency_entry` | ErrorMinor | Dependency row has all three of `topic`, `path`, `note` empty, OR `bundle`/`phase` kind is missing its required `topic` key, OR `governance`/`external` kind is missing its required `path`. Flags rows that survived a mutation but carry no information. (added Warning in v0.73.0, promoted to ErrorMinor in v0.73.1) |
 

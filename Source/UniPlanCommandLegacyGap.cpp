@@ -36,21 +36,33 @@ namespace UniPlan
 // correct steady state.
 // ---------------------------------------------------------------------------
 
-// Discovery types + helpers moved to `UniPlanLegacyDiscovery.{h,cpp}` so
-// they can be shared with `UniPlanWatchSnapshot.cpp` (PB/PBLines columns).
-// The `legacy-gap` semantics are preserved exactly — only the physical
-// location of the definitions has changed.
+// Discovery types + helpers live in `UniPlanLegacyDiscovery.{h,cpp}`.
+// Watch mode used to share them (v0.78.0–0.79.0, for the now-removed
+// PB / PBLines columns); v0.80.0 reverted watch to pure V4 projection,
+// leaving `legacy-gap` as the sole consumer.
 
 // ---------------------------------------------------------------------------
 // Categorization thresholds — agents choose rebuild strategy based on the
 // resulting EPhaseGapCategory. Documented next to EPhaseGapCategory in
 // UniPlanEnums.h.
+//
+// Calibrated to the V3 Playbook.md discipline: a proper per-phase
+// playbook carried 200+ lines of content, ~400 for a comprehensive
+// one. At ~80 chars/line that's 16000 / 32000 V4 chars. The LOC-form
+// thresholds (kLegacyRichMinLoc / kLegacyThinMinLoc) and the chars-form
+// thresholds (kV4HollowMaxChars = kPhaseHollowChars / kV4RichMinChars =
+// kPhaseRichMinChars) are kept in lockstep so legacy and V4 phases
+// fall into the same hollow / thin / rich buckets.
+//
+// Bumped in v0.80.0. Prior values (50 / 150 LOC, 500 / 2000 chars)
+// counted bare-skeleton phases as "authored," which is what caused the
+// PB-col always-✓ false-positive that motivated the column's removal.
 // ---------------------------------------------------------------------------
 
-static constexpr int kLegacyRichMinLoc = 150;
+static constexpr int kLegacyRichMinLoc = 200;
 static constexpr int kLegacyThinMinLoc = 50;
-static constexpr size_t kV4HollowMaxChars = 500;
-static constexpr size_t kV4RichMinChars = 2000;
+static constexpr size_t kV4HollowMaxChars = kPhaseHollowChars; // 4000
+static constexpr size_t kV4RichMinChars = kPhaseRichMinChars;  // 16000
 static constexpr size_t kV4RichMinJobs = 3;
 
 static EPhaseGapCategory CategorizePhase(int InLegacyLoc, size_t InV4Chars,
@@ -91,16 +103,6 @@ static EPhaseGapCategory CategorizePhase(int InLegacyLoc, size_t InV4Chars,
     return EPhaseGapCategory::LegacyThin;
 }
 
-static size_t ComputeV4DesignChars(const FPhaseRecord &InPhase)
-{
-    const FPhaseDesignMaterial &D = InPhase.mDesign;
-    return InPhase.mScope.size() + InPhase.mOutput.size() +
-           D.mInvestigation.size() + D.mCodeEntityContract.size() +
-           D.mCodeSnippets.size() + D.mBestPractices.size() +
-           D.mHandoff.size() + D.mReadinessGate.size() +
-           D.mMultiPlatforming.size();
-}
-
 static FPhaseGapRow
 BuildPhaseGapRow(const fs::path &InRepoRoot, const FTopicBundle &InBundle,
                  int InPhaseIndex,
@@ -112,7 +114,9 @@ BuildPhaseGapRow(const fs::path &InRepoRoot, const FTopicBundle &InBundle,
     Row.mPhaseIndex = InPhaseIndex;
     const FPhaseRecord &P = InBundle.mPhases[InPhaseIndex];
     Row.mPhaseStatus = P.mLifecycle.mStatus;
-    Row.mV4DesignChars = ComputeV4DesignChars(P);
+    // `ComputePhaseDesignChars` moved to UniPlanTopicTypes.h so the watch
+    // TUI can use the same measure via a shared helper, not a copy-paste.
+    Row.mV4DesignChars = ComputePhaseDesignChars(P);
     Row.mV4JobsCount = P.mJobs.size();
 
     // Walk the discovered hits and find the first Playbook entry that

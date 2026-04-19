@@ -233,6 +233,13 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
 
     int NotStarted = 0, InProgress = 0, Completed = 0, Blocked = 0,
         Canceled = 0;
+    // Aggregate design-depth counts across every phase in every bundle,
+    // using the shared hollow / thin / rich thresholds from
+    // UniPlanTopicTypes.h. Same bucketing as the watch TUI Design
+    // column and `legacy-gap` — agents can read one number off
+    // `topic status --human` to see how much authoring debt the corpus
+    // still carries.
+    int HollowPhases = 0, ThinPhases = 0, RichPhases = 0;
     struct FActiveEntry
     {
         std::string mTopicKey;
@@ -263,6 +270,17 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
             break;
         }
 
+        for (const FPhaseRecord &Phase : Bundle.mPhases)
+        {
+            const size_t DesignChars = ComputePhaseDesignChars(Phase);
+            if (DesignChars < kPhaseHollowChars)
+                ++HollowPhases;
+            else if (DesignChars < kPhaseRichMinChars)
+                ++ThinPhases;
+            else
+                ++RichPhases;
+        }
+
         if (Bundle.mStatus == ETopicStatus::InProgress)
         {
             int ActivePhase = -1;
@@ -282,6 +300,7 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
     }
 
     const int Total = static_cast<int>(Bundles.size());
+    const int TotalPhases = HollowPhases + ThinPhases + RichPhases;
 
     if (Options.mbHuman)
     {
@@ -297,6 +316,26 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
         CountTable.AddRow({"blocked", std::to_string(Blocked)});
         CountTable.AddRow({"canceled", std::to_string(Canceled)});
         CountTable.Print();
+
+        // Corpus-wide phase-depth summary. Same thresholds as the watch
+        // `Design` column so the two views agree on what "hollow" means.
+        std::cout << "\n"
+                  << kColorBold << "Phase Design Depth" << kColorReset << " ("
+                  << TotalPhases << " phases total)\n";
+        HumanTable DepthTable;
+        DepthTable.mHeaders = {"Bucket", "Count", "Threshold"};
+        DepthTable.AddRow(
+            {Colorize(kColorRed, "hollow"), std::to_string(HollowPhases),
+             "< " + std::to_string(kPhaseHollowChars) + " chars (~50 lines)"});
+        DepthTable.AddRow(
+            {Colorize(kColorYellow, "thin"), std::to_string(ThinPhases),
+             std::to_string(kPhaseHollowChars) + " – " +
+                 std::to_string(kPhaseRichMinChars - 1) + " chars"});
+        DepthTable.AddRow({Colorize(kColorGreen, "rich"),
+                           std::to_string(RichPhases),
+                           "≥ " + std::to_string(kPhaseRichMinChars) +
+                               " chars (~200 lines)"});
+        DepthTable.Print();
 
         if (!Active.empty())
         {
@@ -328,6 +367,11 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
     EmitJsonFieldInt("completed", Completed);
     EmitJsonFieldInt("blocked", Blocked);
     EmitJsonFieldInt("canceled", Canceled, false);
+    std::cout << "},\"phase_depth\":{";
+    EmitJsonFieldInt("total", TotalPhases);
+    EmitJsonFieldInt("hollow", HollowPhases);
+    EmitJsonFieldInt("thin", ThinPhases);
+    EmitJsonFieldInt("rich", RichPhases, false);
     std::cout << "},\"active\":[";
     for (size_t I = 0; I < Active.size(); ++I)
     {
