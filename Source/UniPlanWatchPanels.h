@@ -49,7 +49,7 @@ class BlockersPanel
     ftxui::Element Render(const std::vector<BlockerItem> &InBlockers) const;
 };
 
-class CompletedPlansPanel
+class NonActivePlansPanel
 {
   public:
     ftxui::Element Render(const std::vector<FWatchPlanSummary> &InPlans,

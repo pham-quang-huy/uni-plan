@@ -276,7 +276,7 @@ Element LintPanel::Render(const FWatchLintSummary &InLint) const
 Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
                                  int InSelectedIndex) const
 {
-    const int MaxVisible = 15;
+    const int MaxVisible = 30;
     const int Count = static_cast<int>(InPlans.size());
 
     // Compute scroll window so selected index is always visible
@@ -370,7 +370,7 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
         " [A]CTIVE PLANS (" + std::to_string(Count) + ") ";
     return window(text(Title) | bold | color(Color::Green),
                   vbox(std::move(FinalRows))) |
-           size(HEIGHT, EQUAL, 20);
+           size(HEIGHT, EQUAL, 35);
 }
 
 // ---------------------------------------------------------------------------
@@ -589,14 +589,14 @@ Element BlockersPanel::Render(const std::vector<BlockerItem> &InBlockers) const
 }
 
 // ---------------------------------------------------------------------------
-// CompletedPlansPanel
+// NonActivePlansPanel
 // ---------------------------------------------------------------------------
 
 Element
-CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
+NonActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
                             int InSelectedIndex) const
 {
-    const int MaxVisible = 10;
+    const int MaxVisible = 30;
     const int Count = static_cast<int>(InPlans.size());
 
     // Compute scroll window
@@ -669,7 +669,7 @@ CompletedPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
     return window(text(" [N]ON-ACTIVE (" + std::to_string(Count) + ") ") |
                       bold | dim,
                   vbox(std::move(NonActiveFinal))) |
-           size(HEIGHT, EQUAL, 15);
+           size(HEIGHT, EQUAL, 35);
 }
 
 // ---------------------------------------------------------------------------

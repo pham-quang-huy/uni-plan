@@ -64,7 +64,7 @@ int DocWatchApp::Run()
     ActivePlansPanel PanelActivePlans;
     PhaseDetailPanel PanelPhaseDetail;
     BlockersPanel PanelBlockers;
-    CompletedPlansPanel PanelCompleted;
+    NonActivePlansPanel PanelNonActive;
     ValidationFailPanel PanelValidationFail;
     ExecutionTaxonomyPanel PanelTaxonomy;
     FileManifestPanel PanelFileManifest;
@@ -107,7 +107,7 @@ int DocWatchApp::Run()
             });
             auto leftRow3 = PanelActivePlans.Render(mSnapshot.mActivePlans,
                                                     mSelectedPlanIndex);
-            auto leftRow4 = PanelCompleted.Render(mSnapshot.mNonActivePlans,
+            auto leftRow4 = PanelNonActive.Render(mSnapshot.mNonActivePlans,
                                                   mSelectedNonActiveIndex);
 
             auto leftPane = vbox({
