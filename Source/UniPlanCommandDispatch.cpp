@@ -251,7 +251,6 @@ void PrintUsage(std::ostream &Out)
 // + subcommand-aware PrintCommandUsage live there so every dispatcher
 // can delegate `--help` through a single include.
 
-
 int RunMain(const int InArgc, char *InArgv[])
 {
     std::vector<std::string> Tokens;
@@ -332,8 +331,13 @@ int RunMain(const int InArgc, char *InArgv[])
 
         if (Command == "cache")
         {
-            if (ContainsHelpFlag(
-                    std::vector<std::string>(Tokens.begin() + 1, Tokens.end())))
+            // v0.85.0: cache's group-level --help is handled by the
+            // standard kCommandHelp path (cache entry lives in
+            // UniPlanCommandHelp.cpp). Below we also honor subcommand-
+            // level --help (cache info/clear/config --help) via the
+            // FSubcommandHelpEntry lookup.
+            if (Tokens.size() >= 2 &&
+                (Tokens[1] == "--help" || Tokens[1] == "-h"))
             {
                 PrintCommandUsage(std::cout, "cache");
                 return 0;
@@ -351,6 +355,18 @@ int RunMain(const int InArgc, char *InArgv[])
                 {
                     Subcommand = Candidate;
                     ArgsStart = 2;
+                }
+            }
+
+            // Subcommand --help (cache info/clear/config --help).
+            {
+                const std::vector<std::string> HelpProbe(
+                    Tokens.begin() + static_cast<std::ptrdiff_t>(ArgsStart),
+                    Tokens.end());
+                if (ContainsHelpFlag(HelpProbe))
+                {
+                    PrintCommandUsage(std::cout, "cache", Subcommand);
+                    return 0;
                 }
             }
 
@@ -424,6 +440,11 @@ int RunMain(const int InArgc, char *InArgv[])
         {
             const std::vector<std::string> Args(Tokens.begin() + 1,
                                                 Tokens.end());
+            if (ContainsHelpFlag(Args))
+            {
+                PrintCommandUsage(std::cout, "watch");
+                return 0;
+            }
             BaseOptions WatchOptions;
             ConsumeCommonOptions(Args, WatchOptions, true);
             const std::string WatchRoot =

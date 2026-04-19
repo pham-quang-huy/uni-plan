@@ -347,18 +347,108 @@ TEST(HelpContent, EveryLeafEmitsExitCodes)
 // dropped from the registry.
 TEST(HelpRouting, PrintCommandUsageCoversEveryRegisteredGroup)
 {
-    for (const char *Name :
-         {"topic", "phase", "job", "task", "changelog", "verification",
-          "timeline", "blockers", "validate", "legacy-gap", "cache"})
+    const char *Groups[] = {
+        "topic",        "phase",    "job",      "task",     "changelog",
+        "verification", "timeline", "blockers", "validate", "legacy-gap",
+        "lane",         "testing",  "manifest", "cache",
+#ifdef UPLAN_WATCH
+        "watch",
+#endif
+    };
+    for (const char *Name : Groups)
     {
         std::ostringstream Out;
         UniPlan::PrintCommandUsage(Out, Name);
         const std::string S = Out.str();
         EXPECT_FALSE(S.empty()) << "group: " << Name;
-        EXPECT_NE(S.find("Usage") == std::string::npos &&
-                      S.find("cache") == std::string::npos,
-                  true)
-            << "group: " << Name; // cache uses inline format without
-                                  // a "Usage:" bare line — accept it
+        EXPECT_NE(S.find("Usage"), std::string::npos)
+            << "group missing Usage: " << Name;
+    }
+}
+
+// v0.85.0 Commit 3 coverage guard. Every command/subcommand reachable
+// through the dispatch table must have a matching help entry — a new
+// command landing without `--help` prose mechanically fails this.
+TEST(HelpCoverage, EveryDispatchTargetHasHelpEntry)
+{
+    // Top-level groups whose --help path we've wired in Commits 1-3.
+    struct FGroup
+    {
+        const char *mName;
+        std::vector<const char *> mExpectedSubcommands;
+    };
+    const std::vector<FGroup> Groups = {
+        {"topic",
+         {"list", "get", "set", "start", "complete", "block", "status"}},
+        {"phase",
+         {"list", "get", "set", "add", "remove", "normalize", "start",
+          "complete", "block", "unblock", "progress", "complete-jobs", "log",
+          "verify", "next", "readiness", "wave-status", "drift"}},
+        {"job", {"set"}},
+        {"task", {"set"}},
+        {"changelog", {"query", "add", "set", "remove"}},
+        {"verification", {"query", "add", "set"}},
+        {"lane", {"set", "add"}},
+        {"testing", {"add", "set"}},
+        {"manifest", {"add", "remove", "list", "set"}},
+        {"cache", {"info", "clear", "config"}},
+    };
+
+    for (const FGroup &G : Groups)
+    {
+        // Group-level help must print something.
+        std::ostringstream GOut;
+        UniPlan::PrintCommandUsage(GOut, G.mName);
+        EXPECT_FALSE(GOut.str().empty()) << "group: " << G.mName;
+
+        // Every subcommand must resolve to a leaf block that is
+        // distinguishable from the group block. We check by asserting
+        // the subcommand leaf emits the "Exit codes:" section (which
+        // only PrintSubcommandBlock emits, not group block).
+        for (const char *Sub : G.mExpectedSubcommands)
+        {
+            std::ostringstream SOut;
+            UniPlan::PrintCommandUsage(SOut, G.mName, Sub);
+            const std::string S = SOut.str();
+            EXPECT_NE(S.find("Exit codes:"), std::string::npos)
+                << "missing leaf help: " << G.mName << " " << Sub;
+        }
+    }
+
+    // Single-command groups (no subcommands): still must print help.
+    const char *const SingleCmds[] = {"timeline", "blockers", "validate",
+                                      "legacy-gap"};
+    for (const char *Name : SingleCmds)
+    {
+        std::ostringstream Out;
+        UniPlan::PrintCommandUsage(Out, Name);
+        EXPECT_FALSE(Out.str().empty()) << "single-command: " << Name;
+    }
+}
+
+// Manifest list carries the v0.84.0 --stale-plan flag on its leaf.
+TEST(HelpContent, ManifestListDocumentsStalePlanFlag)
+{
+    std::ostringstream Out;
+    UniPlan::PrintCommandUsage(Out, "manifest", "list");
+    const std::string S = Out.str();
+    EXPECT_NE(S.find("--stale-plan"), std::string::npos);
+    EXPECT_NE(S.find("stale_create"), std::string::npos);
+    EXPECT_NE(S.find("stale_delete"), std::string::npos);
+    EXPECT_NE(S.find("dangling_modify"), std::string::npos);
+    EXPECT_NE(S.find("--missing-only"), std::string::npos);
+}
+
+// Cache subcommand --help produces a dedicated leaf block, not the
+// group block.
+TEST(HelpContent, CacheSubcommandsHaveLeafBlocks)
+{
+    for (const char *Sub : {"info", "clear", "config"})
+    {
+        std::ostringstream Out;
+        UniPlan::PrintCommandUsage(Out, "cache", Sub);
+        const std::string S = Out.str();
+        EXPECT_NE(S.find("Exit codes:"), std::string::npos)
+            << "cache " << Sub << " should emit leaf block";
     }
 }

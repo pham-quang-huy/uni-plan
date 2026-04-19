@@ -821,6 +821,260 @@ static const FSubcommandHelpEntry kVerificationSubs[] = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// lane subcommands (v0.85.0 Commit 3)
+// ---------------------------------------------------------------------------
+static const FSubcommandHelpEntry kLaneSubs[] = {
+    {
+        "set",
+        "Usage: uni-plan lane set --topic <T> --phase <N> --lane <L>\n"
+        "                         [options]\n\n",
+        "Update an existing lane within a phase. Lanes group jobs that can\n"
+        "execute in parallel within a wave.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --lane <L>              Lane index within the phase\n\n",
+        "  --status <s>            not_started|in_progress|completed|blocked|\n"
+        "                          dropped|canceled\n"
+        "  --scope <text>          Lane scope\n"
+        "  --exit-criteria <text>  Lane exit criteria\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan lane set --topic X --phase 2 --lane 0 --status completed\n",
+        true,
+        false,
+    },
+    {
+        "add",
+        "Usage: uni-plan lane add --topic <T> --phase <N> [options]\n\n",
+        "Append a trailing lane to a phase.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n\n",
+        "  --status <s>            Initial status (default: not_started)\n"
+        "  --scope <text>          Lane scope\n"
+        "  --exit-criteria <text>  Lane exit criteria\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan lane add --topic X --phase 2 --scope 'Integration'\n",
+        true,
+        false,
+    },
+};
+
+// ---------------------------------------------------------------------------
+// testing subcommands
+// ---------------------------------------------------------------------------
+static const FSubcommandHelpEntry kTestingSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan testing add --topic <T> --phase <N>\n"
+        "                            --session <text> --step <text>\n"
+        "                            --action <text> --expected <text>\n"
+        "                            [--actor <human|ai|automated>]\n"
+        "                            [--evidence <text>]\n\n",
+        "Append a testing record to a phase. One record per (session,\n"
+        "step) pair; use multiple records for branching test plans.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --session <text>        Session label (groups related steps)\n"
+        "  --step <text>           Step label\n"
+        "  --action <text>         What the tester does\n"
+        "  --expected <text>       Expected result\n\n",
+        "  --actor <t>             human | ai | automated (default: human)\n"
+        "  --evidence <text>       Execution proof (log, SHA, URL)\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan testing add --topic X --phase 2 --session smoke \\\n"
+        "                       --step 'build' --action 'run build.sh' \\\n"
+        "                       --expected '0 errors' --actor ai\n",
+        true,
+        false,
+    },
+    {
+        "set",
+        "Usage: uni-plan testing set --topic <T> --phase <N> --index <I>\n"
+        "                            [options]\n\n",
+        "Update an existing testing record by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --index <I>             Zero-based index into testing[]\n\n",
+        "  --session <text>        Replace session label\n"
+        "  --actor <t>             Replace actor: human | ai | automated\n"
+        "  --step <text>           Replace step\n"
+        "  --action <text>         Replace action\n"
+        "  --expected <text>       Replace expected\n"
+        "  --evidence <text>       Replace evidence\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan testing set --topic X --phase 2 --index 0 \\\n"
+        "                       --evidence 'build.log sha=abc123'\n",
+        true,
+        false,
+    },
+};
+
+// ---------------------------------------------------------------------------
+// manifest subcommands
+// ---------------------------------------------------------------------------
+static const FSubcommandHelpEntry kManifestSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan manifest add --topic <T> --phase <N>\n"
+        "                             --file <path>\n"
+        "                             --action <create|modify|delete>\n"
+        "                             --description <text>\n\n",
+        "Append a file_manifest entry declaring a file the phase will\n"
+        "create, modify, or delete. Used by readiness/validate to check\n"
+        "plan↔disk consistency.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --file <path>           Repo-relative file path\n"
+        "  --action <a>            create | modify | delete\n"
+        "  --description <text>    What this file change achieves\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan manifest add --topic X --phase 2 \\\n"
+        "                        --file Source/Foo.cpp --action create \\\n"
+        "                        --description 'New command entry point'\n",
+        true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan manifest remove --topic <T> --phase <N> --index <I>\n"
+        "\n",
+        "Remove a file_manifest entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --index <I>             Zero-based index into file_manifest[]\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan manifest remove --topic X --phase 2 --index 3\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan manifest list [--topic <T>] [--phase <N>]\n"
+        "                              [--missing-only] [--stale-plan]\n"
+        "                              [--human]\n\n",
+        "Enumerate file_manifest entries across the corpus with disk-\n"
+        "reality checks. --missing-only and --stale-plan are orthogonal\n"
+        "AND predicates — when both are set, a row must satisfy both.\n\n"
+        "Drift classification (--stale-plan):\n"
+        "  stale_create      action=create, file already exists on disk\n"
+        "  stale_delete      action=delete, file still exists on disk\n"
+        "  dangling_modify   action=modify, file does not exist on disk\n\n",
+        nullptr,
+        "  --topic <T>             Scope to a single topic\n"
+        "  --phase <N>             Scope to a single phase index\n"
+        "  --missing-only          Only rows whose file_path does not resolve\n"
+        "  --stale-plan            Only rows where plan intent and disk "
+        "disagree\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan manifest list --missing-only\n"
+        "  uni-plan manifest list --topic X --stale-plan --human\n"
+        "  uni-plan manifest list --topic X --missing-only --stale-plan\n",
+        false,
+        true,
+    },
+    {
+        "set",
+        "Usage: uni-plan manifest set --topic <T> --phase <N> --index <I>\n"
+        "                             [options]\n\n",
+        "Update an existing file_manifest entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --index <I>             Zero-based index into file_manifest[]\n\n",
+        "  --file <path>           Replace file path\n"
+        "  --action <a>            create | modify | delete\n"
+        "  --description <text>    Replace description\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan manifest set --topic X --phase 2 --index 0 \\\n"
+        "                        --action modify\n",
+        true,
+        false,
+    },
+};
+
+// ---------------------------------------------------------------------------
+// cache subcommands — migrated from ad-hoc inline help block to the
+// structured FSubcommandHelpEntry registry (v0.85.0 Commit 3).
+// ---------------------------------------------------------------------------
+static const FSubcommandHelpEntry kCacheSubs[] = {
+    {
+        "info",
+        "Usage: uni-plan cache info [--human]\n\n",
+        "Show cache directory, size, entry count, and configuration\n"
+        "state. Default subcommand — `uni-plan cache` with no subcommand\n"
+        "runs `cache info`.\n\n",
+        nullptr,
+        nullptr,
+        nullptr,
+        "uni-plan-cache-info-v1",
+        "Examples:\n"
+        "  uni-plan cache\n"
+        "  uni-plan cache info --human\n",
+        false,
+        true,
+    },
+    {
+        "clear",
+        "Usage: uni-plan cache clear [--human]\n\n",
+        "Remove all cached inventory data for all repositories. Safe to\n"
+        "run; cache repopulates on the next invocation.\n\n",
+        nullptr,
+        nullptr,
+        nullptr,
+        "uni-plan-cache-clear-v1",
+        "Examples:\n"
+        "  uni-plan cache clear\n"
+        "  uni-plan cache clear --human\n",
+        false,
+        true,
+    },
+    {
+        "config",
+        "Usage: uni-plan cache config [--dir <path>]\n"
+        "                             [--enabled <true|false>]\n"
+        "                             [--verbose <true|false>] [--human]\n"
+        "\n",
+        "Update cache settings in uni-plan.ini next to the binary.\n\n",
+        nullptr,
+        "  --dir <path>            Set cache directory (absolute, relative,\n"
+        "                          or ${VAR})\n"
+        "  --enabled <true|false>  Enable or disable inventory caching\n"
+        "  --verbose <true|false>  Print cache hit/miss info to stderr\n",
+        nullptr,
+        "uni-plan-cache-config-v1",
+        "Examples:\n"
+        "  uni-plan cache config --dir /tmp/doc-cache\n"
+        "  uni-plan cache config --enabled false\n"
+        "  uni-plan cache config --verbose true\n",
+        false,
+        true,
+    },
+};
+
 // ===========================================================================
 // kCommandHelp — top-level group-level help registry.
 //
@@ -1065,6 +1319,126 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan legacy-gap --topic CycleRefactor --human\n"
         "  uni-plan legacy-gap --category legacy_rich --human\n",
     },
+    {
+        "lane",
+        "Usage:\n"
+        "  uni-plan lane set --topic <T> --phase <N> --lane <L> [options]\n"
+        "  uni-plan lane add --topic <T> --phase <N> [options]\n\n",
+        "Manage lanes within a phase. Lanes group jobs that can execute\n"
+        "in parallel within a wave.\n\n",
+        nullptr,
+        "  set              Update an existing lane's fields\n"
+        "  add              Append a trailing lane to a phase\n\n"
+        "Run `uni-plan lane <sub> --help` for flag detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan lane add --topic X --phase 2 --scope 'Integration'\n",
+        kLaneSubs,
+        sizeof(kLaneSubs) / sizeof(kLaneSubs[0]),
+    },
+    {
+        "testing",
+        "Usage:\n"
+        "  uni-plan testing add --topic <T> --phase <N>\n"
+        "                       --session <t> --step <t>\n"
+        "                       --action <t> --expected <t>\n"
+        "                       [--actor <human|ai|automated>]\n"
+        "                       [--evidence <t>]\n"
+        "  uni-plan testing set --topic <T> --phase <N> --index <I> [options]\n"
+        "\n",
+        "Manage testing records within a phase.\n\n",
+        nullptr,
+        "  add              Append a new testing record\n"
+        "  set              Update an existing testing record by index\n\n"
+        "Run `uni-plan testing <sub> --help` for flag detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan testing add --topic X --phase 2 --session smoke \\\n"
+        "                       --step 'build' --action 'run build.sh' \\\n"
+        "                       --expected '0 errors' --actor ai\n",
+        kTestingSubs,
+        sizeof(kTestingSubs) / sizeof(kTestingSubs[0]),
+    },
+    {
+        "manifest",
+        "Usage:\n"
+        "  uni-plan manifest add --topic <T> --phase <N>\n"
+        "                        --file <path> --action "
+        "<create|modify|delete>\n"
+        "                        --description <t>\n"
+        "  uni-plan manifest remove --topic <T> --phase <N> --index <I>\n"
+        "  uni-plan manifest list [--topic <T>] [--phase <N>]\n"
+        "                         [--missing-only] [--stale-plan]\n"
+        "  uni-plan manifest set --topic <T> --phase <N> --index <I> "
+        "[options]\n"
+        "\n",
+        "Manage file_manifest entries declaring the files a phase will\n"
+        "create, modify, or delete. Used by readiness/validate to check\n"
+        "plan↔disk consistency.\n\n",
+        nullptr,
+        "  add              Append a new file_manifest entry\n"
+        "  remove           Remove an entry by array index\n"
+        "  list             Enumerate entries across the corpus (with\n"
+        "                   --missing-only and --stale-plan drift filters)\n"
+        "  set              Update an existing entry by index\n\n"
+        "Run `uni-plan manifest <sub> --help` for flag detail.\n",
+        kHumanTable,
+        "Examples:\n"
+        "  uni-plan manifest list --missing-only\n"
+        "  uni-plan manifest list --topic X --stale-plan --human\n"
+        "  uni-plan manifest add --topic X --phase 2 \\\n"
+        "                        --file Source/Foo.cpp --action create \\\n"
+        "                        --description 'New command entry point'\n",
+        kManifestSubs,
+        sizeof(kManifestSubs) / sizeof(kManifestSubs[0]),
+    },
+    {
+        "cache",
+        "Usage:\n"
+        "  uni-plan cache [info]\n"
+        "  uni-plan cache clear\n"
+        "  uni-plan cache config [--dir <path>] [--enabled <true|false>]\n"
+        "                        [--verbose <true|false>]\n\n",
+        "Manage the persisted inventory cache.\n\n"
+        "uni-plan scans the repository to build a documentation inventory.\n"
+        "This scan is cached to avoid repeating it on every invocation.\n"
+        "The cache is automatically invalidated when any markdown file is\n"
+        "added, removed, resized, or modified (tracked via FNV-1a hash of\n"
+        "file paths, sizes, and timestamps).\n\n"
+        "Cache location: ~/.uni-plan/cache/<repo-hash>/inventory.cache\n"
+        "Each repository gets its own entry keyed by a hash of the repo\n"
+        "path.\n\n",
+        nullptr,
+        "  info             Show cache state (default — bare `cache` runs "
+        "info)\n"
+        "  clear            Remove all cached data for all repositories\n"
+        "  config           Update settings in uni-plan.ini\n\n"
+        "Run `uni-plan cache <sub> --help` for flag detail.\n",
+        kHumanTable,
+        "Examples:\n"
+        "  uni-plan cache\n"
+        "  uni-plan cache clear --human\n"
+        "  uni-plan cache config --dir /tmp/doc-cache\n",
+        kCacheSubs,
+        sizeof(kCacheSubs) / sizeof(kCacheSubs[0]),
+    },
+#ifdef UPLAN_WATCH
+    {
+        "watch",
+        "Usage: uni-plan watch [--repo-root <path>]\n\n",
+        "Launch the FTXUI terminal dashboard (watch mode). Live view of\n"
+        "active topics, phase timeline, blockers, and design-chars. Press\n"
+        "q to quit.\n\n"
+        "Built only when uni-plan is compiled with -DUPLAN_WATCH=1\n"
+        "(default on).\n\n",
+        nullptr, // required
+        nullptr, // options (no per-command flags — only --repo-root)
+        nullptr, // mHumanLabel — watch is always human
+        "Examples:\n"
+        "  uni-plan watch\n"
+        "  uni-plan watch --repo-root /path/to/repo\n",
+    },
+#endif
 };
 
 // ---------------------------------------------------------------------------
@@ -1085,61 +1459,6 @@ static void PrintSubcommandBlock(std::ostream &Out,
 void PrintCommandUsage(std::ostream &Out, const std::string &InCommand,
                        const std::string &InSubcommand)
 {
-    // Special-case: cache (multi-subcommand layout predates the
-    // FCommandHelpEntry registry; keeping inline pending Commit 3
-    // migration to a proper FSubcommandHelpEntry array).
-    if (InCommand == "cache")
-    {
-        Out << "Manage the persisted inventory cache.\n\n"
-               "uni-plan scans the repository for all plans, playbooks, "
-               "implementations,\n"
-               "and sidecar documents to build a documentation inventory. This "
-               "scan is cached\n"
-               "to avoid repeating it on every invocation. The cache is "
-               "automatically\n"
-               "invalidated when any markdown file is added, removed, resized, "
-               "or "
-               "modified\n"
-               "(tracked via FNV-1a hash of file paths, sizes, and "
-               "timestamps).\n\n"
-               "Cache location: "
-               "~/.uni-plan/cache/<repo-hash>/inventory.cache\n"
-               "Each repository gets its own cache entry keyed by a hash of "
-               "the "
-               "repo path.\n\n"
-               "Subcommands:\n"
-               "  uni-plan cache [info]   [options]\n"
-               "  uni-plan cache clear    [options]\n"
-               "  uni-plan cache config   --dir <path> [--enabled "
-               "<true|false>] "
-               "[--verbose <true|false>] [options]\n\n"
-               "cache info:    Show cache directory, size, entry count, and "
-               "configuration state.\n"
-               "cache clear:   Remove all cached inventory data for all "
-               "repositories.\n"
-               "cache config:  Update cache settings in uni-plan.ini next to "
-               "the "
-               "binary.\n\n"
-               "Options (config):\n"
-               "  --dir <path>            Set cache directory (absolute, "
-               "relative, "
-               "or ${VAR})\n"
-               "  --enabled <true|false>  Enable or disable inventory caching "
-               "globally\n"
-               "  --verbose <true|false>  Print cache hit/miss information to "
-               "stderr\n\n"
-               "Common options:\n"
-               "  --human                 Output as formatted ANSI display\n"
-               "  --repo-root <path>      Override repository root\n\n"
-               "Examples:\n"
-               "  uni-plan cache\n"
-               "  uni-plan cache info\n"
-               "  uni-plan cache clear --human\n"
-               "  uni-plan cache config --dir /tmp/doc-cache\n"
-               "  uni-plan cache config --enabled false\n"
-               "  uni-plan cache config --verbose true\n";
-        return;
-    }
     // Data-driven: standard command help
     for (const FCommandHelpEntry &Entry : kCommandHelp)
     {
