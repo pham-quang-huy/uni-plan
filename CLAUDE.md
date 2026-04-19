@@ -168,7 +168,7 @@ uni-plan/
 
 ## cli_semver_discipline
 
-uni-plan is still **pre-1.0** (currently `0.73.1`) and under active
+uni-plan is still **pre-1.0** (currently `0.73.2`) and under active
 development. The command surface, mutation target path format,
 validator output schema, and auto-changelog `affected` contract are all
 subject to change. There is no stability commitment until we explicitly
@@ -384,8 +384,8 @@ uni-plan phase verify --topic <T> --phase <N> --check <text> [--result <text>] [
 Low-level field setters. Use semantic commands above when possible.
 
 ```bash
-uni-plan topic set --topic <T> [--status <s>] [--next-actions <text>] [--summary <t>] [--goals <t>] [--non-goals <t>] [--risks <t>] [--acceptance-criteria <t>] [--problem-statement <t>] [--validation-commands <t>] [--baseline-audit <t>] [--execution-strategy <t>] [--locked-decisions <t>] [--source-references <t>] [--dependencies <t>]
-uni-plan phase set --topic <T> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>] [--scope <t>] [--output <t>] [--investigation <t>] [--code-entity-contract <t>] [--code-snippets <t>] [--best-practices <t>] [--multi-platforming <t>] [--readiness-gate <t>] [--handoff <t>] [--validation-commands <t>] [--phase-dependencies <t>]
+uni-plan topic set --topic <T> [--status <s>] [--next-actions <text>] [--summary <t>] [--goals <t>] [--non-goals <t>] [--risks <t>] [--acceptance-criteria <t>] [--problem-statement <t>] [--validation-commands <t>] [--baseline-audit <t>] [--execution-strategy <t>] [--locked-decisions <t>] [--source-references <t>] [--dependency-clear] [--dependency-add '<kind>|<topic>|<phase>|<path>|<note>']
+uni-plan phase set --topic <T> --phase <N> [--status <s>] [--done <t>] [--remaining <t>] [--blockers <t>] [--context <t>] [--scope <t>] [--output <t>] [--investigation <t>] [--code-entity-contract <t>] [--code-snippets <t>] [--best-practices <t>] [--multi-platforming <t>] [--readiness-gate <t>] [--handoff <t>] [--validation-commands <t>] [--dependency-clear] [--dependency-add '<kind>|<topic>|<phase>|<path>|<note>']
 uni-plan phase add --topic <T> [--scope <t>] [--output <t>] [--status <s>]  # append trailing phase; default status=not_started
 uni-plan phase remove --topic <T> --phase <N>  # trailing-only; requires not_started + no changelog/verification refs
 uni-plan phase normalize --topic <T> --phase <N> [--dry-run]  # replace em/en/figure dashes -> hyphen, smart quotes -> straight, NBSP -> space across all phase prose fields

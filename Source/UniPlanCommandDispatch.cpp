@@ -251,7 +251,12 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  --execution-strategy    Set execution strategy\n"
      "  --locked-decisions      Set locked decisions\n"
      "  --source-references     Set source references\n"
-     "  --dependencies <text>   Set dependencies\n"
+     "  --dependency-clear      Empty dependencies array before "
+     "--dependency-add\n"
+     "  --dependency-add <spec> Add typed dependency; spec = "
+     "'<kind>|<topic>|<phase>|<path>|<note>'\n"
+     "                          <kind>: bundle | phase | governance "
+     "| external\n"
      "  --reason <text>         Block reason (block only)\n"
      "  --verification <text>   Verification note (complete "
      "only)\n",
@@ -316,7 +321,12 @@ static const FCommandHelpEntry kCommandHelp[] = {
      "  --readiness-gate <text> Set readiness gate\n"
      "  --handoff <text>        Set handoff notes\n"
      "  --validation-commands   Set validation commands\n"
-     "  --phase-dependencies    Set phase dependencies\n",
+     "  --dependency-clear      Empty dependencies array before "
+     "--dependency-add\n"
+     "  --dependency-add <spec> Add typed dependency; spec = "
+     "'<kind>|<topic>|<phase>|<path>|<note>'\n"
+     "                          <kind>: bundle | phase | governance "
+     "| external\n",
      kHumanTable,
      "Examples:\n"
      "  uni-plan phase start --topic X --phase 6\n"
