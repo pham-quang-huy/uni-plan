@@ -581,6 +581,63 @@ TEST_F(FBundleTestFixture, TopicRefIntegritySelfReferencePasses)
     EXPECT_EQ(CountIssuesWithId(Json, "topic_ref_integrity"), 0);
 }
 
+// Regression guard (v0.73.3): validate --topic <T> must resolve cross-topic
+// `kind=bundle` refs against the full repo-wide topic registry, not just
+// the scoped bundle. Prior to v0.73.3, the validate command loaded only
+// the scoped bundle, producing false-positive topic_ref_integrity errors
+// for any kind=bundle/kind=phase reference to another real topic.
+TEST_F(FBundleTestFixture, TopicRefIntegrityScopedRunResolvesCrossTopicRef)
+{
+    // Two real bundles in the repo: A and B.
+    CreateMinimalFixture("A", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    CreateMinimalFixture("B", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+
+    // A depends on B via kind=bundle.
+    UniPlan::FTopicBundle BundleA;
+    ASSERT_TRUE(ReloadBundle("A", BundleA));
+    UniPlan::FBundleReference R;
+    R.mKind = UniPlan::EDependencyKind::Bundle;
+    R.mTopic = "B";
+    BundleA.mMetadata.mDependencies = {R};
+    WriteBundle(mRepoRoot, "A", BundleA);
+
+    // Scoped run: only --topic A in the output, but the evaluator
+    // registry must still see B so the kind=bundle ref resolves.
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "A", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "topic_ref_integrity"), 0);
+    // Output scope: bundle_count reports the scoped view (1), not the
+    // full loaded set.
+    EXPECT_EQ(Json["bundle_count"].get<int>(), 1);
+    EXPECT_EQ(Json["summary"]["topic_count"].get<int>(), 1);
+}
+
+// Regression guard (v0.73.3): --topic <T> pointing at a missing topic
+// emits a load_failure issue and exit 1, unchanged by the scoped-load
+// refactor.
+TEST_F(FBundleTestFixture, ValidateMissingTopicEmitsLoadFailure)
+{
+    CreateMinimalFixture("Real", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "Missing", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "load_failure");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_major");
+    EXPECT_FALSE(Json["valid"].get<bool>());
+}
+
 // -------------------------------------------------------------------
 // no_duplicate_changelog — same (phase, change) recorded twice
 // -------------------------------------------------------------------

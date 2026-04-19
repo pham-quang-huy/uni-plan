@@ -6,6 +6,7 @@
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -70,12 +71,26 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
                                  const FBundleValidateOptions &InOptions)
 {
     std::vector<std::string> BundleWarnings;
-    std::vector<FTopicBundle> Bundles;
+    // Always load all bundles so cross-topic evaluators (e.g.
+    // topic_ref_integrity) can resolve references against the full
+    // topic-key registry, even under --topic filtering. Scoping is
+    // applied to the emitted output below rather than to the loaded
+    // bundle set.
+    std::vector<FTopicBundle> Bundles = LoadAllBundles(InRepoRoot,
+                                                       BundleWarnings);
+
     if (!InOptions.mTopic.empty())
     {
-        FTopicBundle Bundle;
-        std::string Error;
-        if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, Bundle, Error))
+        bool bFound = false;
+        for (const FTopicBundle &B : Bundles)
+        {
+            if (B.mTopicKey == InOptions.mTopic)
+            {
+                bFound = true;
+                break;
+            }
+        }
+        if (!bFound)
         {
             const std::string UTC = GetUtcNow();
             PrintJsonHeader(kValidateSchema, UTC, InRepoRoot.string());
@@ -85,20 +100,30 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
             EmitJsonField("id", "load_failure");
             EmitJsonField("severity", "error_major");
             EmitJsonFieldBool("ok", false);
-            EmitJsonField("detail", Error, false);
+            EmitJsonField("detail",
+                          "topic not found in repo: " + InOptions.mTopic,
+                          false);
             std::cout << "}],";
             PrintJsonClose(BundleWarnings);
             return 1;
         }
-        Bundles.push_back(std::move(Bundle));
-    }
-    else
-    {
-        Bundles = LoadAllBundles(InRepoRoot, BundleWarnings);
     }
 
     std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
     ResolveIssueLines(Bundles, Checks);
+
+    // When --topic scopes the output, drop checks for other topics so
+    // the caller sees only their target topic's issues while keeping
+    // the evaluator registry complete.
+    if (!InOptions.mTopic.empty())
+    {
+        Checks.erase(std::remove_if(Checks.begin(), Checks.end(),
+                                    [&](const ValidateCheck &C)
+                                    {
+                                        return C.mTopic != InOptions.mTopic;
+                                    }),
+                     Checks.end());
+    }
 
     int ErrorMajorCount = 0;
     int ErrorMinorCount = 0;
@@ -124,11 +149,14 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
     if (InOptions.mbStrict && (ErrorMinorCount > 0 || WarningCount > 0))
         bValid = false;
 
+    const size_t TargetCount =
+        InOptions.mTopic.empty() ? Bundles.size() : size_t{1};
+
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kValidateSchema, UTC, InRepoRoot.string());
     if (!InOptions.mTopic.empty())
         EmitJsonField("topic", InOptions.mTopic);
-    EmitJsonFieldSizeT("bundle_count", Bundles.size());
+    EmitJsonFieldSizeT("bundle_count", TargetCount);
     EmitJsonFieldBool("valid", bValid);
     EmitJsonFieldInt("error_major", ErrorMajorCount);
     EmitJsonFieldInt("error_minor", ErrorMinorCount);
@@ -164,12 +192,20 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
     // `phase get` per phase. Bypasses the raw-JSON-read temptation
     // that led to v0.70.x violations.
     std::cout << "\"summary\":{";
-    EmitJsonFieldSizeT("topic_count", Bundles.size());
+    EmitJsonFieldSizeT("topic_count", TargetCount);
     std::cout << "\"topics\":[";
+    bool bTopicEmitted = false;
     for (size_t BI = 0; BI < Bundles.size(); ++BI)
     {
         const FTopicBundle &B = Bundles[BI];
-        PrintJsonSep(BI);
+        // Under --topic scope, the summary only reports the target
+        // topic; other bundles are loaded solely for cross-topic
+        // integrity checks.
+        if (!InOptions.mTopic.empty() && B.mTopicKey != InOptions.mTopic)
+            continue;
+        if (bTopicEmitted)
+            std::cout << ",";
+        bTopicEmitted = true;
         std::cout << "{";
         EmitJsonField("topic", B.mTopicKey);
         EmitJsonFieldSizeT("phase_count", B.mPhases.size());
@@ -249,26 +285,45 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
                                   const FBundleValidateOptions &InOptions)
 {
     std::vector<std::string> BundleWarnings;
-    std::vector<FTopicBundle> Bundles;
+    // See RunBundleValidateJson for the full-load rationale: cross-topic
+    // evaluators need the complete topic-key registry even under
+    // --topic scope.
+    std::vector<FTopicBundle> Bundles = LoadAllBundles(InRepoRoot,
+                                                       BundleWarnings);
+
     if (!InOptions.mTopic.empty())
     {
-        FTopicBundle Bundle;
-        std::string Error;
-        if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, Bundle, Error))
+        bool bFound = false;
+        for (const FTopicBundle &B : Bundles)
+        {
+            if (B.mTopicKey == InOptions.mTopic)
+            {
+                bFound = true;
+                break;
+            }
+        }
+        if (!bFound)
         {
             std::cerr << kColorRed << "FAIL" << kColorReset << " "
-                      << InOptions.mTopic << ": " << Error << "\n";
+                      << InOptions.mTopic
+                      << ": topic not found in repo\n";
             return 1;
         }
-        Bundles.push_back(std::move(Bundle));
-    }
-    else
-    {
-        Bundles = LoadAllBundles(InRepoRoot, BundleWarnings);
     }
 
     std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
     ResolveIssueLines(Bundles, Checks);
+
+    // Filter checks to target topic when --topic scopes the output.
+    if (!InOptions.mTopic.empty())
+    {
+        Checks.erase(std::remove_if(Checks.begin(), Checks.end(),
+                                    [&](const ValidateCheck &C)
+                                    {
+                                        return C.mTopic != InOptions.mTopic;
+                                    }),
+                     Checks.end());
+    }
 
     int ErrorMajorCount = 0;
     int ErrorMinorCount = 0;
@@ -287,8 +342,10 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
     }
 
     const int TotalFailed = ErrorMajorCount + ErrorMinorCount + WarningCount;
+    const size_t TargetCount =
+        InOptions.mTopic.empty() ? Bundles.size() : size_t{1};
     std::cout << kColorBold << "Validate" << kColorReset << "  "
-              << Bundles.size() << " bundles";
+              << TargetCount << " bundles";
     if (TotalFailed == 0)
     {
         std::cout << "  " << kColorGreen << "PASS" << kColorReset << "\n";

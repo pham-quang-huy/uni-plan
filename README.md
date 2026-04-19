@@ -350,6 +350,12 @@ These three commands (added in `v0.71.0`) replaced the previous temptation to `j
 
 Every entry in `issues[]` carries a `line` field (1-based, or `null` if unresolvable) pointing to the JSON line of the offending path. Human output renders a `Line` column between `Topic` and `Path`.
 
+### scoped_validate_load_semantics
+
+`uni-plan validate` always loads the **full** repo-wide bundle set into the evaluator chain, regardless of whether `--topic <T>` is supplied. This is intentional: cross-topic evaluators (`topic_ref_integrity`, `canonical_entity_ref`) need the complete topic-key registry to resolve `kind=bundle` / `kind=phase` references correctly. Under `--topic` scoping, only the output is filtered — `issues[]` shows entries for the target topic only, and the `summary.topics[]` emits just that topic's per-phase stats. `bundle_count` and `summary.topic_count` report the scoped view (`1` under `--topic`, full corpus otherwise).
+
+Practical consequence: a bundle with a `kind=bundle` dep pointing at another topic validates cleanly under both `uni-plan validate --topic <T> --strict` and repo-wide `uni-plan validate --strict`. Prior to this contract, scoped runs produced false-positive `topic_ref_integrity` ErrorMinors whenever the referenced topic wasn't inside the filter.
+
 V3-era vocabulary/filename/CLI drift checks were removed in `v0.63.0`. Pattern enumeration against free-text prose is intrinsically incomplete — drift prevention belongs in authoring discipline, not validator regex.
 
 ## project_structure
