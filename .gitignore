@@ -4,3 +4,7 @@ Build/
 *.o
 *.d
 .DS_Store
+# ctest scratch — created when `ctest` runs from the repo root instead
+# of Build/CMake (e.g. operator forgets --test-dir). The canonical
+# location lives under Build/CMake/Testing/ (already ignored via Build/).
+Testing/
