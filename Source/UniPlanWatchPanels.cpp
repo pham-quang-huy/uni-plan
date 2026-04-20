@@ -4,17 +4,83 @@
 #include "UniPlanTypes.h"
 
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/dom/node.hpp>
+#include <ftxui/dom/requirement.hpp>
 #include <ftxui/dom/table.hpp>
 #include <ftxui/screen/color.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace UniPlan
 {
 
 using namespace ftxui;
+
+// ---------------------------------------------------------------------------
+// Weighted-flex decorator
+//
+// FTXUI's stock `| flex` hard-codes a grow weight of 1, so multiple flex
+// siblings in an hbox always split extra space 50/50 / 33/33/33 / etc.
+// The hbox layout in box_helper.cpp distributes extra space as
+//   added = extra * flex_grow / sum(flex_grow)
+// so a true 2:1 split needs flex_grow=2 on one child, 1 on the other.
+// Stock decorators don't expose the weight, hence this tiny Node subclass.
+//
+// min_x is also forced to 0. FTXUI's hbox respects each child's reported
+// min_x BEFORE distributing extra_space via flex_grow — so if a long prose
+// line makes the left column's min_x 200, the hbox grants that 200 first
+// and only weights what's left. On wide terminals that left the right
+// column with almost nothing despite flex_grow=1. Zeroing min_x lets
+// flex_grow control the full width; children whose rendered content
+// exceeds the final column box truncate at the boundary (same behavior
+// stock `text()` already had — just at the proper 2/3 cut, not past it).
+// ---------------------------------------------------------------------------
+
+namespace
+{
+class WeightedFlexNode : public Node
+{
+  public:
+    WeightedFlexNode(Element InChild, int InWeight)
+        : Node(Elements{std::move(InChild)}), mWeight(InWeight)
+    {
+    }
+
+    void ComputeRequirement() override
+    {
+        children_[0]->ComputeRequirement();
+        requirement_ = children_[0]->requirement();
+        requirement_.flex_grow_x = mWeight;
+        requirement_.min_x = 0;
+    }
+
+    void SetBox(Box InBox) override
+    {
+        Node::SetBox(InBox);
+        children_[0]->SetBox(InBox);
+    }
+
+    void Render(Screen &InScreen) override
+    {
+        children_[0]->Render(InScreen);
+    }
+
+  private:
+    int mWeight;
+};
+} // namespace
+
+static Decorator FlexWithWeight(int InWeight)
+{
+    return [InWeight](Element InChild) -> Element
+    {
+        return std::make_shared<WeightedFlexNode>(std::move(InChild), InWeight);
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Color helpers
@@ -752,7 +818,8 @@ Element ValidationFailPanel::Render(
 Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
                                        int InSelectedPhaseIndex,
                                        int InSelectedWaveIndex,
-                                       int InSelectedLaneIndex) const
+                                       int InSelectedLaneIndex,
+                                       bool InFocusMode) const
 {
     // Find the taxonomy for the selected phase
     const FPhaseTaxonomy *rpTax = nullptr;
@@ -1051,12 +1118,18 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         text(" " + std::to_string(TasksTodo) + "t") | color(Color::Yellow),
     });
 
-    return vbox({
-        LanesPanel,
-        JobsPanel,
-        TasksPanel,
-        SummaryLine,
-    });
+    // The LANES / JOB BOARD / TASKS sub-panels only render when the watch
+    // app is in focus mode. In default mode the summary line alone closes
+    // the panel, so the right pane stays compact for overview use.
+    Elements TaxonomyRows;
+    if (InFocusMode)
+    {
+        TaxonomyRows.push_back(LanesPanel);
+        TaxonomyRows.push_back(JobsPanel);
+        TaxonomyRows.push_back(TasksPanel);
+    }
+    TaxonomyRows.push_back(SummaryLine);
+    return vbox(std::move(TaxonomyRows));
 }
 
 // ---------------------------------------------------------------------------
@@ -1497,63 +1570,69 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
                       text("  No plan selected") | dim);
     }
 
-    Elements Rows;
+    // Two-column layout. Left column: descriptive plan framing (Summary /
+    // Goals / Non-Goals). Right column: actionable state (Risks / Next
+    // Actions / Acceptance Criteria). Separating the narrative from the
+    // live-state entries keeps wide screens legible and stops the single
+    // column from stretching past a reasonable reading width.
+    Elements LeftRows;
 
     // Summary sub-section
-    Rows.push_back(text("  Summary") | bold);
+    LeftRows.push_back(text("  Summary") | bold);
     if (InPlan.mSummaryLines.empty())
     {
-        Rows.push_back(text("    (none)") | dim);
+        LeftRows.push_back(text("    (none)") | dim);
     }
     else
     {
         for (const std::string &Line : InPlan.mSummaryLines)
         {
-            Rows.push_back(text("    " + Line) | dim);
+            LeftRows.push_back(text("    " + Line) | dim);
         }
     }
 
-    Rows.push_back(text(""));
+    LeftRows.push_back(text(""));
 
     // Goals sub-section — matches schema `goals` field. Label must
     // match the schema vocabulary so AI agents reading the watch TUI
     // and the CLI/JSON see the same noun. Pre-v0.90.0 this was labeled
     // "Scope" which collided with the per-phase/lane/job `scope` field.
-    Rows.push_back(text("  Goals") | bold);
+    LeftRows.push_back(text("  Goals") | bold);
     if (InPlan.mGoalStatements.empty())
     {
-        Rows.push_back(text("    (none)") | dim);
+        LeftRows.push_back(text("    (none)") | dim);
     }
     else
     {
         for (const std::string &Goal : InPlan.mGoalStatements)
         {
-            Rows.push_back(text("    \xe2\x97\x8f " + Goal) |
-                           color(Color::Green));
+            LeftRows.push_back(text("    \xe2\x97\x8f " + Goal) |
+                               color(Color::Green));
         }
     }
 
-    Rows.push_back(text(""));
+    LeftRows.push_back(text(""));
 
     // Non-Goals sub-section — matches schema `non_goals` field. See
     // note above for the rename rationale.
-    Rows.push_back(text("  Non-Goals") | bold);
+    LeftRows.push_back(text("  Non-Goals") | bold);
     if (InPlan.mNonGoalStatements.empty())
     {
-        Rows.push_back(text("    (none)") | dim);
+        LeftRows.push_back(text("    (none)") | dim);
     }
     else
     {
         for (const std::string &NonGoal : InPlan.mNonGoalStatements)
         {
-            Rows.push_back(text("    \xe2\x97\x8b " + NonGoal) |
-                           color(Color::Yellow));
+            LeftRows.push_back(text("    \xe2\x97\x8b " + NonGoal) |
+                               color(Color::Yellow));
         }
     }
 
-    // v0.89.0 typed-array sub-sections — Risks, Next Actions, Acceptance
-    // Criteria. Each renders with status/severity color-coding so the
-    // operator can tell at a glance which entries need attention.
+    // Right column — v0.89.0 typed-array sub-sections: Risks, Next Actions,
+    // Acceptance Criteria. Each renders with status/severity color-coding
+    // so the operator can tell at a glance which entries need attention.
+    Elements RightRows;
     const auto SeverityColor = [](ERiskSeverity InSeverity) -> Color
     {
         switch (InSeverity)
@@ -1599,11 +1678,10 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
         return Color::White;
     };
 
-    Rows.push_back(text(""));
-    Rows.push_back(text("  Risks") | bold);
+    RightRows.push_back(text("  Risks") | bold);
     if (InPlan.mRiskEntries.empty())
     {
-        Rows.push_back(text("    (none)") | dim);
+        RightRows.push_back(text("    (none)") | dim);
     }
     else
     {
@@ -1612,16 +1690,16 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
             const std::string Prefix = std::string("    [") +
                                        ToString(R.mSeverity) + "/" +
                                        ToString(R.mStatus) + "] ";
-            Rows.push_back(text(Prefix + R.mStatement) |
-                           color(SeverityColor(R.mSeverity)));
+            RightRows.push_back(text(Prefix + R.mStatement) |
+                                color(SeverityColor(R.mSeverity)));
         }
     }
 
-    Rows.push_back(text(""));
-    Rows.push_back(text("  Next Actions") | bold);
+    RightRows.push_back(text(""));
+    RightRows.push_back(text("  Next Actions") | bold);
     if (InPlan.mNextActionEntries.empty())
     {
-        Rows.push_back(text("    (none)") | dim);
+        RightRows.push_back(text("    (none)") | dim);
     }
     else
     {
@@ -1639,15 +1717,15 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
                     ? Color::Green
                     : (A.mStatus == EActionStatus::Abandoned ? Color::GrayDark
                                                              : Color::Cyan);
-            Rows.push_back(text(Prefix + A.mStatement) | color(C));
+            RightRows.push_back(text(Prefix + A.mStatement) | color(C));
         }
     }
 
-    Rows.push_back(text(""));
-    Rows.push_back(text("  Acceptance Criteria") | bold);
+    RightRows.push_back(text(""));
+    RightRows.push_back(text("  Acceptance Criteria") | bold);
     if (InPlan.mAcceptanceCriteria.empty())
     {
-        Rows.push_back(text("    (none)") | dim);
+        RightRows.push_back(text("    (none)") | dim);
     }
     else
     {
@@ -1655,13 +1733,24 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
         {
             const std::string Glyph = CriterionGlyph(C.mStatus);
             const std::string IdPart = C.mId.empty() ? "" : (C.mId + " ");
-            Rows.push_back(text("    " + Glyph + " " + IdPart + C.mStatement) |
-                           color(CriterionColor(C.mStatus)));
+            RightRows.push_back(
+                text("    " + Glyph + " " + IdPart + C.mStatement) |
+                color(CriterionColor(C.mStatus)));
         }
     }
 
+    // True 2:1 proportional split via the weighted-flex decorator defined
+    // at the top of this file. Extra horizontal space in the hbox is
+    // distributed 2/3 to the narrative left column, 1/3 to the live-state
+    // right column — holds the proportion across any terminal width,
+    // unlike the earlier fixed-width right column that skewed on wide
+    // terminals.
     return window(text(" PLAN DETAIL ") | bold | color(Color::Cyan),
-                  vbox(Rows));
+                  hbox({
+                      vbox(std::move(LeftRows)) | FlexWithWeight(2),
+                      separator(),
+                      vbox(std::move(RightRows)) | FlexWithWeight(1),
+                  }));
 }
 
 // ---------------------------------------------------------------------------

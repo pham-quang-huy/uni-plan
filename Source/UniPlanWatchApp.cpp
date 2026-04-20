@@ -140,9 +140,9 @@ int DocWatchApp::Run()
             // ── RIGHT PANE (detail for selected plan) ─────────────
             auto rightRow1 =
                 PanelPhaseDetail.Render(SelectedPlan, mSelectedPhaseIndex);
-            auto rightRow2 =
-                PanelTaxonomy.Render(SelectedPlan, mSelectedPhaseIndex,
-                                     mSelectedWaveIndex, mSelectedLaneIndex);
+            auto rightRow2 = PanelTaxonomy.Render(
+                SelectedPlan, mSelectedPhaseIndex, mSelectedWaveIndex,
+                mSelectedLaneIndex, mbFocusMode);
 
             // Resolve selected phase taxonomy for file manifest
             FPhaseTaxonomy SelectedTaxonomy;
@@ -167,8 +167,9 @@ int DocWatchApp::Run()
 
             auto rightRow0 = PanelPlanDetail.Render(SelectedPlan);
 
-            // Focus mode drops the plan-detail header row so execution detail
-            // (phase / taxonomy / manifest / blockers) gets the vertical space.
+            // Focus mode drops the plan-detail header row and surfaces the
+            // BLOCKERS + VALIDATION FAILURES row; default mode hides both
+            // so the right pane stays compact for overview use.
             Elements RightPaneRows;
             if (!mbFocusMode)
             {
@@ -177,10 +178,13 @@ int DocWatchApp::Run()
             RightPaneRows.push_back(rightRow1);
             RightPaneRows.push_back(rightRow2);
             RightPaneRows.push_back(rightRow3);
-            RightPaneRows.push_back(hbox({
-                rightRow4 | flex,
-                rightRow5 | flex,
-            }));
+            if (mbFocusMode)
+            {
+                RightPaneRows.push_back(hbox({
+                    rightRow4 | flex,
+                    rightRow5 | flex,
+                }));
+            }
             auto rightPane = vbox(std::move(RightPaneRows));
 
             // ── Status bar ────────────────────────────────────────

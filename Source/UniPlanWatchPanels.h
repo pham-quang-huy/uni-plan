@@ -72,9 +72,16 @@ class ValidationFailPanel
 class ExecutionTaxonomyPanel
 {
   public:
+    // `InFocusMode` gates the full LANES / JOB BOARD / TASKS sub-panels.
+    // Wired to the watch app's focus-mode toggle (`): in focus mode all
+    // three render and the summary line still closes the panel; in default
+    // mode only the summary line renders, keeping the right pane compact
+    // for overview use. Lane / wave selection keybindings remain active in
+    // both modes — they continue to drive the job-board filter state even
+    // while the board itself is hidden.
     ftxui::Element Render(const FWatchPlanSummary &InPlan,
                           int InSelectedPhaseIndex, int InSelectedWaveIndex,
-                          int InSelectedLaneIndex) const;
+                          int InSelectedLaneIndex, bool InFocusMode) const;
 };
 
 class SchemaPanel
