@@ -76,6 +76,98 @@ void EmitDependenciesJson(const char *InName,
     if (InTrailingComma)
         std::cout << ",";
 }
+
+// ---------------------------------------------------------------------------
+// EmitRisksJson — write a typed risks array as JSON:
+//   [{"id":"R1","statement":"...","mitigation":"...","severity":"high",
+//     "status":"open","notes":"..."}, ...]
+// Emits an empty array when the input vector is empty (never null).
+// ---------------------------------------------------------------------------
+
+void EmitRisksJson(const char *InName,
+                   const std::vector<FRiskEntry> &InRisks,
+                   bool InTrailingComma)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InRisks.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FRiskEntry &R = InRisks[I];
+        std::cout << "{";
+        EmitJsonField("id", R.mId);
+        EmitJsonField("statement", R.mStatement);
+        EmitJsonField("mitigation", R.mMitigation);
+        EmitJsonField("severity", ToString(R.mSeverity));
+        EmitJsonField("status", ToString(R.mStatus));
+        EmitJsonField("notes", R.mNotes, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
+
+// ---------------------------------------------------------------------------
+// EmitNextActionsJson — write a typed next_actions array as JSON:
+//   [{"order":1,"statement":"...","rationale":"...","owner":"...",
+//     "status":"pending","target_date":"..."}, ...]
+// ---------------------------------------------------------------------------
+
+void EmitNextActionsJson(const char *InName,
+                         const std::vector<FNextActionEntry> &InActions,
+                         bool InTrailingComma)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InActions.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FNextActionEntry &A = InActions[I];
+        std::cout << "{";
+        std::cout << "\"order\":" << A.mOrder << ",";
+        EmitJsonField("statement", A.mStatement);
+        EmitJsonField("rationale", A.mRationale);
+        EmitJsonField("owner", A.mOwner);
+        EmitJsonField("status", ToString(A.mStatus));
+        EmitJsonField("target_date", A.mTargetDate, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
+
+// ---------------------------------------------------------------------------
+// EmitAcceptanceCriteriaJson — write a typed acceptance_criteria array as
+// JSON:
+//   [{"id":"AC1","statement":"...","status":"met","measure":"...",
+//     "evidence":"..."}, ...]
+// ---------------------------------------------------------------------------
+
+void EmitAcceptanceCriteriaJson(
+    const char *InName,
+    const std::vector<FAcceptanceCriterionEntry> &InCriteria,
+    bool InTrailingComma)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InCriteria.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FAcceptanceCriterionEntry &C = InCriteria[I];
+        std::cout << "{";
+        EmitJsonField("id", C.mId);
+        EmitJsonField("statement", C.mStatement);
+        EmitJsonField("status", ToString(C.mStatus));
+        EmitJsonField("measure", C.mMeasure);
+        EmitJsonField("evidence", C.mEvidence, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
 // ---------------------------------------------------------------------------
 // Topic List — JSON output
 // ---------------------------------------------------------------------------
@@ -194,9 +286,10 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
     if (Wants("non_goals"))
         EmitJsonFieldNullable("non_goals", Meta.mNonGoals);
     if (Wants("risks"))
-        EmitJsonFieldNullable("risks", Meta.mRisks);
+        EmitRisksJson("risks", Meta.mRisks);
     if (Wants("acceptance_criteria"))
-        EmitJsonFieldNullable("acceptance_criteria", Meta.mAcceptanceCriteria);
+        EmitAcceptanceCriteriaJson("acceptance_criteria",
+                                   Meta.mAcceptanceCriteria);
     if (Wants("problem_statement"))
         EmitJsonFieldNullable("problem_statement", Meta.mProblemStatement);
     if (Wants("validation_commands"))
@@ -213,7 +306,7 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
     if (Wants("dependencies"))
         EmitDependenciesJson("dependencies", Meta.mDependencies);
     if (Wants("next_actions"))
-        EmitJsonFieldNullable("next_actions", Bundle.mNextActions);
+        EmitNextActionsJson("next_actions", Bundle.mNextActions);
     EmitJsonFieldSizeT("phase_count", Bundle.mPhases.size());
 
     if (Wants("phases"))
@@ -287,10 +380,6 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
         PrintField("Goals", Bundle.mMetadata.mGoals);
     if (Wants("non_goals"))
         PrintField("Non-Goals", Bundle.mMetadata.mNonGoals);
-    if (Wants("risks"))
-        PrintField("Risks", Bundle.mMetadata.mRisks);
-    if (Wants("acceptance_criteria"))
-        PrintField("Acceptance Criteria", Bundle.mMetadata.mAcceptanceCriteria);
     if (Wants("problem_statement"))
         PrintField("Problem Statement", Bundle.mMetadata.mProblemStatement);
     if (Wants("baseline_audit"))
@@ -301,8 +390,51 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
         PrintField("Locked Decisions", Bundle.mMetadata.mLockedDecisions);
     if (Wants("source_references"))
         PrintField("Source References", Bundle.mMetadata.mSourceReferences);
-    if (Wants("next_actions"))
-        PrintField("Next Actions", Bundle.mNextActions);
+
+    // Typed array tables (v0.89.0+): risks, acceptance_criteria, next_actions
+    if (Wants("risks") && !Bundle.mMetadata.mRisks.empty())
+    {
+        std::cout << kColorBold << "Risks" << kColorReset << "\n";
+        HumanTable RiskTable;
+        RiskTable.mHeaders = {"Id", "Statement", "Mitigation", "Severity",
+                              "Status"};
+        for (const FRiskEntry &R : Bundle.mMetadata.mRisks)
+        {
+            RiskTable.AddRow({R.mId, R.mStatement, R.mMitigation,
+                              ToString(R.mSeverity), ToString(R.mStatus)});
+        }
+        RiskTable.Print();
+        std::cout << "\n";
+    }
+    if (Wants("acceptance_criteria")
+        && !Bundle.mMetadata.mAcceptanceCriteria.empty())
+    {
+        std::cout << kColorBold << "Acceptance Criteria" << kColorReset << "\n";
+        HumanTable ACTable;
+        ACTable.mHeaders = {"Id", "Statement", "Status", "Measure"};
+        for (const FAcceptanceCriterionEntry &C :
+             Bundle.mMetadata.mAcceptanceCriteria)
+        {
+            ACTable.AddRow(
+                {C.mId, C.mStatement, ToString(C.mStatus), C.mMeasure});
+        }
+        ACTable.Print();
+        std::cout << "\n";
+    }
+    if (Wants("next_actions") && !Bundle.mNextActions.empty())
+    {
+        std::cout << kColorBold << "Next Actions" << kColorReset << "\n";
+        HumanTable NATable;
+        NATable.mHeaders = {"Order", "Statement", "Status", "Rationale",
+                            "Owner"};
+        for (const FNextActionEntry &A : Bundle.mNextActions)
+        {
+            NATable.AddRow({std::to_string(A.mOrder), A.mStatement,
+                            ToString(A.mStatus), A.mRationale, A.mOwner});
+        }
+        NATable.Print();
+        std::cout << "\n";
+    }
 
     // Validation commands table
     if (Wants("validation_commands") &&

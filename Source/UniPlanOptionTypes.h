@@ -134,13 +134,15 @@ struct FTopicSetOptions : BaseOptions
 {
     std::string mTopic;
     std::optional<ETopicStatus> opStatus;
-    std::string mNextActions;
+    // `risks`, `next_actions`, `acceptance_criteria` are typed arrays as of
+    // v0.89.0 and are mutated via the dedicated `uni-plan risk`,
+    // `uni-plan next-action`, `uni-plan acceptance-criterion` groups. The
+    // former `--risks`, `--next-actions`, `--acceptance-criteria` flags
+    // (plus their `-file` variants) were removed in the same release.
     // Metadata fields
     std::string mSummary;
     std::string mGoals;
     std::string mNonGoals;
-    std::string mRisks;
-    std::string mAcceptanceCriteria;
     std::string mProblemStatement;
     // Typed validation_commands mutation (structured, replaces the former
     // string form). --validation-clear wipes the existing vector before
@@ -488,6 +490,134 @@ struct FChangelogSetOptions : BaseOptions
     std::string mChange;
     std::optional<EChangeType> opType;
     std::string mAffected;
+};
+
+// ---------------------------------------------------------------------------
+// Tier 6 — Risk entry CLI groups (v0.89.0+)
+//
+// `uni-plan risk add --topic <T> --statement <t> [--mitigation <t>]
+//   [--severity low|medium|high|critical] [--status open|mitigated|accepted|
+//   closed] [--id <t>] [--notes <t>]` — append typed risk entry.
+// `uni-plan risk set --topic <T> --index <N> [same flags]` — mutate one
+// entry; all fields optional; only passed flags update.
+// `uni-plan risk remove --topic <T> --index <N>` — erase entry by index.
+// `uni-plan risk list --topic <T> [--severity <filter>] [--status <filter>]`
+// — emit array filtered by severity/status.
+// ---------------------------------------------------------------------------
+
+struct FRiskAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mId;
+    std::string mStatement;
+    std::string mMitigation;
+    std::optional<ERiskSeverity> opSeverity; // unset -> Medium
+    std::optional<ERiskStatus> opStatus;     // unset -> Open
+    std::string mNotes;
+};
+
+struct FRiskSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    // opPresent flags distinguish "--id ''" (clear) from "not passed"
+    // (unchanged). Strings use empty-means-unchanged semantics, matching
+    // FChangelogSetOptions.
+    std::string mId;
+    std::string mStatement;
+    std::string mMitigation;
+    std::optional<ERiskSeverity> opSeverity;
+    std::optional<ERiskStatus> opStatus;
+    std::string mNotes;
+};
+
+struct FRiskRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+};
+
+struct FRiskListOptions : BaseOptions
+{
+    std::string mTopic;
+    std::optional<ERiskSeverity> opSeverityFilter;
+    std::optional<ERiskStatus> opStatusFilter;
+};
+
+// ---------------------------------------------------------------------------
+// Tier 6 — Next-action entry CLI groups (v0.89.0+)
+// ---------------------------------------------------------------------------
+
+struct FNextActionAddOptions : BaseOptions
+{
+    std::string mTopic;
+    int mOrder = 0; // 0 = auto-assign (size+1); callers can set explicitly
+    std::string mStatement;
+    std::string mRationale;
+    std::string mOwner;
+    std::optional<EActionStatus> opStatus;
+    std::string mTargetDate;
+};
+
+struct FNextActionSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    int mOrder = -1; // -1 = unchanged; >=0 = new order
+    std::string mStatement;
+    std::string mRationale;
+    std::string mOwner;
+    std::optional<EActionStatus> opStatus;
+    std::string mTargetDate;
+};
+
+struct FNextActionRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+};
+
+struct FNextActionListOptions : BaseOptions
+{
+    std::string mTopic;
+    std::optional<EActionStatus> opStatusFilter;
+};
+
+// ---------------------------------------------------------------------------
+// Tier 6 — Acceptance-criterion entry CLI groups (v0.89.0+)
+// ---------------------------------------------------------------------------
+
+struct FAcceptanceCriterionAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mId;
+    std::string mStatement;
+    std::optional<ECriterionStatus> opStatus;
+    std::string mMeasure;
+    std::string mEvidence;
+};
+
+struct FAcceptanceCriterionSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    std::string mId;
+    std::string mStatement;
+    std::optional<ECriterionStatus> opStatus;
+    std::string mMeasure;
+    std::string mEvidence;
+};
+
+struct FAcceptanceCriterionRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+};
+
+struct FAcceptanceCriterionListOptions : BaseOptions
+{
+    std::string mTopic;
+    std::optional<ECriterionStatus> opStatusFilter;
 };
 
 // ---------------------------------------------------------------------------

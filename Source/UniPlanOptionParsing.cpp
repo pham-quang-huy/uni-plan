@@ -652,10 +652,6 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
             Options.opStatus = Value;
             continue;
         }
-        if (TryConsumeStringOrFileOption(Remaining, Index, "--next-actions",
-                                         "--next-actions-file",
-                                         Options.mNextActions))
-            continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--summary",
                                          "--summary-file", Options.mSummary))
             continue;
@@ -665,13 +661,34 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
         if (TryConsumeStringOrFileOption(Remaining, Index, "--non-goals",
                                          "--non-goals-file", Options.mNonGoals))
             continue;
-        if (TryConsumeStringOrFileOption(Remaining, Index, "--risks",
-                                         "--risks-file", Options.mRisks))
-            continue;
-        if (TryConsumeStringOrFileOption(
-                Remaining, Index, "--acceptance-criteria",
-                "--acceptance-criteria-file", Options.mAcceptanceCriteria))
-            continue;
+        // Removed in v0.89.0: --risks, --next-actions,
+        // --acceptance-criteria (and their -file variants). These fields
+        // are typed arrays now; use `uni-plan risk`, `uni-plan next-action`,
+        // `uni-plan acceptance-criterion` groups instead. Fail fast with a
+        // migration pointer so consumer scripts break loudly.
+        if (Token == "--risks" || Token == "--risks-file")
+        {
+            throw UsageError(
+                "--risks / --risks-file removed in v0.89.0: use "
+                "`uni-plan risk add --topic <T> --statement <text>` instead "
+                "(see `uni-plan risk --help`)");
+        }
+        if (Token == "--next-actions" || Token == "--next-actions-file")
+        {
+            throw UsageError(
+                "--next-actions / --next-actions-file removed in v0.89.0: use "
+                "`uni-plan next-action add --topic <T> --statement <text>` "
+                "instead (see `uni-plan next-action --help`)");
+        }
+        if (Token == "--acceptance-criteria"
+            || Token == "--acceptance-criteria-file")
+        {
+            throw UsageError(
+                "--acceptance-criteria / --acceptance-criteria-file removed "
+                "in v0.89.0: use `uni-plan acceptance-criterion add --topic "
+                "<T> --statement <text>` instead (see "
+                "`uni-plan acceptance-criterion --help`)");
+        }
         if (TryConsumeStringOrFileOption(
                 Remaining, Index, "--problem-statement",
                 "--problem-statement-file", Options.mProblemStatement))
@@ -2432,6 +2449,535 @@ ParseLegacyGapOptions(const std::vector<std::string> &InTokens)
         }
         throw UsageError("Unknown option for legacy-gap: " + Token);
     }
+    return Options;
+}
+
+// ---------------------------------------------------------------------------
+// Tier 6 — v0.89.0 typed-array CLI groups
+//
+// Parsers for `risk`, `next-action`, `acceptance-criterion` add/set/
+// remove/list subcommands. Mirrors the changelog add/set/remove shape at
+// `ParseChangelogAddOptions` / `ParseChangelogSetOptions` /
+// `ParseChangelogRemoveOptions` above.
+// ---------------------------------------------------------------------------
+
+static void ParseRiskSeverityFlag(const std::vector<std::string> &InTokens,
+                                  size_t &InOutIndex,
+                                  std::optional<ERiskSeverity> &OutOp)
+{
+    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--severity");
+    ERiskSeverity Value = ERiskSeverity::Medium;
+    if (!RiskSeverityFromString(Raw, Value))
+    {
+        throw UsageError(
+            "Invalid risk severity '" + Raw +
+            "' (expected: low, medium, high, critical)");
+    }
+    OutOp = Value;
+}
+
+static void ParseRiskStatusFlag(const std::vector<std::string> &InTokens,
+                                size_t &InOutIndex,
+                                std::optional<ERiskStatus> &OutOp)
+{
+    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--status");
+    ERiskStatus Value = ERiskStatus::Open;
+    if (!RiskStatusFromString(Raw, Value))
+    {
+        throw UsageError(
+            "Invalid risk status '" + Raw +
+            "' (expected: open, mitigated, accepted, closed)");
+    }
+    OutOp = Value;
+}
+
+static void ParseActionStatusFlag(const std::vector<std::string> &InTokens,
+                                  size_t &InOutIndex,
+                                  std::optional<EActionStatus> &OutOp)
+{
+    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--status");
+    EActionStatus Value = EActionStatus::Pending;
+    if (!ActionStatusFromString(Raw, Value))
+    {
+        throw UsageError(
+            "Invalid action status '" + Raw +
+            "' (expected: pending, in_progress, completed, abandoned)");
+    }
+    OutOp = Value;
+}
+
+static void
+ParseCriterionStatusFlag(const std::vector<std::string> &InTokens,
+                         size_t &InOutIndex,
+                         std::optional<ECriterionStatus> &OutOp)
+{
+    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--status");
+    ECriterionStatus Value = ECriterionStatus::NotMet;
+    if (!CriterionStatusFromString(Raw, Value))
+    {
+        throw UsageError(
+            "Invalid criterion status '" + Raw +
+            "' (expected: not_met, met, partial, not_applicable)");
+    }
+    OutOp = Value;
+}
+
+FRiskAddOptions ParseRiskAddOptions(const std::vector<std::string> &InTokens)
+{
+    FRiskAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--id", "--id-file",
+                                         Options.mId))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
+                                         "--statement-file", Options.mStatement))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--mitigation",
+                                         "--mitigation-file",
+                                         Options.mMitigation))
+            continue;
+        if (Token == "--severity")
+        {
+            ParseRiskSeverityFlag(Remaining, Index, Options.opSeverity);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            ParseRiskStatusFlag(Remaining, Index, Options.opStatus);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--notes",
+                                         "--notes-file", Options.mNotes))
+            continue;
+        throw UsageError("Unknown option for risk add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("risk add requires --topic");
+    if (Options.mStatement.empty())
+        throw UsageError("risk add requires --statement");
+    return Options;
+}
+
+FRiskSetOptions ParseRiskSetOptions(const std::vector<std::string> &InTokens)
+{
+    FRiskSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--id", "--id-file",
+                                         Options.mId))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
+                                         "--statement-file", Options.mStatement))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--mitigation",
+                                         "--mitigation-file",
+                                         Options.mMitigation))
+            continue;
+        if (Token == "--severity")
+        {
+            ParseRiskSeverityFlag(Remaining, Index, Options.opSeverity);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            ParseRiskStatusFlag(Remaining, Index, Options.opStatus);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--notes",
+                                         "--notes-file", Options.mNotes))
+            continue;
+        throw UsageError("Unknown option for risk set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("risk set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("risk set requires --index");
+    return Options;
+}
+
+FRiskRemoveOptions
+ParseRiskRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FRiskRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for risk remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("risk remove requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("risk remove requires --index");
+    return Options;
+}
+
+FRiskListOptions ParseRiskListOptions(const std::vector<std::string> &InTokens)
+{
+    FRiskListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--severity")
+        {
+            ParseRiskSeverityFlag(Remaining, Index, Options.opSeverityFilter);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            ParseRiskStatusFlag(Remaining, Index, Options.opStatusFilter);
+            continue;
+        }
+        throw UsageError("Unknown option for risk list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("risk list requires --topic");
+    return Options;
+}
+
+FNextActionAddOptions
+ParseNextActionAddOptions(const std::vector<std::string> &InTokens)
+{
+    FNextActionAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--order")
+        {
+            const std::string V =
+                ConsumeValuedOption(Remaining, Index, "--order");
+            try
+            {
+                size_t Pos = 0;
+                Options.mOrder = std::stoi(V, &Pos);
+                if (Pos != V.size())
+                    throw UsageError("--order must be an integer");
+            }
+            catch (const std::invalid_argument &)
+            {
+                throw UsageError("--order must be an integer");
+            }
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
+                                         "--statement-file", Options.mStatement))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--rationale",
+                                         "--rationale-file", Options.mRationale))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--owner",
+                                         "--owner-file", Options.mOwner))
+            continue;
+        if (Token == "--status")
+        {
+            ParseActionStatusFlag(Remaining, Index, Options.opStatus);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--target-date",
+                                         "--target-date-file",
+                                         Options.mTargetDate))
+            continue;
+        throw UsageError("Unknown option for next-action add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("next-action add requires --topic");
+    if (Options.mStatement.empty())
+        throw UsageError("next-action add requires --statement");
+    return Options;
+}
+
+FNextActionSetOptions
+ParseNextActionSetOptions(const std::vector<std::string> &InTokens)
+{
+    FNextActionSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (Token == "--order")
+        {
+            const std::string V =
+                ConsumeValuedOption(Remaining, Index, "--order");
+            try
+            {
+                size_t Pos = 0;
+                Options.mOrder = std::stoi(V, &Pos);
+                if (Pos != V.size())
+                    throw UsageError("--order must be an integer");
+            }
+            catch (const std::invalid_argument &)
+            {
+                throw UsageError("--order must be an integer");
+            }
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
+                                         "--statement-file", Options.mStatement))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--rationale",
+                                         "--rationale-file", Options.mRationale))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--owner",
+                                         "--owner-file", Options.mOwner))
+            continue;
+        if (Token == "--status")
+        {
+            ParseActionStatusFlag(Remaining, Index, Options.opStatus);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--target-date",
+                                         "--target-date-file",
+                                         Options.mTargetDate))
+            continue;
+        throw UsageError("Unknown option for next-action set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("next-action set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("next-action set requires --index");
+    return Options;
+}
+
+FNextActionRemoveOptions
+ParseNextActionRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FNextActionRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for next-action remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("next-action remove requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("next-action remove requires --index");
+    return Options;
+}
+
+FNextActionListOptions
+ParseNextActionListOptions(const std::vector<std::string> &InTokens)
+{
+    FNextActionListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            ParseActionStatusFlag(Remaining, Index, Options.opStatusFilter);
+            continue;
+        }
+        throw UsageError("Unknown option for next-action list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("next-action list requires --topic");
+    return Options;
+}
+
+FAcceptanceCriterionAddOptions ParseAcceptanceCriterionAddOptions(
+    const std::vector<std::string> &InTokens)
+{
+    FAcceptanceCriterionAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--id", "--id-file",
+                                         Options.mId))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
+                                         "--statement-file", Options.mStatement))
+            continue;
+        if (Token == "--status")
+        {
+            ParseCriterionStatusFlag(Remaining, Index, Options.opStatus);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--measure",
+                                         "--measure-file", Options.mMeasure))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--evidence",
+                                         "--evidence-file", Options.mEvidence))
+            continue;
+        throw UsageError("Unknown option for acceptance-criterion add: " +
+                         Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("acceptance-criterion add requires --topic");
+    if (Options.mStatement.empty())
+        throw UsageError("acceptance-criterion add requires --statement");
+    return Options;
+}
+
+FAcceptanceCriterionSetOptions ParseAcceptanceCriterionSetOptions(
+    const std::vector<std::string> &InTokens)
+{
+    FAcceptanceCriterionSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--id", "--id-file",
+                                         Options.mId))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
+                                         "--statement-file", Options.mStatement))
+            continue;
+        if (Token == "--status")
+        {
+            ParseCriterionStatusFlag(Remaining, Index, Options.opStatus);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--measure",
+                                         "--measure-file", Options.mMeasure))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--evidence",
+                                         "--evidence-file", Options.mEvidence))
+            continue;
+        throw UsageError("Unknown option for acceptance-criterion set: " +
+                         Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("acceptance-criterion set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("acceptance-criterion set requires --index");
+    return Options;
+}
+
+FAcceptanceCriterionRemoveOptions ParseAcceptanceCriterionRemoveOptions(
+    const std::vector<std::string> &InTokens)
+{
+    FAcceptanceCriterionRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for acceptance-criterion remove: " +
+                         Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("acceptance-criterion remove requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("acceptance-criterion remove requires --index");
+    return Options;
+}
+
+FAcceptanceCriterionListOptions ParseAcceptanceCriterionListOptions(
+    const std::vector<std::string> &InTokens)
+{
+    FAcceptanceCriterionListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            ParseCriterionStatusFlag(Remaining, Index, Options.opStatusFilter);
+            continue;
+        }
+        throw UsageError("Unknown option for acceptance-criterion list: " +
+                         Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("acceptance-criterion list requires --topic");
     return Options;
 }
 

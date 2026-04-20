@@ -35,12 +35,18 @@
       "description": "What is explicitly out of scope. Newline-separated if multiple."
     },
     "risks": {
-      "type": "string",
-      "description": "Risk register with impact, likelihood, and mitigations"
+      "description": "Typed array of risk entries (v0.89.0+). Legacy string form is still accepted on read via dual-read auto-promote; writer always emits array.",
+      "oneOf": [
+        { "type": "array", "items": { "$ref": "#/$defs/risk_entry" } },
+        { "type": "string", "description": "Legacy pipe-delimited rows; auto-promoted on load." }
+      ]
     },
     "acceptance_criteria": {
-      "type": "string",
-      "description": "Measurable criteria for plan completion"
+      "description": "Typed array of acceptance criterion entries (v0.89.0+). Legacy string form is still accepted on read via dual-read auto-promote; writer always emits array.",
+      "oneOf": [
+        { "type": "array", "items": { "$ref": "#/$defs/acceptance_criterion_entry" } },
+        { "type": "string", "description": "Legacy pipe-delimited rows; auto-promoted on load." }
+      ]
     },
     "problem_statement": {
       "type": "string",
@@ -67,12 +73,18 @@
       "description": "External references: documentation links, API specs, prior art"
     },
     "dependencies": {
-      "type": "string",
-      "description": "Cross-topic dependencies at plan level"
+      "description": "Typed array of FBundleReference entries (v0.72.0+). Legacy string form is accepted on read; writer always emits array.",
+      "oneOf": [
+        { "type": "array", "items": { "$ref": "#/$defs/bundle_reference" } },
+        { "type": "string", "description": "Legacy form; auto-promoted on load." }
+      ]
     },
     "next_actions": {
-      "type": "string",
-      "description": "Prioritized immediate next steps"
+      "description": "Typed array of next-action entries (v0.89.0+). Legacy string form is still accepted on read via dual-read auto-promote; writer always emits array.",
+      "oneOf": [
+        { "type": "array", "items": { "$ref": "#/$defs/next_action_entry" } },
+        { "type": "string", "description": "Legacy pipe-delimited rows; auto-promoted on load." }
+      ]
     },
     "phases": {
       "type": "array",
@@ -342,6 +354,59 @@
         "check": { "type": "string" },
         "result": { "type": "string" },
         "detail": { "type": "string" }
+      }
+    },
+    "bundle_reference": {
+      "type": "object",
+      "description": "One typed dependency entry (FBundleReference in uni-plan source). v0.72.0+",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["bundle", "phase", "governance", "external"]
+        },
+        "topic": { "type": "string", "description": "Target topic key (required when kind=bundle|phase)" },
+        "phase": { "type": ["integer", "null"], "description": "Target phase index when kind=phase, else null" },
+        "path": { "type": "string", "description": "File path for kind=governance|external" },
+        "note": { "type": "string", "description": "Free description" }
+      }
+    },
+    "risk_entry": {
+      "type": "object",
+      "description": "One typed risk entry (FRiskEntry). v0.89.0+",
+      "required": ["statement"],
+      "properties": {
+        "id": { "type": "string", "description": "Stable token (e.g. 'R1'); optional but must be unique within the array when populated" },
+        "statement": { "type": "string", "description": "Risk description (required, non-empty)" },
+        "mitigation": { "type": "string", "description": "Mitigation strategy; required for quality on high/critical severity" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"], "default": "medium" },
+        "status": { "type": "string", "enum": ["open", "mitigated", "accepted", "closed"], "default": "open" },
+        "notes": { "type": "string" }
+      }
+    },
+    "next_action_entry": {
+      "type": "object",
+      "description": "One typed next-action entry (FNextActionEntry). v0.89.0+",
+      "required": ["statement"],
+      "properties": {
+        "order": { "type": "integer", "description": "Display order; must be >= 1 and unique within the array" },
+        "statement": { "type": "string", "description": "Action description (required, non-empty)" },
+        "rationale": { "type": "string" },
+        "owner": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "abandoned"], "default": "pending" },
+        "target_date": { "type": "string", "description": "ISO 8601 date or phase ref like 'phases[2]'" }
+      }
+    },
+    "acceptance_criterion_entry": {
+      "type": "object",
+      "description": "One typed acceptance-criterion entry (FAcceptanceCriterionEntry). v0.89.0+",
+      "required": ["statement"],
+      "properties": {
+        "id": { "type": "string", "description": "Stable token (e.g. 'AC1'); optional but must be unique within the array when populated" },
+        "statement": { "type": "string", "description": "Criterion text (required, non-empty)" },
+        "status": { "type": "string", "enum": ["not_met", "met", "partial", "not_applicable"], "default": "not_met" },
+        "measure": { "type": "string", "description": "How to verify the criterion" },
+        "evidence": { "type": "string", "description": "Reference to verification entry, commit SHA, or PR when status=met" }
       }
     }
   }

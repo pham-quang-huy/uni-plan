@@ -23,6 +23,16 @@ void EmitValidationCommandsJson(
 void EmitDependenciesJson(const char *InName,
                           const std::vector<FBundleReference> &InDependencies,
                           bool InTrailingComma = true);
+void EmitRisksJson(const char *InName,
+                   const std::vector<FRiskEntry> &InRisks,
+                   bool InTrailingComma = true);
+void EmitNextActionsJson(const char *InName,
+                         const std::vector<FNextActionEntry> &InActions,
+                         bool InTrailingComma = true);
+void EmitAcceptanceCriteriaJson(
+    const char *InName,
+    const std::vector<FAcceptanceCriterionEntry> &InCriteria,
+    bool InTrailingComma = true);
 
 // From DocCache.cpp
 fs::path ResolveExecutableDirectory();
@@ -242,6 +252,39 @@ void EvalTopicFieldsNotIdentical(const std::vector<FTopicBundle> &InBundles,
                                  std::vector<ValidateCheck> &OutChecks);
 void EvalNoDegenerateDependencyEntry(const std::vector<FTopicBundle> &InBundles,
                                      std::vector<ValidateCheck> &OutChecks);
+
+// v0.89.0 typed-array evaluators.
+// scope_and_non_scope_populated closes the watch PLAN DETAIL blind spot
+// surfaced during the VoGame audit (Part A.1 of the v0.89.0 plan). The
+// remaining 10 enforce well-formedness and completion-honesty on the
+// three new typed arrays.
+void EvalScopeAndNonScopePopulated(const std::vector<FTopicBundle> &InBundles,
+                                   std::vector<ValidateCheck> &OutChecks);
+void EvalRiskEntryWellformed(const std::vector<FTopicBundle> &InBundles,
+                             std::vector<ValidateCheck> &OutChecks);
+void EvalRiskSeverityPopulatedForHighImpact(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
+void EvalRiskIdUnique(const std::vector<FTopicBundle> &InBundles,
+                      std::vector<ValidateCheck> &OutChecks);
+void EvalNextActionWellformed(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks);
+void EvalNextActionOrderUnique(const std::vector<FTopicBundle> &InBundles,
+                               std::vector<ValidateCheck> &OutChecks);
+void EvalNextActionHasEntries(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks);
+void EvalAcceptanceCriterionWellformed(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
+void EvalAcceptanceCriterionIdUnique(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
+void EvalAcceptanceCriteriaHasEntries(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
+void EvalCompletedTopicCriteriaAllMet(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
 void EvalNoUnresolvedMarker(const std::vector<FTopicBundle> &InBundles,
                             std::vector<ValidateCheck> &OutChecks);
 void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
@@ -397,6 +440,62 @@ int RunLaneAddCommand(const std::vector<std::string> &InArgs,
                       const std::string &InRepoRoot);
 int RunChangelogSetCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot);
+
+// Semantic commands — Tier 6: Plan-entry CLI groups (v0.89.0+)
+//
+// `risk`, `next-action`, `acceptance-criterion` groups each expose
+// add/set/remove/list. Mutation runners live in
+// UniPlanCommandPlanEntries.cpp; parsers live in UniPlanOptionParsing.cpp.
+int RunRiskAddCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+int RunRiskSetCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+int RunRiskRemoveCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunRiskListCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
+int RunNextActionAddCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot);
+int RunNextActionSetCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot);
+int RunNextActionRemoveCommand(const std::vector<std::string> &InArgs,
+                               const std::string &InRepoRoot);
+int RunNextActionListCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot);
+int RunAcceptanceCriterionAddCommand(const std::vector<std::string> &InArgs,
+                                     const std::string &InRepoRoot);
+int RunAcceptanceCriterionSetCommand(const std::vector<std::string> &InArgs,
+                                     const std::string &InRepoRoot);
+int RunAcceptanceCriterionRemoveCommand(const std::vector<std::string> &InArgs,
+                                        const std::string &InRepoRoot);
+int RunAcceptanceCriterionListCommand(const std::vector<std::string> &InArgs,
+                                      const std::string &InRepoRoot);
+
+// v0.89.0: eager bundle normalization after typed-array schema change.
+int RunMigrateCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+
+FRiskAddOptions ParseRiskAddOptions(const std::vector<std::string> &InTokens);
+FRiskSetOptions ParseRiskSetOptions(const std::vector<std::string> &InTokens);
+FRiskRemoveOptions
+ParseRiskRemoveOptions(const std::vector<std::string> &InTokens);
+FRiskListOptions ParseRiskListOptions(const std::vector<std::string> &InTokens);
+FNextActionAddOptions
+ParseNextActionAddOptions(const std::vector<std::string> &InTokens);
+FNextActionSetOptions
+ParseNextActionSetOptions(const std::vector<std::string> &InTokens);
+FNextActionRemoveOptions
+ParseNextActionRemoveOptions(const std::vector<std::string> &InTokens);
+FNextActionListOptions
+ParseNextActionListOptions(const std::vector<std::string> &InTokens);
+FAcceptanceCriterionAddOptions
+ParseAcceptanceCriterionAddOptions(const std::vector<std::string> &InTokens);
+FAcceptanceCriterionSetOptions
+ParseAcceptanceCriterionSetOptions(const std::vector<std::string> &InTokens);
+FAcceptanceCriterionRemoveOptions
+ParseAcceptanceCriterionRemoveOptions(const std::vector<std::string> &InTokens);
+FAcceptanceCriterionListOptions
+ParseAcceptanceCriterionListOptions(const std::vector<std::string> &InTokens);
 int RunChangelogRemoveCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot);
 

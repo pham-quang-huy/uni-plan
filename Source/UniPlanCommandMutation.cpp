@@ -49,16 +49,10 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
         Desc = "Status → " + NewStatusStr;
         Bundle.mStatus = NewTopicStatus;
     }
-    if (!Options.mNextActions.empty())
-    {
-        Changes.push_back(
-            {"next_actions", {Bundle.mNextActions, Options.mNextActions}});
-        if (Desc.empty())
-            Desc = "Updated next_actions";
-        Bundle.mNextActions = Options.mNextActions;
-    }
-
-    // Metadata fields — apply each non-empty option to Bundle.mMetadata
+    // Metadata fields — apply each non-empty option to Bundle.mMetadata.
+    // `risks`, `acceptance_criteria`, `next_actions` are typed arrays as
+    // of v0.89.0 and are mutated via dedicated `risk`, `acceptance-
+    // criterion`, `next-action` CLI groups, not `topic set`.
     auto ApplyMeta = [&](const std::string &InFlag, std::string &InOutField,
                          const std::string &InNewValue)
     {
@@ -73,9 +67,6 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
     ApplyMeta("summary", Bundle.mMetadata.mSummary, Options.mSummary);
     ApplyMeta("goals", Bundle.mMetadata.mGoals, Options.mGoals);
     ApplyMeta("non_goals", Bundle.mMetadata.mNonGoals, Options.mNonGoals);
-    ApplyMeta("risks", Bundle.mMetadata.mRisks, Options.mRisks);
-    ApplyMeta("acceptance_criteria", Bundle.mMetadata.mAcceptanceCriteria,
-              Options.mAcceptanceCriteria);
     ApplyMeta("problem_statement", Bundle.mMetadata.mProblemStatement,
               Options.mProblemStatement);
 

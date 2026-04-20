@@ -84,6 +84,11 @@ struct FWatchPlanSummary
     std::vector<FPhaseTaxonomy> mPhaseTaxonomies;
     std::vector<FWatchSidecarSummary> mSidecarSummaries;
     FWatchTopicSchemaResult mSchemaResult;
+    // v0.89.0 typed arrays surfaced in PLAN DETAIL. Copied directly from
+    // the bundle — no line splitting needed since each is a typed vector.
+    std::vector<FRiskEntry> mRiskEntries;
+    std::vector<FNextActionEntry> mNextActionEntries;
+    std::vector<FAcceptanceCriterionEntry> mAcceptanceCriteria;
 };
 
 struct FWatchValidationSummary

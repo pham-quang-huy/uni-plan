@@ -2,7 +2,9 @@
 #include "UniPlanJSON.h"
 #include "UniPlanSchemaValidation.h"
 
+#include <algorithm>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 namespace UniPlan
@@ -200,6 +202,502 @@ static void DeserializeBundleReferences(const JSONValue &InParent,
     }
 }
 
+// ---------------------------------------------------------------------------
+// Pipe-delimited row splitter — shared between the three dual-read
+// deserializers below. Strips the leading `- ` bullet if present so both
+// hyphen-bulleted and plain row forms parse to the same segments. Consumes
+// backtick-quoted tokens as whole segments (so `"\`R1\`"` parses as `R1`).
+// ---------------------------------------------------------------------------
+
+static std::vector<std::string>
+SplitPipeRow(const std::string &InRow)
+{
+    // Strip leading/trailing pipes — legacy bundles used markdown table
+    // syntax (`| Risk | Mitigation |`) that would otherwise produce
+    // spurious empty segments at the array ends.
+    size_t Start = 0;
+    size_t End = InRow.size();
+    while (Start < End && (InRow[Start] == ' ' || InRow[Start] == '|'))
+        ++Start;
+    while (End > Start
+           && (InRow[End - 1] == ' ' || InRow[End - 1] == '|'))
+        --End;
+
+    std::vector<std::string> Segments;
+    std::string Current;
+    for (size_t I = Start; I < End; ++I)
+    {
+        const char C = InRow[I];
+        if (C == '|')
+        {
+            // Trim trailing space on this segment and leading space on next.
+            while (!Current.empty() && Current.back() == ' ')
+                Current.pop_back();
+            Segments.push_back(std::move(Current));
+            Current.clear();
+        }
+        else
+        {
+            if (!(Current.empty() && C == ' '))
+                Current += C;
+        }
+    }
+    while (!Current.empty() && Current.back() == ' ')
+        Current.pop_back();
+    Segments.push_back(std::move(Current));
+    return Segments;
+}
+
+// Detect markdown-table separator rows: all segments are either empty or
+// made of `-`/`:`/space chars only. Used to identify the `| --- | --- |`
+// row between a table header and its body, so the body can detect whether
+// it's the first post-header row.
+static bool IsMarkdownTableSeparatorRow(const std::vector<std::string> &InSegments)
+{
+    if (InSegments.empty())
+        return false;
+    bool SawSeparatorContent = false;
+    for (const std::string &Seg : InSegments)
+    {
+        if (Seg.empty())
+            continue;
+        // A separator segment is all `-` (with optional `:` for alignment).
+        bool OnlyDashes = true;
+        for (char C : Seg)
+        {
+            if (C != '-' && C != ':' && C != ' ')
+            {
+                OnlyDashes = false;
+                break;
+            }
+        }
+        if (!OnlyDashes)
+            return false;
+        SawSeparatorContent = true;
+    }
+    return SawSeparatorContent;
+}
+
+// Returns true when `InRow` is a markdown-table meta row — either a
+// separator row, or the header row immediately preceding a separator.
+// Header detection looks one row ahead in the input list; this catches
+// cases like `| Risk | Mitigation | Notes |` followed by `| --- | --- |
+// --- |` where the first line must be skipped because it is the column
+// label row, not data.
+static bool IsMarkdownTableMetaRow(const std::vector<std::string> &InAllRows,
+                                   size_t InRowIndex,
+                                   const std::vector<std::string> &InSegments)
+{
+    if (IsMarkdownTableSeparatorRow(InSegments))
+        return true;
+    // Header-precedes-separator heuristic: peek at the next row.
+    if (InRowIndex + 1 < InAllRows.size())
+    {
+        const std::vector<std::string> NextSegs =
+            SplitPipeRow(InAllRows[InRowIndex + 1]);
+        if (IsMarkdownTableSeparatorRow(NextSegs))
+            return true;
+    }
+    return false;
+}
+
+static bool IsPureBacktickToken(const std::string &InSegment)
+{
+    // A "pure" backtick token is exactly `<body>` with no interior
+    // backticks — otherwise we're looking at a segment that merely starts
+    // and ends with a backtick around free prose (e.g.
+    // "`A` is confused with `B`") and must not be peeled into an id.
+    if (InSegment.size() < 2)
+        return false;
+    if (InSegment.front() != '`' || InSegment.back() != '`')
+        return false;
+    int Count = 0;
+    for (char C : InSegment)
+        if (C == '`')
+            ++Count;
+    return Count == 2;
+}
+
+static std::string UnwrapBacktickToken(const std::string &InSegment)
+{
+    if (IsPureBacktickToken(InSegment))
+        return InSegment.substr(1, InSegment.size() - 2);
+    return InSegment;
+}
+
+static void SplitByNewline(const std::string &InText,
+                           std::vector<std::string> &OutRows)
+{
+    OutRows.clear();
+    std::string Current;
+    for (char C : InText)
+    {
+        if (C == '\n')
+        {
+            if (!Current.empty())
+                OutRows.push_back(std::move(Current));
+            Current.clear();
+        }
+        else
+        {
+            Current += C;
+        }
+    }
+    if (!Current.empty())
+        OutRows.push_back(std::move(Current));
+}
+
+// ---------------------------------------------------------------------------
+// FRiskEntry serialization + dual-read deserializer. The array form is
+// canonical going forward; the legacy string form (pipe-delimited rows)
+// is accepted so pre-v0.89.0 bundles keep loading without migration.
+// Legacy row format: `<statement> | <mitigation> | <notes>` with an
+// optional leading backtick-quoted id segment: `` `R1` | statement | … ``.
+// ---------------------------------------------------------------------------
+
+static JSONValue SerializeRiskEntry(const FRiskEntry &InEntry)
+{
+    JSONValue Entry = JSONValue::object();
+    Entry["id"] = InEntry.mId;
+    Entry["statement"] = InEntry.mStatement;
+    Entry["mitigation"] = InEntry.mMitigation;
+    Entry["severity"] = ToString(InEntry.mSeverity);
+    Entry["status"] = ToString(InEntry.mStatus);
+    Entry["notes"] = InEntry.mNotes;
+    return Entry;
+}
+
+static JSONValue
+SerializeRiskEntryArray(const std::vector<FRiskEntry> &InArray)
+{
+    JSONValue Arr = JSONValue::array();
+    for (const FRiskEntry &R : InArray)
+        Arr.push_back(SerializeRiskEntry(R));
+    return Arr;
+}
+
+static void DeserializeRiskEntries(const JSONValue &InParent,
+                                   const std::string &InKey,
+                                   std::vector<FRiskEntry> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JSONValue &V = InParent[InKey];
+    if (V.is_array())
+    {
+        for (const JSONValue &E : V)
+        {
+            if (!E.is_object())
+                continue;
+            FRiskEntry R;
+            R.mId = GetString(E, "id");
+            R.mStatement = GetString(E, "statement");
+            R.mMitigation = GetString(E, "mitigation");
+            const std::string Severity = GetString(E, "severity", "medium");
+            if (!RiskSeverityFromString(Severity, R.mSeverity))
+                R.mSeverity = ERiskSeverity::Medium;
+            const std::string Status = GetString(E, "status", "open");
+            if (!RiskStatusFromString(Status, R.mStatus))
+                R.mStatus = ERiskStatus::Open;
+            R.mNotes = GetString(E, "notes");
+            OutArray.push_back(std::move(R));
+        }
+        return;
+    }
+    if (V.is_string())
+    {
+        const std::string Raw = V.get<std::string>();
+        if (Raw.empty())
+            return;
+        std::vector<std::string> Rows;
+        SplitByNewline(Raw, Rows);
+        for (size_t RowI = 0; RowI < Rows.size(); ++RowI)
+        {
+            const std::string &Row = Rows[RowI];
+            std::vector<std::string> Segs = SplitPipeRow(Row);
+            if (Segs.empty())
+                continue;
+            // Skip markdown-table header rows (`| Statement | Status |`
+            // preceding a separator) and separator rows themselves
+            // (`| --- | --- |`), plus empty-segment-only rows that
+            // leak in when authors wrap the pipe-delimited data in a
+            // full markdown table.
+            if (IsMarkdownTableMetaRow(Rows, RowI, Segs))
+                continue;
+            bool AllEmpty = true;
+            for (const std::string &S : Segs)
+                if (!S.empty()) { AllEmpty = false; break; }
+            if (AllEmpty)
+                continue;
+            FRiskEntry R;
+            size_t Offset = 0;
+            // Optional leading backtick-quoted id: `R1` | …
+            if (IsPureBacktickToken(Segs[0]))
+            {
+                R.mId = UnwrapBacktickToken(Segs[0]);
+                Offset = 1;
+            }
+            if (Segs.size() > Offset)
+                R.mStatement = Segs[Offset];
+            if (Segs.size() > Offset + 1)
+                R.mMitigation = Segs[Offset + 1];
+            if (Segs.size() > Offset + 2)
+            {
+                // Remainder joined with pipe to preserve author intent.
+                R.mNotes = Segs[Offset + 2];
+                for (size_t I = Offset + 3; I < Segs.size(); ++I)
+                    R.mNotes += "|" + Segs[I];
+            }
+            OutArray.push_back(std::move(R));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FNextActionEntry serialization + dual-read deserializer.
+// Legacy row format: `<order> | <statement> | <rationale>` with the order
+// segment typically backtick-quoted (`\`1\``). If segment 0 cannot be
+// parsed as an int, the whole row is captured in mStatement to avoid
+// losing author content.
+// ---------------------------------------------------------------------------
+
+static JSONValue SerializeNextActionEntry(const FNextActionEntry &InEntry)
+{
+    JSONValue Entry = JSONValue::object();
+    Entry["order"] = InEntry.mOrder;
+    Entry["statement"] = InEntry.mStatement;
+    Entry["rationale"] = InEntry.mRationale;
+    Entry["owner"] = InEntry.mOwner;
+    Entry["status"] = ToString(InEntry.mStatus);
+    Entry["target_date"] = InEntry.mTargetDate;
+    return Entry;
+}
+
+static JSONValue
+SerializeNextActionEntryArray(const std::vector<FNextActionEntry> &InArray)
+{
+    JSONValue Arr = JSONValue::array();
+    for (const FNextActionEntry &A : InArray)
+        Arr.push_back(SerializeNextActionEntry(A));
+    return Arr;
+}
+
+static void DeserializeNextActionEntries(const JSONValue &InParent,
+                                         const std::string &InKey,
+                                         std::vector<FNextActionEntry> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JSONValue &V = InParent[InKey];
+    if (V.is_array())
+    {
+        for (const JSONValue &E : V)
+        {
+            if (!E.is_object())
+                continue;
+            FNextActionEntry A;
+            if (E.contains("order") && E["order"].is_number_integer())
+                A.mOrder = E["order"].get<int>();
+            A.mStatement = GetString(E, "statement");
+            A.mRationale = GetString(E, "rationale");
+            A.mOwner = GetString(E, "owner");
+            const std::string Status = GetString(E, "status", "pending");
+            if (!ActionStatusFromString(Status, A.mStatus))
+                A.mStatus = EActionStatus::Pending;
+            A.mTargetDate = GetString(E, "target_date");
+            OutArray.push_back(std::move(A));
+        }
+        return;
+    }
+    if (V.is_string())
+    {
+        const std::string Raw = V.get<std::string>();
+        if (Raw.empty())
+            return;
+        std::vector<std::string> Rows;
+        SplitByNewline(Raw, Rows);
+        std::set<int> UsedOrders;
+        int NextSynthOrder = 0;
+        auto AssignUniqueOrder = [&](int InPreferred) -> int
+        {
+            int Pick = InPreferred > 0 ? InPreferred : ++NextSynthOrder;
+            while (UsedOrders.count(Pick) > 0)
+            {
+                ++Pick;
+                NextSynthOrder = std::max(NextSynthOrder, Pick);
+            }
+            UsedOrders.insert(Pick);
+            return Pick;
+        };
+        for (size_t RowI = 0; RowI < Rows.size(); ++RowI)
+        {
+            const std::string &Row = Rows[RowI];
+            std::vector<std::string> Segs = SplitPipeRow(Row);
+            if (Segs.empty())
+                continue;
+            // Skip markdown-table header rows (`| Statement | Status |`
+            // preceding a separator) and separator rows themselves
+            // (`| --- | --- |`), plus empty-segment-only rows that
+            // leak in when authors wrap the pipe-delimited data in a
+            // full markdown table.
+            if (IsMarkdownTableMetaRow(Rows, RowI, Segs))
+                continue;
+            bool AllEmpty = true;
+            for (const std::string &S : Segs)
+                if (!S.empty()) { AllEmpty = false; break; }
+            if (AllEmpty)
+                continue;
+            FNextActionEntry A;
+            const std::string OrderToken = UnwrapBacktickToken(Segs[0]);
+            int ParsedOrder = -1;
+            if (!OrderToken.empty())
+            {
+                try
+                {
+                    size_t Pos = 0;
+                    const int Parsed = std::stoi(OrderToken, &Pos);
+                    if (Pos == OrderToken.size())
+                        ParsedOrder = Parsed;
+                }
+                catch (const std::exception &)
+                {
+                    // Not an int; treat row as statement-only.
+                }
+            }
+            if (ParsedOrder > 0)
+            {
+                // Parsed int; second+ occurrences get bumped past the max
+                // so `next_action_order_unique` validator stays clean even
+                // when legacy bundles concatenated two numbered lists.
+                A.mOrder = AssignUniqueOrder(ParsedOrder);
+                if (Segs.size() > 1)
+                    A.mStatement = Segs[1];
+                if (Segs.size() > 2)
+                {
+                    A.mRationale = Segs[2];
+                    for (size_t I = 3; I < Segs.size(); ++I)
+                        A.mRationale += "|" + Segs[I];
+                }
+            }
+            else
+            {
+                // No valid order segment; preserve whole row in statement
+                // to avoid data loss, and assign a synthetic unique order.
+                A.mStatement = Row;
+                A.mOrder = AssignUniqueOrder(-1);
+            }
+            OutArray.push_back(std::move(A));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FAcceptanceCriterionEntry serialization + dual-read deserializer.
+// Legacy row format: `<id> | <statement> | <status>` with id typically
+// backtick-quoted (`\`AC1\``). Known status strings map to ECriterionStatus:
+// "completed" → Met, "pending" → NotMet, unknown → NotMet (raw preserved
+// in mEvidence for audit).
+// ---------------------------------------------------------------------------
+
+static JSONValue
+SerializeAcceptanceCriterionEntry(const FAcceptanceCriterionEntry &InEntry)
+{
+    JSONValue Entry = JSONValue::object();
+    Entry["id"] = InEntry.mId;
+    Entry["statement"] = InEntry.mStatement;
+    Entry["status"] = ToString(InEntry.mStatus);
+    Entry["measure"] = InEntry.mMeasure;
+    Entry["evidence"] = InEntry.mEvidence;
+    return Entry;
+}
+
+static JSONValue SerializeAcceptanceCriterionEntryArray(
+    const std::vector<FAcceptanceCriterionEntry> &InArray)
+{
+    JSONValue Arr = JSONValue::array();
+    for (const FAcceptanceCriterionEntry &C : InArray)
+        Arr.push_back(SerializeAcceptanceCriterionEntry(C));
+    return Arr;
+}
+
+static void DeserializeAcceptanceCriterionEntries(
+    const JSONValue &InParent, const std::string &InKey,
+    std::vector<FAcceptanceCriterionEntry> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JSONValue &V = InParent[InKey];
+    if (V.is_array())
+    {
+        for (const JSONValue &E : V)
+        {
+            if (!E.is_object())
+                continue;
+            FAcceptanceCriterionEntry C;
+            C.mId = GetString(E, "id");
+            C.mStatement = GetString(E, "statement");
+            const std::string Status = GetString(E, "status", "not_met");
+            if (!CriterionStatusFromString(Status, C.mStatus))
+                C.mStatus = ECriterionStatus::NotMet;
+            C.mMeasure = GetString(E, "measure");
+            C.mEvidence = GetString(E, "evidence");
+            OutArray.push_back(std::move(C));
+        }
+        return;
+    }
+    if (V.is_string())
+    {
+        const std::string Raw = V.get<std::string>();
+        if (Raw.empty())
+            return;
+        std::vector<std::string> Rows;
+        SplitByNewline(Raw, Rows);
+        for (size_t RowI = 0; RowI < Rows.size(); ++RowI)
+        {
+            const std::string &Row = Rows[RowI];
+            std::vector<std::string> Segs = SplitPipeRow(Row);
+            if (Segs.empty())
+                continue;
+            // Skip markdown-table header rows (`| Statement | Status |`
+            // preceding a separator) and separator rows themselves
+            // (`| --- | --- |`), plus empty-segment-only rows that
+            // leak in when authors wrap the pipe-delimited data in a
+            // full markdown table.
+            if (IsMarkdownTableMetaRow(Rows, RowI, Segs))
+                continue;
+            bool AllEmpty = true;
+            for (const std::string &S : Segs)
+                if (!S.empty()) { AllEmpty = false; break; }
+            if (AllEmpty)
+                continue;
+            FAcceptanceCriterionEntry C;
+            size_t Offset = 0;
+            if (IsPureBacktickToken(Segs[0]))
+            {
+                C.mId = UnwrapBacktickToken(Segs[0]);
+                Offset = 1;
+            }
+            if (Segs.size() > Offset)
+                C.mStatement = Segs[Offset];
+            if (Segs.size() > Offset + 1)
+            {
+                const std::string RawStatus = Segs[Offset + 1];
+                if (!CriterionStatusFromString(RawStatus, C.mStatus))
+                {
+                    C.mStatus = ECriterionStatus::NotMet;
+                    // Preserve the unrecognized status token in mEvidence
+                    // so information is not lost on dual-read.
+                    C.mEvidence = RawStatus;
+                }
+            }
+            OutArray.push_back(std::move(C));
+        }
+    }
+}
+
 static JSONValue SerializeLaneRecord(const FLaneRecord &InLane)
 {
     JSONValue Lane = JSONValue::object();
@@ -340,8 +838,9 @@ static JSONValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["summary"] = Meta.mSummary;
     Root["goals"] = Meta.mGoals;
     Root["non_goals"] = Meta.mNonGoals;
-    Root["risks"] = Meta.mRisks;
-    Root["acceptance_criteria"] = Meta.mAcceptanceCriteria;
+    Root["risks"] = SerializeRiskEntryArray(Meta.mRisks);
+    Root["acceptance_criteria"] =
+        SerializeAcceptanceCriterionEntryArray(Meta.mAcceptanceCriteria);
     Root["problem_statement"] = Meta.mProblemStatement;
     Root["validation_commands"] =
         SerializeValidationCommandArray(Meta.mValidationCommands);
@@ -357,7 +856,7 @@ static JSONValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
         Phases.push_back(SerializePhaseRecord(Phase));
     Root["phases"] = std::move(Phases);
 
-    Root["next_actions"] = InBundle.mNextActions;
+    Root["next_actions"] = SerializeNextActionEntryArray(InBundle.mNextActions);
 
     // Changelogs (flat array with scope)
     JSONValue ChangeLogs = JSONValue::array();
@@ -765,8 +1264,9 @@ static bool DeserializeTopicBundleV4(const JSONValue &InRoot,
     OptionalString(InRoot, "summary", Meta.mSummary);
     OptionalString(InRoot, "goals", Meta.mGoals);
     OptionalString(InRoot, "non_goals", Meta.mNonGoals);
-    OptionalString(InRoot, "risks", Meta.mRisks);
-    OptionalString(InRoot, "acceptance_criteria", Meta.mAcceptanceCriteria);
+    DeserializeRiskEntries(InRoot, "risks", Meta.mRisks);
+    DeserializeAcceptanceCriterionEntries(InRoot, "acceptance_criteria",
+                                          Meta.mAcceptanceCriteria);
     OptionalString(InRoot, "problem_statement", Meta.mProblemStatement);
     DeserializeValidationCommands(InRoot, "validation_commands",
                                   Meta.mValidationCommands);
@@ -775,7 +1275,7 @@ static bool DeserializeTopicBundleV4(const JSONValue &InRoot,
     OptionalString(InRoot, "locked_decisions", Meta.mLockedDecisions);
     OptionalString(InRoot, "source_references", Meta.mSourceReferences);
     DeserializeBundleReferences(InRoot, "dependencies", Meta.mDependencies);
-    OptionalString(InRoot, "next_actions", OutBundle.mNextActions);
+    DeserializeNextActionEntries(InRoot, "next_actions", OutBundle.mNextActions);
 
     // Phases — strict validation per record
     for (size_t I = 0; I < InRoot["phases"].size(); ++I)

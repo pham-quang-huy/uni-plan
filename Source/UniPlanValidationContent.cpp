@@ -63,8 +63,27 @@ static void ScanTopicProse(const FTopicBundle &InBundle,
     Scan("summary", M.mSummary);
     Scan("goals", M.mGoals);
     Scan("non_goals", M.mNonGoals);
-    Scan("risks", M.mRisks);
-    Scan("acceptance_criteria", M.mAcceptanceCriteria);
+    // risks is a typed vector — scan each entry's prose fields individually
+    // so path references like `risks[3].statement` surface in the issue
+    // output.
+    for (size_t I = 0; I < M.mRisks.size(); ++I)
+    {
+        const FRiskEntry &R = M.mRisks[I];
+        const std::string Base = "risks[" + std::to_string(I) + "]";
+        Scan(Base + ".statement", R.mStatement);
+        Scan(Base + ".mitigation", R.mMitigation);
+        Scan(Base + ".notes", R.mNotes);
+    }
+    // acceptance_criteria is a typed vector — same per-entry scanning.
+    for (size_t I = 0; I < M.mAcceptanceCriteria.size(); ++I)
+    {
+        const FAcceptanceCriterionEntry &C = M.mAcceptanceCriteria[I];
+        const std::string Base =
+            "acceptance_criteria[" + std::to_string(I) + "]";
+        Scan(Base + ".statement", C.mStatement);
+        Scan(Base + ".measure", C.mMeasure);
+        Scan(Base + ".evidence", C.mEvidence);
+    }
     Scan("problem_statement", M.mProblemStatement);
     // validation_commands is a typed vector now — scan each element's
     // command + description prose individually so path references like
@@ -89,7 +108,16 @@ static void ScanTopicProse(const FTopicBundle &InBundle,
         Scan(Base + ".path", R.mPath);
         Scan(Base + ".note", R.mNote);
     }
-    Scan("next_actions", InBundle.mNextActions);
+    // next_actions is a typed vector — scan per-entry prose fields.
+    for (size_t I = 0; I < InBundle.mNextActions.size(); ++I)
+    {
+        const FNextActionEntry &A = InBundle.mNextActions[I];
+        const std::string Base = "next_actions[" + std::to_string(I) + "]";
+        Scan(Base + ".statement", A.mStatement);
+        Scan(Base + ".rationale", A.mRationale);
+        Scan(Base + ".owner", A.mOwner);
+        Scan(Base + ".target_date", A.mTargetDate);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1299,6 +1327,295 @@ void EvalStaleMislabeledModify(const std::vector<FTopicBundle> &InBundles,
                          std::to_string(PI) + " --index " +
                          std::to_string(MI) + " --action create`.");
             }
+        }
+    }
+}
+
+// ===========================================================================
+// v0.89.0 typed-array evaluators
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// scope_and_non_scope_populated — closes the VoGame watch blind spot.
+// Topics in active governance states (`in_progress`, `completed`,
+// `blocked`) must have both `goals` and `non_goals` populated — the
+// watch TUI PLAN DETAIL panel reads these typed fields to render Scope
+// and Non-Scope rows, and renders `(none)` when either is empty.
+// Severity is Warning by default; promoted to ErrorMinor under --strict.
+// Skipped for `not_started` (still being authored) and `canceled`.
+// ---------------------------------------------------------------------------
+
+void EvalScopeAndNonScopePopulated(const std::vector<FTopicBundle> &InBundles,
+                                   std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        if (B.mStatus == ETopicStatus::NotStarted
+            || B.mStatus == ETopicStatus::Canceled)
+            continue;
+        const bool bGoalsEmpty = B.mMetadata.mGoals.empty();
+        const bool bNonGoalsEmpty = B.mMetadata.mNonGoals.empty();
+        if (!bGoalsEmpty && !bNonGoalsEmpty)
+            continue;
+        std::string Path = "plan";
+        std::string Detail;
+        if (bGoalsEmpty && bNonGoalsEmpty)
+            Detail = "goals and non_goals are both empty";
+        else if (bGoalsEmpty)
+            Detail = "goals is empty";
+        else
+            Detail = "non_goals is empty";
+        Detail += "; populate via `uni-plan topic set --topic " + B.mTopicKey
+                  + " --goals <text> --non-goals <text>` so watch TUI PLAN "
+                    "DETAIL can render Scope / Non-Scope panels";
+        Fail(OutChecks, "scope_and_non_scope_populated",
+             EValidationSeverity::Warning, B.mTopicKey, Path, Detail);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Per-entry well-formedness checks for the three v0.89.0 typed arrays.
+// Each fires ErrorMinor so they surface without --strict but don't block
+// load — broken entries still load (with defaults) but the validator
+// immediately points at the defect.
+// ---------------------------------------------------------------------------
+
+void EvalRiskEntryWellformed(const std::vector<FTopicBundle> &InBundles,
+                             std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mMetadata.mRisks.size(); ++I)
+        {
+            const FRiskEntry &R = B.mMetadata.mRisks[I];
+            if (R.mStatement.empty())
+            {
+                Fail(OutChecks, "risk_entry_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "risks[" + std::to_string(I) + "].statement",
+                     "statement is empty");
+            }
+        }
+    }
+}
+
+void EvalRiskSeverityPopulatedForHighImpact(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mMetadata.mRisks.size(); ++I)
+        {
+            const FRiskEntry &R = B.mMetadata.mRisks[I];
+            const bool bHighImpact = (R.mSeverity == ERiskSeverity::High
+                                      || R.mSeverity == ERiskSeverity::Critical);
+            if (!bHighImpact)
+                continue;
+            if (R.mStatus == ERiskStatus::Accepted
+                || R.mStatus == ERiskStatus::Closed)
+                continue;
+            if (!R.mMitigation.empty())
+                continue;
+            Fail(OutChecks, "risk_severity_populated_for_high_impact",
+                 EValidationSeverity::Warning, B.mTopicKey,
+                 "risks[" + std::to_string(I) + "]",
+                 std::string("severity=") + ToString(R.mSeverity)
+                     + " risk missing mitigation (set --mitigation or move "
+                       "status to accepted/closed)");
+        }
+    }
+}
+
+void EvalRiskIdUnique(const std::vector<FTopicBundle> &InBundles,
+                      std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        std::map<std::string, size_t> Seen;
+        for (size_t I = 0; I < B.mMetadata.mRisks.size(); ++I)
+        {
+            const FRiskEntry &R = B.mMetadata.mRisks[I];
+            if (R.mId.empty())
+                continue;
+            const auto It = Seen.find(R.mId);
+            if (It != Seen.end())
+            {
+                Fail(OutChecks, "risk_id_unique",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "risks[" + std::to_string(I) + "].id",
+                     "id '" + R.mId + "' duplicates risks["
+                         + std::to_string(It->second) + "].id");
+                continue;
+            }
+            Seen[R.mId] = I;
+        }
+    }
+}
+
+void EvalNextActionWellformed(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mNextActions.size(); ++I)
+        {
+            const FNextActionEntry &A = B.mNextActions[I];
+            if (A.mStatement.empty())
+            {
+                Fail(OutChecks, "next_action_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "next_actions[" + std::to_string(I) + "].statement",
+                     "statement is empty");
+            }
+            if (A.mOrder <= 0)
+            {
+                Fail(OutChecks, "next_action_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "next_actions[" + std::to_string(I) + "].order",
+                     "order must be >= 1 (got " + std::to_string(A.mOrder) + ")");
+            }
+        }
+    }
+}
+
+void EvalNextActionOrderUnique(const std::vector<FTopicBundle> &InBundles,
+                               std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        std::map<int, size_t> Seen;
+        for (size_t I = 0; I < B.mNextActions.size(); ++I)
+        {
+            const FNextActionEntry &A = B.mNextActions[I];
+            if (A.mOrder <= 0)
+                continue; // caught by next_action_wellformed
+            const auto It = Seen.find(A.mOrder);
+            if (It != Seen.end())
+            {
+                Fail(OutChecks, "next_action_order_unique",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "next_actions[" + std::to_string(I) + "].order",
+                     "order=" + std::to_string(A.mOrder)
+                         + " duplicates next_actions["
+                         + std::to_string(It->second) + "].order");
+                continue;
+            }
+            Seen[A.mOrder] = I;
+        }
+    }
+}
+
+void EvalNextActionHasEntries(const std::vector<FTopicBundle> &InBundles,
+                              std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        if (B.mStatus != ETopicStatus::InProgress
+            && B.mStatus != ETopicStatus::Blocked)
+            continue;
+        if (!B.mNextActions.empty())
+            continue;
+        Fail(OutChecks, "next_action_has_entries",
+             EValidationSeverity::Warning, B.mTopicKey, "next_actions",
+             std::string("active topic (status=") + ToString(B.mStatus)
+                 + ") has no next_actions — add at least one via "
+                   "`uni-plan next-action add --topic " + B.mTopicKey
+                 + " --statement <text>`");
+    }
+}
+
+void EvalAcceptanceCriterionWellformed(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mMetadata.mAcceptanceCriteria.size(); ++I)
+        {
+            const FAcceptanceCriterionEntry &C =
+                B.mMetadata.mAcceptanceCriteria[I];
+            if (C.mStatement.empty())
+            {
+                Fail(OutChecks, "acceptance_criterion_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "acceptance_criteria[" + std::to_string(I) + "].statement",
+                     "statement is empty");
+            }
+        }
+    }
+}
+
+void EvalAcceptanceCriterionIdUnique(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        std::map<std::string, size_t> Seen;
+        for (size_t I = 0; I < B.mMetadata.mAcceptanceCriteria.size(); ++I)
+        {
+            const FAcceptanceCriterionEntry &C =
+                B.mMetadata.mAcceptanceCriteria[I];
+            if (C.mId.empty())
+                continue;
+            const auto It = Seen.find(C.mId);
+            if (It != Seen.end())
+            {
+                Fail(OutChecks, "acceptance_criterion_id_unique",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "acceptance_criteria[" + std::to_string(I) + "].id",
+                     "id '" + C.mId + "' duplicates acceptance_criteria["
+                         + std::to_string(It->second) + "].id");
+                continue;
+            }
+            Seen[C.mId] = I;
+        }
+    }
+}
+
+void EvalAcceptanceCriteriaHasEntries(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        if (B.mStatus != ETopicStatus::Completed)
+            continue;
+        if (!B.mMetadata.mAcceptanceCriteria.empty())
+            continue;
+        Fail(OutChecks, "acceptance_criteria_has_entries",
+             EValidationSeverity::ErrorMinor, B.mTopicKey,
+             "acceptance_criteria",
+             "completed topic has no acceptance_criteria — a completed "
+             "topic with zero criteria provides no audit trail for what "
+             "was delivered; backfill via `uni-plan acceptance-criterion "
+             "add --topic " + B.mTopicKey + " --statement <text>`");
+    }
+}
+
+void EvalCompletedTopicCriteriaAllMet(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        if (B.mStatus != ETopicStatus::Completed)
+            continue;
+        for (size_t I = 0; I < B.mMetadata.mAcceptanceCriteria.size(); ++I)
+        {
+            const FAcceptanceCriterionEntry &C =
+                B.mMetadata.mAcceptanceCriteria[I];
+            if (C.mStatus == ECriterionStatus::Met
+                || C.mStatus == ECriterionStatus::NotApplicable)
+                continue;
+            Fail(OutChecks, "completed_topic_criteria_all_met",
+                 EValidationSeverity::Warning, B.mTopicKey,
+                 "acceptance_criteria[" + std::to_string(I) + "].status",
+                 std::string("completed topic has acceptance_criteria[")
+                     + std::to_string(I) + "] with status="
+                     + ToString(C.mStatus)
+                     + " (expected met or not_applicable)");
         }
     }
 }

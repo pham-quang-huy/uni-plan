@@ -879,4 +879,234 @@ inline bool DependencyKindFromString(const std::string &InValue,
     return false;
 }
 
+// ---------------------------------------------------------------------------
+// ERiskSeverity — severity classification for FRiskEntry.
+// Default Medium so an unclassified risk still carries meaningful signal
+// rather than silently slipping through as Low.
+// ---------------------------------------------------------------------------
+
+enum class ERiskSeverity : uint8_t
+{
+    Low,
+    Medium,
+    High,
+    Critical
+};
+
+inline const char *ToString(ERiskSeverity InValue)
+{
+    switch (InValue)
+    {
+    case ERiskSeverity::Low:
+        return "low";
+    case ERiskSeverity::Medium:
+        return "medium";
+    case ERiskSeverity::High:
+        return "high";
+    case ERiskSeverity::Critical:
+        return "critical";
+    }
+    return "medium";
+}
+
+inline bool RiskSeverityFromString(const std::string &InValue,
+                                   ERiskSeverity &OutValue)
+{
+    if (InValue == "low")
+    {
+        OutValue = ERiskSeverity::Low;
+        return true;
+    }
+    if (InValue == "medium" || InValue.empty())
+    {
+        OutValue = ERiskSeverity::Medium;
+        return true;
+    }
+    if (InValue == "high")
+    {
+        OutValue = ERiskSeverity::High;
+        return true;
+    }
+    if (InValue == "critical")
+    {
+        OutValue = ERiskSeverity::Critical;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// ERiskStatus — lifecycle of one FRiskEntry.
+//   Open       — risk is active and requires attention.
+//   Mitigated  — mitigation implemented; residual risk is tolerable.
+//   Accepted   — risk consciously accepted without mitigation.
+//   Closed    — risk no longer applies (conditions changed).
+// ---------------------------------------------------------------------------
+
+enum class ERiskStatus : uint8_t
+{
+    Open,
+    Mitigated,
+    Accepted,
+    Closed
+};
+
+inline const char *ToString(ERiskStatus InValue)
+{
+    switch (InValue)
+    {
+    case ERiskStatus::Open:
+        return "open";
+    case ERiskStatus::Mitigated:
+        return "mitigated";
+    case ERiskStatus::Accepted:
+        return "accepted";
+    case ERiskStatus::Closed:
+        return "closed";
+    }
+    return "open";
+}
+
+inline bool RiskStatusFromString(const std::string &InValue,
+                                 ERiskStatus &OutValue)
+{
+    if (InValue == "open" || InValue.empty())
+    {
+        OutValue = ERiskStatus::Open;
+        return true;
+    }
+    if (InValue == "mitigated")
+    {
+        OutValue = ERiskStatus::Mitigated;
+        return true;
+    }
+    if (InValue == "accepted")
+    {
+        OutValue = ERiskStatus::Accepted;
+        return true;
+    }
+    if (InValue == "closed")
+    {
+        OutValue = ERiskStatus::Closed;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// EActionStatus — lifecycle of one FNextActionEntry.
+//   Pending    — action is identified but not yet started.
+//   InProgress — action is actively being worked.
+//   Completed  — action has been executed; kept for audit trail.
+//   Abandoned  — action will not be executed (superseded / scope changed).
+// ---------------------------------------------------------------------------
+
+enum class EActionStatus : uint8_t
+{
+    Pending,
+    InProgress,
+    Completed,
+    Abandoned
+};
+
+inline const char *ToString(EActionStatus InValue)
+{
+    switch (InValue)
+    {
+    case EActionStatus::Pending:
+        return "pending";
+    case EActionStatus::InProgress:
+        return "in_progress";
+    case EActionStatus::Completed:
+        return "completed";
+    case EActionStatus::Abandoned:
+        return "abandoned";
+    }
+    return "pending";
+}
+
+inline bool ActionStatusFromString(const std::string &InValue,
+                                   EActionStatus &OutValue)
+{
+    if (InValue == "pending" || InValue.empty())
+    {
+        OutValue = EActionStatus::Pending;
+        return true;
+    }
+    if (InValue == "in_progress")
+    {
+        OutValue = EActionStatus::InProgress;
+        return true;
+    }
+    if (InValue == "completed")
+    {
+        OutValue = EActionStatus::Completed;
+        return true;
+    }
+    if (InValue == "abandoned")
+    {
+        OutValue = EActionStatus::Abandoned;
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// ECriterionStatus — verification state of one FAcceptanceCriterionEntry.
+//   NotMet        — criterion not yet verified met (default).
+//   Met           — criterion verified, evidence recorded.
+//   Partial       — partially met (quantified in mEvidence).
+//   NotApplicable — criterion does not apply given current scope.
+// ---------------------------------------------------------------------------
+
+enum class ECriterionStatus : uint8_t
+{
+    NotMet,
+    Met,
+    Partial,
+    NotApplicable
+};
+
+inline const char *ToString(ECriterionStatus InValue)
+{
+    switch (InValue)
+    {
+    case ECriterionStatus::NotMet:
+        return "not_met";
+    case ECriterionStatus::Met:
+        return "met";
+    case ECriterionStatus::Partial:
+        return "partial";
+    case ECriterionStatus::NotApplicable:
+        return "not_applicable";
+    }
+    return "not_met";
+}
+
+inline bool CriterionStatusFromString(const std::string &InValue,
+                                      ECriterionStatus &OutValue)
+{
+    if (InValue == "not_met" || InValue.empty() || InValue == "pending")
+    {
+        OutValue = ECriterionStatus::NotMet;
+        return true;
+    }
+    if (InValue == "met" || InValue == "completed")
+    {
+        OutValue = ECriterionStatus::Met;
+        return true;
+    }
+    if (InValue == "partial")
+    {
+        OutValue = ECriterionStatus::Partial;
+        return true;
+    }
+    if (InValue == "not_applicable" || InValue == "n/a")
+    {
+        OutValue = ECriterionStatus::NotApplicable;
+        return true;
+    }
+    return false;
+}
+
 } // namespace UniPlan

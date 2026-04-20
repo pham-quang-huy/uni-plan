@@ -1551,6 +1551,115 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
         }
     }
 
+    // v0.89.0 typed-array sub-sections — Risks, Next Actions, Acceptance
+    // Criteria. Each renders with status/severity color-coding so the
+    // operator can tell at a glance which entries need attention.
+    const auto SeverityColor = [](ERiskSeverity InSeverity) -> Color
+    {
+        switch (InSeverity)
+        {
+        case ERiskSeverity::Low:
+            return Color::Green;
+        case ERiskSeverity::Medium:
+            return Color::Yellow;
+        case ERiskSeverity::High:
+        case ERiskSeverity::Critical:
+            return Color::Red;
+        }
+        return Color::White;
+    };
+    const auto CriterionGlyph = [](ECriterionStatus InStatus) -> const char *
+    {
+        switch (InStatus)
+        {
+        case ECriterionStatus::Met:
+            return "\xe2\x97\x8f"; // filled
+        case ECriterionStatus::NotMet:
+            return "\xe2\x97\x8b"; // hollow
+        case ECriterionStatus::Partial:
+            return "\xe2\x97\x90"; // half
+        case ECriterionStatus::NotApplicable:
+            return "\xe2\x8a\x98"; // crossed
+        }
+        return " ";
+    };
+    const auto CriterionColor = [](ECriterionStatus InStatus) -> Color
+    {
+        switch (InStatus)
+        {
+        case ECriterionStatus::Met:
+            return Color::Green;
+        case ECriterionStatus::NotMet:
+            return Color::Yellow;
+        case ECriterionStatus::Partial:
+            return Color::Yellow;
+        case ECriterionStatus::NotApplicable:
+            return Color::GrayDark;
+        }
+        return Color::White;
+    };
+
+    Rows.push_back(text(""));
+    Rows.push_back(text("  Risks") | bold);
+    if (InPlan.mRiskEntries.empty())
+    {
+        Rows.push_back(text("    (none)") | dim);
+    }
+    else
+    {
+        for (const FRiskEntry &R : InPlan.mRiskEntries)
+        {
+            const std::string Prefix = std::string("    [") +
+                                       ToString(R.mSeverity) + "/" +
+                                       ToString(R.mStatus) + "] ";
+            Rows.push_back(text(Prefix + R.mStatement) |
+                           color(SeverityColor(R.mSeverity)));
+        }
+    }
+
+    Rows.push_back(text(""));
+    Rows.push_back(text("  Next Actions") | bold);
+    if (InPlan.mNextActionEntries.empty())
+    {
+        Rows.push_back(text("    (none)") | dim);
+    }
+    else
+    {
+        // Sort by mOrder for display without mutating the snapshot.
+        std::vector<FNextActionEntry> Sorted = InPlan.mNextActionEntries;
+        std::sort(Sorted.begin(), Sorted.end(),
+                  [](const FNextActionEntry &A, const FNextActionEntry &B)
+                  { return A.mOrder < B.mOrder; });
+        for (const FNextActionEntry &A : Sorted)
+        {
+            const std::string Prefix = "    " + std::to_string(A.mOrder) +
+                                       ". [" + ToString(A.mStatus) + "] ";
+            const Color C =
+                (A.mStatus == EActionStatus::Completed)
+                    ? Color::Green
+                    : (A.mStatus == EActionStatus::Abandoned ? Color::GrayDark
+                                                             : Color::Cyan);
+            Rows.push_back(text(Prefix + A.mStatement) | color(C));
+        }
+    }
+
+    Rows.push_back(text(""));
+    Rows.push_back(text("  Acceptance Criteria") | bold);
+    if (InPlan.mAcceptanceCriteria.empty())
+    {
+        Rows.push_back(text("    (none)") | dim);
+    }
+    else
+    {
+        for (const FAcceptanceCriterionEntry &C : InPlan.mAcceptanceCriteria)
+        {
+            const std::string Glyph = CriterionGlyph(C.mStatus);
+            const std::string IdPart = C.mId.empty() ? "" : (C.mId + " ");
+            Rows.push_back(text("    " + Glyph + " " + IdPart + C.mStatement) |
+                           color(CriterionColor(C.mStatus)));
+        }
+    }
+
     return window(text(" PLAN DETAIL ") | bold | color(Color::Cyan),
                   vbox(Rows));
 }

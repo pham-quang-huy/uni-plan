@@ -109,6 +109,11 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
     SplitLines(InBundle.mMetadata.mSummary, Summary.mSummaryLines);
     SplitLines(InBundle.mMetadata.mGoals, Summary.mGoalStatements);
     SplitLines(InBundle.mMetadata.mNonGoals, Summary.mNonGoalStatements);
+    // v0.89.0 typed arrays — pass-through; the panel renderer handles
+    // per-entry formatting and severity/status color.
+    Summary.mRiskEntries = InBundle.mMetadata.mRisks;
+    Summary.mNextActionEntries = InBundle.mNextActions;
+    Summary.mAcceptanceCriteria = InBundle.mMetadata.mAcceptanceCriteria;
 
     // Blockers — single source of truth. Populate the per-plan list so
     // the watch BLOCKERS panel and the per-plan blocker count come from

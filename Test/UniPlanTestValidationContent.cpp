@@ -1429,3 +1429,202 @@ TEST_F(FBundleTestFixture, NoDegenerateDependencyEntryPassesWithRealTopic)
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(CountIssuesWithId(Json, "no_degenerate_dependency_entry"), 0);
 }
+
+// ===================================================================
+// v0.89.0 typed-array evaluators
+// ===================================================================
+
+TEST_F(FBundleTestFixture,
+       ScopeAndNonScopePopulatedFlagsInProgressTopicWithEmptyFields)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Blank both — the exact VoGame shape: in_progress topic with summary
+    // populated but goals/non_goals empty.
+    Bundle.mMetadata.mGoals = "";
+    Bundle.mMetadata.mNonGoals = "";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "scope_and_non_scope_populated");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+    EXPECT_EQ(Issue["path"].get<std::string>(), "plan");
+}
+
+TEST_F(FBundleTestFixture, ScopeAndNonScopePopulatedPassesWhenBothAreSet)
+{
+    // CreateMinimalFixture seeds goals + non_goals for active/completed
+    // topics since v0.89.0, so the default state is clean.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "scope_and_non_scope_populated"), 0);
+}
+
+TEST_F(FBundleTestFixture,
+       ScopeAndNonScopePopulatedSkipsNotStartedTopic)
+{
+    // Not-started topics are still being authored; don't fire on them.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::NotStarted, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mMetadata.mGoals = "";
+    Bundle.mMetadata.mNonGoals = "";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "scope_and_non_scope_populated"), 0);
+}
+
+TEST_F(FBundleTestFixture, RiskEntryWellformedFlagsEmptyStatement)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FRiskEntry Risk;
+    // mStatement intentionally left empty
+    Risk.mMitigation = "Some mitigation";
+    Bundle.mMetadata.mRisks.push_back(std::move(Risk));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "risk_entry_wellformed");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+    EXPECT_EQ(Issue["path"].get<std::string>(), "risks[0].statement");
+}
+
+TEST_F(FBundleTestFixture,
+       RiskSeverityPopulatedForHighImpactFlagsHighWithoutMitigation)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FRiskEntry Risk;
+    Risk.mStatement = "Critical regression if builder fails";
+    Risk.mSeverity = UniPlan::ERiskSeverity::High;
+    Risk.mStatus = UniPlan::ERiskStatus::Open; // not accepted/closed
+    // mMitigation intentionally empty
+    Bundle.mMetadata.mRisks.push_back(std::move(Risk));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue =
+        FirstIssueWithId(Json, "risk_severity_populated_for_high_impact");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+}
+
+TEST_F(FBundleTestFixture, NextActionOrderUniqueFlagsDuplicates)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Clear the seeded action so we control the test input exactly.
+    Bundle.mNextActions.clear();
+    for (int I = 0; I < 2; ++I)
+    {
+        UniPlan::FNextActionEntry NA;
+        NA.mOrder = 3; // both same order
+        NA.mStatement = "Action " + std::to_string(I);
+        Bundle.mNextActions.push_back(std::move(NA));
+    }
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "next_action_order_unique");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture,
+       AcceptanceCriteriaHasEntriesFlagsCompletedTopicWithEmptyArray)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::Completed, 1,
+                         UniPlan::EExecutionStatus::Completed, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Clear the seeded criterion — the fixture added one for completed
+    // topics since v0.89.0, but this test wants the empty state.
+    Bundle.mMetadata.mAcceptanceCriteria.clear();
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason = "Test scoped to AC evaluator";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue =
+        FirstIssueWithId(Json, "acceptance_criteria_has_entries");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture,
+       CompletedTopicCriteriaAllMetFlagsUnmetCriterionOnCompletedTopic)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::Completed, 1,
+                         UniPlan::EExecutionStatus::Completed, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Replace the seeded Met criterion with one still NotMet.
+    Bundle.mMetadata.mAcceptanceCriteria.clear();
+    UniPlan::FAcceptanceCriterionEntry AC;
+    AC.mStatement = "Still open";
+    AC.mStatus = UniPlan::ECriterionStatus::NotMet;
+    Bundle.mMetadata.mAcceptanceCriteria.push_back(std::move(AC));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason = "Test scoped to AC evaluator";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue =
+        FirstIssueWithId(Json, "completed_topic_criteria_all_met");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+}

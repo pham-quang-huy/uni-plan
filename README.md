@@ -143,7 +143,7 @@ All skills live under `.claude/skills/` with `implicit_invocation: true`, so the
 | --- | --- | --- |
 | `query` | Read-only inspection; JSON by default, `--human` for ANSI tables | `topic list / get / status`, `phase list / get / next / readiness / wave-status / drift`, `changelog`, `verification`, `timeline`, `blockers`, `validate` |
 | `semantic_lifecycle` | Gated state transitions — prefer these over raw `set` | `topic start / complete / block`, `phase start / complete / block / unblock / cancel / progress / complete-jobs`, `phase log`, `phase verify` |
-| `raw_mutation` | Low-level field setters; use only when a semantic command doesn't fit | `topic set`, `phase set / add / remove / normalize`, `job set`, `task set`, `changelog add / set / remove`, `verification add / set`, `lane set / add`, `testing add / set`, `manifest add / remove / list / set` |
+| `raw_mutation` | Low-level field setters; use only when a semantic command doesn't fit | `topic set`, `phase set / add / remove / normalize`, `job set`, `task set`, `changelog add / set / remove`, `verification add / set`, `lane set / add`, `testing add / set`, `manifest add / remove / list / set`, `risk add / set / remove / list` (v0.89.0+), `next-action add / set / remove / list` (v0.89.0+), `acceptance-criterion add / set / remove / list` (v0.89.0+) |
 | `utility` | Operational commands | `cache info / clear / config`, `watch` |
 
 Default output is JSON with two top-level sections — `issues[]` and `summary` — so agents can consume any command without raw file reads.
@@ -248,6 +248,22 @@ Typed list of `FBundleReference` entries, present at **both** plan-level ([FPlan
 | `external` | Reference a third-party doc or URL | `<path>` |
 
 Validators enforce integrity: `topic_ref_integrity` (the target topic must exist), `path_resolves` (the path must resolve on disk for repo-local refs), `canonical_entity_ref` (changelog `affected` paths must match the `phases[N]` / `jobs[N]` / `lanes[N]` shape).
+
+### risks_next_actions_acceptance_criteria_field_model
+
+> Target: understand the v0.89.0 schema for these three fields before mutating them.
+
+Typed vectors on the plan. Promoted from legacy pipe-delimited `std::string` form in v0.89.0 to give each entry its own structured fields, uniqueness invariants, and per-entry CLI mutation. **Default and canonical shape is array**; the reader still accepts the legacy string form via dual-read auto-promote for zero-downtime migration.
+
+| JSON key | C++ type | Per-entry fields | Enums | CLI group |
+| --- | --- | --- | --- | --- |
+| `risks` | `std::vector<FRiskEntry>` on `FPlanMetadata` | `id`, `statement` (required), `mitigation`, `severity`, `status`, `notes` | `severity ∈ {low, medium, high, critical}`, `status ∈ {open, mitigated, accepted, closed}` | `uni-plan risk add/set/remove/list` |
+| `next_actions` | `std::vector<FNextActionEntry>` on `FTopicBundle` | `order` (unique, ≥ 1), `statement` (required), `rationale`, `owner`, `status`, `target_date` | `status ∈ {pending, in_progress, completed, abandoned}` | `uni-plan next-action add/set/remove/list` |
+| `acceptance_criteria` | `std::vector<FAcceptanceCriterionEntry>` on `FPlanMetadata` | `id`, `statement` (required), `status`, `measure`, `evidence` | `status ∈ {not_met, met, partial, not_applicable}` | `uni-plan acceptance-criterion add/set/remove/list` |
+
+Validators: `risk_entry_wellformed`, `risk_severity_populated_for_high_impact`, `risk_id_unique`, `next_action_wellformed`, `next_action_order_unique`, `next_action_has_entries` (active topics), `acceptance_criterion_wellformed`, `acceptance_criterion_id_unique`, `acceptance_criteria_has_entries` (completed topics), `completed_topic_criteria_all_met`.
+
+**Legacy flags removed in v0.89.0.** `topic set --risks <text>`, `--next-actions <text>`, `--acceptance-criteria <text>` (and their `-file` variants) emit `UsageError` with migration pointers. Existing bundles with string-form values keep loading via dual-read and are normalized to array form on the next CLI mutation that writes the bundle back.
 
 ### blockers_field_model
 

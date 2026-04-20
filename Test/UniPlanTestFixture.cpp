@@ -70,6 +70,34 @@ void FBundleTestFixture::CreateMinimalFixture(
     Bundle.mMetadata.mTitle = "Test topic: " + InTopicKey;
     Bundle.mMetadata.mSummary = "Minimal fixture for testing";
 
+    // v0.89.0: active/completed topics need goals/non_goals populated to
+    // satisfy `scope_and_non_scope_populated` and acceptance_criteria
+    // populated to satisfy `acceptance_criteria_has_entries` +
+    // `completed_topic_criteria_all_met`. Tests exercising those
+    // evaluators specifically can overwrite these fields after
+    // ReloadBundle.
+    if (InTopicStatus != UniPlan::ETopicStatus::NotStarted
+        && InTopicStatus != UniPlan::ETopicStatus::Canceled)
+    {
+        Bundle.mMetadata.mGoals = "Test goal";
+        Bundle.mMetadata.mNonGoals = "Test non-goal";
+    }
+    if (InTopicStatus == UniPlan::ETopicStatus::Completed)
+    {
+        UniPlan::FAcceptanceCriterionEntry AC;
+        AC.mStatement = "Test fixture delivered";
+        AC.mStatus = UniPlan::ECriterionStatus::Met;
+        Bundle.mMetadata.mAcceptanceCriteria.push_back(std::move(AC));
+    }
+    if (InTopicStatus == UniPlan::ETopicStatus::InProgress
+        || InTopicStatus == UniPlan::ETopicStatus::Blocked)
+    {
+        UniPlan::FNextActionEntry NA;
+        NA.mOrder = 1;
+        NA.mStatement = "Test next action";
+        Bundle.mNextActions.push_back(std::move(NA));
+    }
+
     // Stamp timestamps consistent with the requested phase status so the
     // fixture satisfies `completed_phase_timestamp_required`. Tests that
     // want to exercise the missing-timestamp path can blank these fields

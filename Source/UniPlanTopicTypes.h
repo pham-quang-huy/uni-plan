@@ -132,8 +132,8 @@ struct FPlanMetadata
     std::string mSummary;
     std::string mGoals;
     std::string mNonGoals;
-    std::string mRisks;
-    std::string mAcceptanceCriteria;
+    std::vector<FRiskEntry> mRisks;
+    std::vector<FAcceptanceCriterionEntry> mAcceptanceCriteria;
     std::string mProblemStatement;
     std::vector<FValidationCommand> mValidationCommands;
     std::string mBaselineAudit;
@@ -155,7 +155,7 @@ struct FTopicBundle
     FPlanMetadata mMetadata;
 
     std::vector<FPhaseRecord> mPhases;
-    std::string mNextActions;
+    std::vector<FNextActionEntry> mNextActions;
 
     std::vector<FChangeLogEntry> mChangeLogs;
     std::vector<FVerificationEntry> mVerifications;

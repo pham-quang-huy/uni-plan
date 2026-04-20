@@ -122,6 +122,45 @@ static int DispatchManifestCommand(const std::vector<std::string> &InArgs,
                               "add, set, remove, list, suggest");
 }
 
+// v0.89.0 typed-array CLI groups. Each group exposes add/set/remove/list
+// with the same shape as the existing `changelog` / `manifest` precedents
+// above.
+static int DispatchRiskCommand(const std::vector<std::string> &InArgs,
+                               const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {{"add", &RunRiskAddCommand},
+                                          {"set", &RunRiskSetCommand},
+                                          {"remove", &RunRiskRemoveCommand},
+                                          {"list", &RunRiskListCommand}};
+    return DispatchSubcommand("risk", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
+}
+
+static int DispatchNextActionCommand(const std::vector<std::string> &InArgs,
+                                     const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {
+        {"add", &RunNextActionAddCommand},
+        {"set", &RunNextActionSetCommand},
+        {"remove", &RunNextActionRemoveCommand},
+        {"list", &RunNextActionListCommand}};
+    return DispatchSubcommand("next-action", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
+}
+
+static int
+DispatchAcceptanceCriterionCommand(const std::vector<std::string> &InArgs,
+                                   const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {
+        {"add", &RunAcceptanceCriterionAddCommand},
+        {"set", &RunAcceptanceCriterionSetCommand},
+        {"remove", &RunAcceptanceCriterionRemoveCommand},
+        {"list", &RunAcceptanceCriterionListCommand}};
+    return DispatchSubcommand("acceptance-criterion", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
+}
+
 // ---------------------------------------------------------------------------
 // Phase list all — collects phases from every plan in the inventory
 // ---------------------------------------------------------------------------
@@ -237,6 +276,15 @@ void PrintUsage(std::ostream &Out)
     Out << "  uni-plan manifest set --topic <T> "
            "--phase <N> --index <N> [--file <t>] "
            "[--action <t>] [--description <t>]\n";
+    Out << "  uni-plan risk add|set|remove|list --topic <T> "
+           "[--statement <t>] [--severity <s>] "
+           "[--status <s>] [--index <N>]\n";
+    Out << "  uni-plan next-action add|set|remove|list --topic <T> "
+           "[--statement <t>] [--order <N>] "
+           "[--status <s>] [--index <N>]\n";
+    Out << "  uni-plan acceptance-criterion "
+           "add|set|remove|list --topic <T> "
+           "[--statement <t>] [--status <s>] [--index <N>]\n";
     Out << "\n";
     Out << "Utility:\n";
     Out << "  uni-plan cache [info|clear|config]\n";
@@ -321,6 +369,10 @@ int RunMain(const int InArgc, char *InArgv[])
             {"lane", &DispatchLaneCommand},
             {"testing", &DispatchTestingCommand},
             {"manifest", &DispatchManifestCommand},
+            {"risk", &DispatchRiskCommand},
+            {"next-action", &DispatchNextActionCommand},
+            {"acceptance-criterion", &DispatchAcceptanceCriterionCommand},
+            {"migrate", &RunMigrateCommand},
         };
 
         for (const FCommandEntry &Entry : kCommands)

@@ -96,12 +96,9 @@ static const FSubcommandHelpEntry kTopicSubs[] = {
         "  --topic <T>             Topic key\n\n",
         "  --status <s>            Set status: not_started | in_progress |\n"
         "                          completed | blocked | canceled\n"
-        "  --next-actions <text>   Set next actions\n"
         "  --summary <text>        Set plan summary\n"
         "  --goals <text>          Set plan goals\n"
         "  --non-goals <text>      Set non-goals\n"
-        "  --risks <text>          Set risks\n"
-        "  --acceptance-criteria   Set acceptance criteria\n"
         "  --problem-statement     Set problem statement\n"
         "  --validation-commands   Set validation commands\n"
         "  --baseline-audit        Set baseline audit\n"
@@ -113,7 +110,17 @@ static const FSubcommandHelpEntry kTopicSubs[] = {
         "  --dependency-add <spec> Add typed dependency; spec =\n"
         "                          '<kind>|<topic>|<phase>|<path>|<note>'\n"
         "                          <kind>: bundle | phase | governance |\n"
-        "                                  external\n",
+        "                                  external\n"
+        "\n"
+        "  risks, next_actions, acceptance_criteria are typed arrays\n"
+        "  (v0.89.0+) and are mutated via dedicated groups, not `topic\n"
+        "  set`:\n"
+        "    uni-plan risk add|set|remove|list --topic <T> ...\n"
+        "    uni-plan next-action add|set|remove|list --topic <T> ...\n"
+        "    uni-plan acceptance-criterion add|set|remove|list --topic <T>\n"
+        "  Passing --risks / --next-actions / --acceptance-criteria (or\n"
+        "  their -file variants) here surfaces UsageError with a pointer\n"
+        "  to the matching group. See `uni-plan risk --help` etc.\n",
         nullptr,
         "uni-plan-mutation-v1",
         "Examples:\n"
@@ -1097,6 +1104,253 @@ static const FSubcommandHelpEntry kManifestSubs[] = {
 };
 
 // ---------------------------------------------------------------------------
+// v0.89.0 typed-array CLI group help entries: `risk`, `next-action`,
+// `acceptance-criterion`. Each group mirrors the `changelog` / `manifest`
+// shape above with add/set/remove/list leaves.
+// ---------------------------------------------------------------------------
+
+static const FSubcommandHelpEntry kRiskSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan risk add --topic <T> --statement <text>\n"
+        "                         [--id <t>] [--mitigation <t>]\n"
+        "                         [--severity low|medium|high|critical]\n"
+        "                         [--status open|mitigated|accepted|closed]\n"
+        "                         [--notes <t>]\n\n",
+        "Append a typed risk entry. Severity defaults to medium, status to\n"
+        "open. High/critical severities should carry a mitigation; a\n"
+        "validator (`risk_severity_populated_for_high_impact`) flags\n"
+        "missing mitigations under --strict.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --statement <text>      Risk description (non-empty)\n\n",
+        "  --id <t>                Stable token (e.g. \"R1\")\n"
+        "  --mitigation <t>        Mitigation strategy\n"
+        "  --severity <s>          low | medium | high | critical\n"
+        "  --status <s>            open | mitigated | accepted | closed\n"
+        "  --notes <t>             Free context\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan risk add --topic X --statement \"Listener drift\" \\\n"
+        "                    --mitigation \"Pin endpoint\" --severity high\n",
+        true,
+        false,
+    },
+    {
+        "set",
+        "Usage: uni-plan risk set --topic <T> --index <N>\n"
+        "                         [same field flags as add]\n\n",
+        "Update one typed risk entry by array index. Empty string flags\n"
+        "are treated as unchanged (matches changelog set semantics); pass\n"
+        "any flag to update that field.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into risks[]\n\n",
+        "  --id / --statement / --mitigation / --notes / "
+        "--severity / --status   Field updates\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan risk set --topic X --index 0 --status mitigated\n",
+        true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan risk remove --topic <T> --index <N>\n\n",
+        "Erase a typed risk entry by array index. Shifts subsequent\n"
+        "indices down by one.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into risks[]\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan risk remove --topic X --index 2\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan risk list --topic <T> [--severity <s>]\n"
+        "                          [--status <s>]\n\n",
+        "Enumerate typed risk entries with optional severity/status\n"
+        "filters.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n",
+        "  --severity <s>          Filter by severity\n"
+        "  --status <s>            Filter by status\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan risk list --topic X --severity high\n",
+        false,
+        false,
+    },
+};
+
+static const FSubcommandHelpEntry kNextActionSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan next-action add --topic <T> --statement <text>\n"
+        "                                [--order <N>] [--rationale <t>]\n"
+        "                                [--owner <t>] [--status <s>]\n"
+        "                                [--target-date <t>]\n\n",
+        "Append a typed next-action entry. --order auto-assigns to\n"
+        "next_actions.size()+1 when unset. Status defaults to pending.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --statement <text>      Action description (non-empty)\n\n",
+        "  --order <N>             Display order (unique within array)\n"
+        "  --rationale <t>         Why this action\n"
+        "  --owner <t>             Who is responsible\n"
+        "  --status <s>            pending | in_progress | completed |\n"
+        "                          abandoned\n"
+        "  --target-date <t>       ISO 8601 date or phase ref\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan next-action add --topic X \\\n"
+        "                           --statement \"Ship v0.89.0\" \\\n"
+        "                           --target-date 2026-05-01\n",
+        true,
+        false,
+    },
+    {
+        "set",
+        "Usage: uni-plan next-action set --topic <T> --index <N>\n"
+        "                                [same field flags as add]\n\n",
+        "Update one typed next-action entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into next_actions[]\n\n",
+        "  --order / --statement / --rationale / --owner / --status / "
+        "--target-date   Field updates\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan next-action set --topic X --index 0 --status "
+        "completed\n",
+        true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan next-action remove --topic <T> --index <N>\n\n",
+        "Erase a typed next-action entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into next_actions[]\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan next-action remove --topic X --index 1\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan next-action list --topic <T> [--status <s>]\n\n",
+        "Enumerate typed next-action entries with optional status filter.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n",
+        "  --status <s>            Filter by status\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan next-action list --topic X --status pending\n",
+        false,
+        false,
+    },
+};
+
+static const FSubcommandHelpEntry kAcceptanceCriterionSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan acceptance-criterion add --topic <T>\n"
+        "                                        --statement <text>\n"
+        "                                        [--id <t>] [--status <s>]\n"
+        "                                        [--measure <t>]\n"
+        "                                        [--evidence <t>]\n\n",
+        "Append a typed acceptance-criterion entry. Status defaults to\n"
+        "not_met; set to met/partial/not_applicable as verification\n"
+        "progresses. The `completed_topic_criteria_all_met` validator\n"
+        "flags completed topics with any criterion still not met.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --statement <text>      Criterion text (non-empty)\n\n",
+        "  --id <t>                Stable token (e.g. \"AC1\")\n"
+        "  --status <s>            not_met | met | partial | not_applicable\n"
+        "  --measure <t>           How to verify\n"
+        "  --evidence <t>          Ref to verification entry, commit,\n"
+        "                          or PR\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan acceptance-criterion add --topic X \\\n"
+        "          --statement \"Validate clean under --strict\" \\\n"
+        "          --measure \"uni-plan validate --topic X --strict\"\n",
+        true,
+        false,
+    },
+    {
+        "set",
+        "Usage: uni-plan acceptance-criterion set --topic <T> --index <N>\n"
+        "                                        [same field flags as add]\n\n",
+        "Update one typed acceptance-criterion entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into\n"
+        "                          acceptance_criteria[]\n\n",
+        "  --id / --statement / --status / --measure / --evidence   "
+        "Field updates\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan acceptance-criterion set --topic X --index 0 \\\n"
+        "                                    --status met\n",
+        true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan acceptance-criterion remove --topic <T> "
+        "--index <N>\n\n",
+        "Erase a typed acceptance-criterion entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into\n"
+        "                          acceptance_criteria[]\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan acceptance-criterion remove --topic X --index 2\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan acceptance-criterion list --topic <T>\n"
+        "                                         [--status <s>]\n\n",
+        "Enumerate typed acceptance-criterion entries with optional\n"
+        "status filter.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n",
+        "  --status <s>            Filter by status\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan acceptance-criterion list --topic X --status met\n",
+        false,
+        false,
+    },
+};
+
+// ---------------------------------------------------------------------------
 // cache subcommands — migrated from ad-hoc inline help block to the
 // structured FSubcommandHelpEntry registry (v0.85.0 Commit 3).
 // ---------------------------------------------------------------------------
@@ -1473,6 +1727,97 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "                        --description 'New command entry point'\n",
         kManifestSubs,
         sizeof(kManifestSubs) / sizeof(kManifestSubs[0]),
+    },
+    {
+        "risk",
+        "Usage:\n"
+        "  uni-plan risk add --topic <T> --statement <t>\n"
+        "                    [--severity <s>] [--status <s>]\n"
+        "                    [--mitigation <t>] [--id <t>] [--notes <t>]\n"
+        "  uni-plan risk set --topic <T> --index <N> [field flags]\n"
+        "  uni-plan risk remove --topic <T> --index <N>\n"
+        "  uni-plan risk list --topic <T> [--severity <s>] [--status <s>]\n"
+        "\n",
+        "Manage typed risks[] entries (v0.89.0+). Each entry has a stable\n"
+        "id, statement, mitigation, severity (low/medium/high/critical),\n"
+        "status (open/mitigated/accepted/closed), and free notes. The\n"
+        "legacy string form (pipe-delimited rows) is still auto-read on\n"
+        "bundle load; writer always emits array form.\n\n",
+        nullptr,
+        "  add              Append a new risks[] entry\n"
+        "  set              Update an entry by index\n"
+        "  remove           Erase an entry by index (shifts indices down)\n"
+        "  list             Enumerate entries with optional filters\n\n"
+        "Run `uni-plan risk <sub> --help` for flag detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan risk add --topic X --statement 'Listener drift' \\\n"
+        "                    --mitigation 'Pin endpoint' --severity high\n"
+        "  uni-plan risk set --topic X --index 0 --status mitigated\n"
+        "  uni-plan risk list --topic X --severity high\n",
+        kRiskSubs,
+        sizeof(kRiskSubs) / sizeof(kRiskSubs[0]),
+    },
+    {
+        "next-action",
+        "Usage:\n"
+        "  uni-plan next-action add --topic <T> --statement <t>\n"
+        "                           [--order <N>] [--rationale <t>]\n"
+        "                           [--owner <t>] [--status <s>]\n"
+        "                           [--target-date <t>]\n"
+        "  uni-plan next-action set --topic <T> --index <N> [field flags]\n"
+        "  uni-plan next-action remove --topic <T> --index <N>\n"
+        "  uni-plan next-action list --topic <T> [--status <s>]\n\n",
+        "Manage typed next_actions[] entries (v0.89.0+). Each entry has\n"
+        "an order, statement, rationale, owner, status, and optional\n"
+        "target date. --order auto-assigns on add when unset. The legacy\n"
+        "string form is still auto-read; writer always emits array.\n\n",
+        nullptr,
+        "  add              Append a new next_actions[] entry\n"
+        "  set              Update an entry by index\n"
+        "  remove           Erase an entry by index\n"
+        "  list             Enumerate entries with optional filter\n\n"
+        "Run `uni-plan next-action <sub> --help` for flag detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan next-action add --topic X \\\n"
+        "                           --statement 'Ship v0.89.0'\n"
+        "  uni-plan next-action set --topic X --index 0 --status "
+        "completed\n",
+        kNextActionSubs,
+        sizeof(kNextActionSubs) / sizeof(kNextActionSubs[0]),
+    },
+    {
+        "acceptance-criterion",
+        "Usage:\n"
+        "  uni-plan acceptance-criterion add --topic <T> --statement <t>\n"
+        "                                    [--id <t>] [--status <s>]\n"
+        "                                    [--measure <t>] [--evidence <t>]\n"
+        "  uni-plan acceptance-criterion set --topic <T> --index <N> "
+        "[flags]\n"
+        "  uni-plan acceptance-criterion remove --topic <T> --index <N>\n"
+        "  uni-plan acceptance-criterion list --topic <T> [--status <s>]\n\n",
+        "Manage typed acceptance_criteria[] entries (v0.89.0+). Each\n"
+        "entry has an id, statement, status (not_met/met/partial/\n"
+        "not_applicable), measure, and evidence ref. The legacy string\n"
+        "form is still auto-read; writer always emits array.\n\n",
+        nullptr,
+        "  add              Append a new acceptance_criteria[] entry\n"
+        "  set              Update an entry by index\n"
+        "  remove           Erase an entry by index\n"
+        "  list             Enumerate entries with optional filter\n\n"
+        "Run `uni-plan acceptance-criterion <sub> --help` for flag "
+        "detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan acceptance-criterion add --topic X \\\n"
+        "          --statement 'Validate clean under --strict' \\\n"
+        "          --measure 'uni-plan validate --topic X --strict'\n"
+        "  uni-plan acceptance-criterion set --topic X --index 0 "
+        "--status met\n",
+        kAcceptanceCriterionSubs,
+        sizeof(kAcceptanceCriterionSubs) /
+            sizeof(kAcceptanceCriterionSubs[0]),
     },
     {
         "cache",

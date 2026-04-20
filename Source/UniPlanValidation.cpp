@@ -975,6 +975,22 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
         EvalStaleMislabeledModify(InBundles, Checks, InRepoRoot);
     EvalPathResolves(InBundles, Checks);
 
+    // v0.89.0 typed-array evaluators. `scope_and_non_scope_populated`
+    // closes the watch PLAN DETAIL blind spot (VoGame audit fallout);
+    // the remaining 10 enforce well-formedness + completion honesty on
+    // risks, next_actions, acceptance_criteria.
+    EvalScopeAndNonScopePopulated(InBundles, Checks);
+    EvalRiskEntryWellformed(InBundles, Checks);
+    EvalRiskSeverityPopulatedForHighImpact(InBundles, Checks);
+    EvalRiskIdUnique(InBundles, Checks);
+    EvalNextActionWellformed(InBundles, Checks);
+    EvalNextActionOrderUnique(InBundles, Checks);
+    EvalNextActionHasEntries(InBundles, Checks);
+    EvalAcceptanceCriterionWellformed(InBundles, Checks);
+    EvalAcceptanceCriterionIdUnique(InBundles, Checks);
+    EvalAcceptanceCriteriaHasEntries(InBundles, Checks);
+    EvalCompletedTopicCriteriaAllMet(InBundles, Checks);
+
     return Checks;
 }
 

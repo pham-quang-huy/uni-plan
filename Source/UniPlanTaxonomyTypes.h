@@ -102,6 +102,73 @@ struct FBundleReference
 };
 
 // ---------------------------------------------------------------------------
+// FRiskEntry — one row in a bundle's risks array.
+// Replaces the former `std::string mRisks` pipe-delimited-prose field with
+// a typed record so risk severity/status can be enforced at parse time and
+// high-severity risks can be validated to carry explicit mitigations.
+//
+// mStatement is required (non-empty). mId is optional and carries a stable
+// token like "R1" for cross-references from changelog/verification prose;
+// if empty, consumers may synthesize from index. mMitigation is required
+// for quality on High/Critical risks but optional at schema level so a
+// new risk can be captured without a mitigation yet and flagged by the
+// `risk_severity_populated_for_high_impact` validator.
+// ---------------------------------------------------------------------------
+
+struct FRiskEntry
+{
+    std::string mId;
+    std::string mStatement;
+    std::string mMitigation;
+    ERiskSeverity mSeverity = ERiskSeverity::Medium;
+    ERiskStatus mStatus = ERiskStatus::Open;
+    std::string mNotes;
+};
+
+// ---------------------------------------------------------------------------
+// FNextActionEntry — one row in a bundle's next_actions array.
+// Replaces the former `std::string mNextActions` pipe-delimited-prose
+// field with a typed record so action ordering/status can be enforced at
+// parse time and `uni-plan phase next` can surface actionable items.
+//
+// mStatement is required (non-empty). mOrder is the display order within
+// the array (enforced unique by the `next_action_order_unique` validator);
+// 0 is reserved for unordered legacy imports. mTargetDate is optional ISO
+// 8601 (`YYYY-MM-DD`) or a phase ref like `phases[2]`.
+// ---------------------------------------------------------------------------
+
+struct FNextActionEntry
+{
+    int mOrder = 0;
+    std::string mStatement;
+    std::string mRationale;
+    std::string mOwner;
+    EActionStatus mStatus = EActionStatus::Pending;
+    std::string mTargetDate;
+};
+
+// ---------------------------------------------------------------------------
+// FAcceptanceCriterionEntry — one row in a bundle's acceptance_criteria
+// array.
+// Replaces the former `std::string mAcceptanceCriteria` pipe-delimited-
+// prose field with a typed record so per-criterion status can be tracked
+// and `completed_topic_criteria_all_met` can validate completion honesty.
+//
+// mStatement is required (non-empty). mId is optional stable token like
+// "AC1". mMeasure captures how to verify; mEvidence references a
+// verification entry, commit SHA, or PR when the criterion is met.
+// ---------------------------------------------------------------------------
+
+struct FAcceptanceCriterionEntry
+{
+    std::string mId;
+    std::string mStatement;
+    ECriterionStatus mStatus = ECriterionStatus::NotMet;
+    std::string mMeasure;
+    std::string mEvidence;
+};
+
+// ---------------------------------------------------------------------------
 // FPhaseTaxonomy — display-oriented taxonomy for watch mode panels.
 // Tasks are flat here for display convenience (flattened from
 // nested FJobRecord.mTasks).
