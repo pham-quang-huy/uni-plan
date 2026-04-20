@@ -82,13 +82,23 @@ void EmitDependenciesJson(const char *InName,
 
 // ---------------------------------------------------------------------------
 // EmitRisksJson — write a typed risks array as JSON:
-//   [{"id":"R1","statement":"...","mitigation":"...","severity":"high",
-//     "status":"open","notes":"..."}, ...]
+//   [{"index":0,"id":"R1","statement":"...","mitigation":"...","severity":
+//     "high","status":"open","notes":"..."}, ...]
 // Emits an empty array when the input vector is empty (never null).
+//
+// The `index` field is the stable mutation target for `risk set / remove
+// --index <N>` (v0.95.0+). When InOriginalIndices is nullptr (typical for
+// `topic get`, which passes the full unfiltered vector), the emitted index
+// equals the loop counter — which equals the storage position. When the
+// caller filtered its vector (e.g. `risk list --severity high`) it must
+// pass InOriginalIndices so the emitted index remains bound to the pre-
+// filter storage position; otherwise `set --index <N>` after a filter
+// would target the wrong row.
 // ---------------------------------------------------------------------------
 
 void EmitRisksJson(const char *InName, const std::vector<FRiskEntry> &InRisks,
-                   bool InTrailingComma)
+                   bool InTrailingComma,
+                   const std::vector<size_t> *InOriginalIndices)
 {
     std::cout << "\"" << InName << "\":[";
     for (size_t I = 0; I < InRisks.size(); ++I)
@@ -96,7 +106,10 @@ void EmitRisksJson(const char *InName, const std::vector<FRiskEntry> &InRisks,
         if (I > 0)
             std::cout << ",";
         const FRiskEntry &R = InRisks[I];
+        const size_t EmittedIndex =
+            InOriginalIndices ? (*InOriginalIndices)[I] : I;
         std::cout << "{";
+        EmitJsonFieldSizeT("index", EmittedIndex);
         EmitJsonField("id", R.mId);
         EmitJsonField("statement", R.mStatement);
         EmitJsonField("mitigation", R.mMitigation);
@@ -118,7 +131,8 @@ void EmitRisksJson(const char *InName, const std::vector<FRiskEntry> &InRisks,
 
 void EmitNextActionsJson(const char *InName,
                          const std::vector<FNextActionEntry> &InActions,
-                         bool InTrailingComma)
+                         bool InTrailingComma,
+                         const std::vector<size_t> *InOriginalIndices)
 {
     std::cout << "\"" << InName << "\":[";
     for (size_t I = 0; I < InActions.size(); ++I)
@@ -126,7 +140,10 @@ void EmitNextActionsJson(const char *InName,
         if (I > 0)
             std::cout << ",";
         const FNextActionEntry &A = InActions[I];
+        const size_t EmittedIndex =
+            InOriginalIndices ? (*InOriginalIndices)[I] : I;
         std::cout << "{";
+        EmitJsonFieldSizeT("index", EmittedIndex);
         std::cout << "\"order\":" << A.mOrder << ",";
         EmitJsonField("statement", A.mStatement);
         EmitJsonField("rationale", A.mRationale);
@@ -150,7 +167,7 @@ void EmitNextActionsJson(const char *InName,
 void EmitAcceptanceCriteriaJson(
     const char *InName,
     const std::vector<FAcceptanceCriterionEntry> &InCriteria,
-    bool InTrailingComma)
+    bool InTrailingComma, const std::vector<size_t> *InOriginalIndices)
 {
     std::cout << "\"" << InName << "\":[";
     for (size_t I = 0; I < InCriteria.size(); ++I)
@@ -158,7 +175,10 @@ void EmitAcceptanceCriteriaJson(
         if (I > 0)
             std::cout << ",";
         const FAcceptanceCriterionEntry &C = InCriteria[I];
+        const size_t EmittedIndex =
+            InOriginalIndices ? (*InOriginalIndices)[I] : I;
         std::cout << "{";
+        EmitJsonFieldSizeT("index", EmittedIndex);
         EmitJsonField("id", C.mId);
         EmitJsonField("statement", C.mStatement);
         EmitJsonField("status", ToString(C.mStatus));

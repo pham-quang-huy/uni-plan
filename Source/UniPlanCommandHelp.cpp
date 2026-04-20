@@ -911,7 +911,14 @@ static const FSubcommandHelpEntry kChangelogSubs[] = {
         "query",
         "Usage: uni-plan changelog --topic <T> [--phase <N>] [--human]\n\n",
         "Query changelog entries. Default subcommand when no add/set/\n"
-        "remove is supplied.\n\n",
+        "remove is supplied.\n\n"
+        "Every emitted entry carries a stable `index` field (JSON) / `Idx`\n"
+        "column (--human) equal to the entry's position in the bundle's\n"
+        "underlying changelogs[] vector. Output is sorted by (phase asc,\n"
+        "date desc), so render order does NOT match storage order —\n"
+        "use the emitted `index`, not the row number, when targeting\n"
+        "`changelog set --index <N>` / `changelog remove --index <N>`\n"
+        "(v0.95.0+).\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n\n",
         "  --phase <N>             Filter to a specific phase index\n",
@@ -954,7 +961,11 @@ static const FSubcommandHelpEntry kChangelogSubs[] = {
         "set",
         "Usage: uni-plan changelog set --topic <T> --index <I> [options]\n\n",
         "Mutate an existing changelog entry by array index. Use for rare\n"
-        "repair operations; prefer `changelog add` for normal flow.\n\n",
+        "repair operations; prefer `changelog add` for normal flow.\n\n"
+        "--index targets the entry's position in the underlying vector,\n"
+        "NOT the rendered row number from `uni-plan changelog` (which\n"
+        "is sorted). Cite the `index` field emitted by the query output\n"
+        "(v0.95.0+) to avoid index drift.\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n"
         "  --index <I>             Zero-based index into changelogs[]\n\n",
@@ -999,7 +1010,13 @@ static const FSubcommandHelpEntry kVerificationSubs[] = {
         "query",
         "Usage: uni-plan verification --topic <T> [--phase <N>] [--human]\n\n",
         "Query verification entries. Default subcommand when no add/set is\n"
-        "supplied.\n\n",
+        "supplied.\n\n"
+        "Every emitted entry carries a stable `index` field (JSON) / `Idx`\n"
+        "column (--human) equal to the entry's position in the bundle's\n"
+        "underlying verifications[] vector. Filtering by phase drops\n"
+        "rows; the emitted index remains the pre-filter storage index\n"
+        "and is the correct target for `verification set --index <N>`\n"
+        "(v0.95.0+).\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n\n",
         "  --phase <N>             Filter to a specific phase index\n",

@@ -1134,3 +1134,280 @@ TEST_F(FBundleTestFixture, ValidateAcceptsCanonicalAffectedRefs)
             << "unexpected canonical_entity_ref failure for: " << Issue["path"];
     }
 }
+
+// ===================================================================
+// Stable `index` field on changelog / verification / typed-array queries
+// (v0.95.0+ index-drift regression guards)
+//
+// The class-of-bug these cover: query commands sort or filter before
+// emitting, while `set --index N` / `remove --index N` mutations
+// target the raw storage index in the bundle's underlying vector. If
+// the query output doesn't expose the storage index, an operator /
+// agent reading the query and citing --index N addresses the wrong
+// row. These tests lock in the v0.95.0 contract: every filter or
+// sorted render emits a stable `index` field equal to the storage
+// position, and a mutation against that index targets the exact row
+// that appeared in the query output.
+// ===================================================================
+
+TEST_F(FBundleTestFixture, ChangelogQueryEmitsStableIndexAcrossSort)
+{
+    // SampleTopic fixture has mixed-phase changelog entries whose
+    // storage order differs from the sorted render order. Capture the
+    // JSON, then re-target each emitted row via `changelog set --index
+    // <captured>` and verify the mutation lands on the same row the
+    // query claimed.
+    CopyFixture("SampleTopic");
+    StartCapture();
+    ASSERT_EQ(
+        UniPlan::RunBundleChangelogCommand(
+            {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string()),
+        0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("entries"));
+    ASSERT_GT(Json["entries"].size(), 0u);
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+
+    // Every emitted entry must carry an `index` field that points at
+    // the same underlying row the renderer showed.
+    for (const auto &Entry : Json["entries"])
+    {
+        ASSERT_TRUE(Entry.contains("index"))
+            << "changelog entry missing 'index' field";
+        const size_t Idx = Entry["index"].get<size_t>();
+        ASSERT_LT(Idx, Before.mChangeLogs.size());
+        EXPECT_EQ(Before.mChangeLogs[Idx].mChange,
+                  Entry["change"].get<std::string>())
+            << "index " << Idx << " should map to the same `change` row "
+            << "the renderer emitted";
+    }
+
+    // Round-trip: pick the FIRST emitted entry, mutate via
+    // `changelog set --index <its emitted index>`, assert the mutation
+    // landed on exactly that row.
+    const size_t TargetIdx = Json["entries"][0]["index"].get<size_t>();
+    const std::string OriginalChange = Before.mChangeLogs[TargetIdx].mChange;
+    const std::string NewChange = "REINDEXED-" + OriginalChange;
+    StartCapture();
+    const int SetCode = UniPlan::RunChangelogSetCommand(
+        {"--topic", "SampleTopic", "--index", std::to_string(TargetIdx),
+         "--change", NewChange, "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(SetCode, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mChangeLogs[TargetIdx].mChange, NewChange)
+        << "mutation must land on the row the query emitted at that index";
+}
+
+TEST_F(FBundleTestFixture, ChangelogQueryEmitsStableIndexUnderPhaseFilter)
+{
+    // Phase filter narrows the result set; remaining rows MUST still
+    // expose their original storage index, not a 0..N-1 filtered
+    // position, or `changelog set --index <N>` after filtering targets
+    // the wrong row.
+    CopyFixture("SampleTopic");
+    StartCapture();
+    ASSERT_EQ(
+        UniPlan::RunBundleChangelogCommand(
+            {"--topic", "SampleTopic", "--phase", "1", "--repo-root",
+             mRepoRoot.string()},
+            mRepoRoot.string()),
+        0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("entries"));
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (const auto &Entry : Json["entries"])
+    {
+        ASSERT_TRUE(Entry.contains("index"));
+        const size_t Idx = Entry["index"].get<size_t>();
+        ASSERT_LT(Idx, Bundle.mChangeLogs.size());
+        EXPECT_EQ(Bundle.mChangeLogs[Idx].mPhase, 1)
+            << "filter=1 should only emit rows whose storage-index row "
+            << "has mPhase=1";
+    }
+}
+
+TEST_F(FBundleTestFixture, VerificationQueryEmitsStableIndex)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    ASSERT_EQ(
+        UniPlan::RunBundleVerificationCommand(
+            {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string()),
+        0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("entries"));
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    for (const auto &Entry : Json["entries"])
+    {
+        ASSERT_TRUE(Entry.contains("index"))
+            << "verification entry missing 'index' field";
+        const size_t Idx = Entry["index"].get<size_t>();
+        ASSERT_LT(Idx, Bundle.mVerifications.size());
+        EXPECT_EQ(Bundle.mVerifications[Idx].mCheck,
+                  Entry["check"].get<std::string>());
+    }
+}
+
+TEST_F(FBundleTestFixture, RiskListEmitsStableIndexAcrossFilter)
+{
+    // Seed two risks with differing severities, then list filtered to
+    // `high` and verify the surviving row carries its original
+    // storage index (not the filtered 0-position).
+    CopyFixture("SampleTopic");
+    ASSERT_EQ(
+        UniPlan::RunRiskAddCommand(
+            {"--topic", "SampleTopic", "--statement", "Low-severity risk",
+             "--severity", "low", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string()),
+        0);
+    ASSERT_EQ(
+        UniPlan::RunRiskAddCommand(
+            {"--topic", "SampleTopic", "--statement", "High-severity risk",
+             "--severity", "high", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string()),
+        0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    // Find the storage index of the high-severity entry we just added.
+    size_t HighSeverityIdx = Bundle.mMetadata.mRisks.size();
+    for (size_t I = 0; I < Bundle.mMetadata.mRisks.size(); ++I)
+    {
+        if (Bundle.mMetadata.mRisks[I].mStatement == "High-severity risk")
+            HighSeverityIdx = I;
+    }
+    ASSERT_LT(HighSeverityIdx, Bundle.mMetadata.mRisks.size());
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunRiskListCommand(
+                  {"--topic", "SampleTopic", "--severity", "high",
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("risks"));
+    bool bFound = false;
+    for (const auto &Risk : Json["risks"])
+    {
+        ASSERT_TRUE(Risk.contains("index"))
+            << "risk list entry missing 'index' field";
+        if (Risk["statement"].get<std::string>() == "High-severity risk")
+        {
+            EXPECT_EQ(Risk["index"].get<size_t>(), HighSeverityIdx)
+                << "filtered list must expose the pre-filter storage index";
+            bFound = true;
+        }
+    }
+    EXPECT_TRUE(bFound);
+}
+
+TEST_F(FBundleTestFixture, NextActionListEmitsStableIndexAcrossFilter)
+{
+    CopyFixture("SampleTopic");
+    ASSERT_EQ(UniPlan::RunNextActionAddCommand(
+                  {"--topic", "SampleTopic", "--statement", "Pending action",
+                   "--status", "pending", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    ASSERT_EQ(UniPlan::RunNextActionAddCommand(
+                  {"--topic", "SampleTopic", "--statement", "Completed action",
+                   "--status", "completed", "--repo-root",
+                   mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    size_t CompletedIdx = Bundle.mNextActions.size();
+    for (size_t I = 0; I < Bundle.mNextActions.size(); ++I)
+    {
+        if (Bundle.mNextActions[I].mStatement == "Completed action")
+            CompletedIdx = I;
+    }
+    ASSERT_LT(CompletedIdx, Bundle.mNextActions.size());
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunNextActionListCommand(
+                  {"--topic", "SampleTopic", "--status", "completed",
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("next_actions"));
+    bool bFound = false;
+    for (const auto &Action : Json["next_actions"])
+    {
+        ASSERT_TRUE(Action.contains("index"));
+        if (Action["statement"].get<std::string>() == "Completed action")
+        {
+            EXPECT_EQ(Action["index"].get<size_t>(), CompletedIdx);
+            bFound = true;
+        }
+    }
+    EXPECT_TRUE(bFound);
+}
+
+TEST_F(FBundleTestFixture, AcceptanceCriterionListEmitsStableIndexAcrossFilter)
+{
+    CopyFixture("SampleTopic");
+    ASSERT_EQ(
+        UniPlan::RunAcceptanceCriterionAddCommand(
+            {"--topic", "SampleTopic", "--statement", "Unmet criterion",
+             "--status", "not_met", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string()),
+        0);
+    ASSERT_EQ(UniPlan::RunAcceptanceCriterionAddCommand(
+                  {"--topic", "SampleTopic", "--statement", "Met criterion",
+                   "--status", "met", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    size_t MetIdx = Bundle.mMetadata.mAcceptanceCriteria.size();
+    for (size_t I = 0; I < Bundle.mMetadata.mAcceptanceCriteria.size(); ++I)
+    {
+        if (Bundle.mMetadata.mAcceptanceCriteria[I].mStatement
+            == "Met criterion")
+            MetIdx = I;
+    }
+    ASSERT_LT(MetIdx, Bundle.mMetadata.mAcceptanceCriteria.size());
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunAcceptanceCriterionListCommand(
+                  {"--topic", "SampleTopic", "--status", "met", "--repo-root",
+                   mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("acceptance_criteria"));
+    bool bFound = false;
+    for (const auto &C : Json["acceptance_criteria"])
+    {
+        ASSERT_TRUE(C.contains("index"));
+        if (C["statement"].get<std::string>() == "Met criterion")
+        {
+            EXPECT_EQ(C["index"].get<size_t>(), MetIdx);
+            bFound = true;
+        }
+    }
+    EXPECT_TRUE(bFound);
+}

@@ -134,7 +134,8 @@ int RunRiskSetCommand(const std::vector<std::string> &InArgs,
     }
     if (!Options.mStatement.empty())
     {
-        Changes.push_back({"statement", {Entry.mStatement, Options.mStatement}});
+        Changes.push_back(
+            {"statement", {Entry.mStatement, Options.mStatement}});
         Entry.mStatement = Options.mStatement;
     }
     if (!Options.mMitigation.empty())
@@ -204,8 +205,8 @@ int RunRiskRemoveCommand(const std::vector<std::string> &InArgs,
     const std::string Target = "risks[" + std::to_string(Options.mIndex) + "]";
     const FRiskEntry Removed =
         Bundle.mMetadata.mRisks[static_cast<size_t>(Options.mIndex)];
-    Bundle.mMetadata.mRisks.erase(Bundle.mMetadata.mRisks.begin()
-                                  + Options.mIndex);
+    Bundle.mMetadata.mRisks.erase(Bundle.mMetadata.mRisks.begin() +
+                                  Options.mIndex);
 
     AppendAutoChangelog(Bundle, kTargetPlan,
                         "risk removed: " + Target + " (" + Removed.mStatement +
@@ -244,23 +245,31 @@ int RunRiskListCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
+    // Preserve storage-order indices through the filter so the emitted
+    // `index` field remains bound to the pre-filter position (v0.95.0+).
+    // `risk set --index N` / `risk remove --index N` target the storage
+    // index in Bundle.mMetadata.mRisks; any filtered list must expose
+    // that stable target, not the filtered-array position.
     std::vector<FRiskEntry> Filtered;
-    for (const FRiskEntry &R : Bundle.mMetadata.mRisks)
+    std::vector<size_t> OriginalIndices;
+    for (size_t I = 0; I < Bundle.mMetadata.mRisks.size(); ++I)
     {
-        if (Options.opSeverityFilter.has_value()
-            && R.mSeverity != *Options.opSeverityFilter)
+        const FRiskEntry &R = Bundle.mMetadata.mRisks[I];
+        if (Options.opSeverityFilter.has_value() &&
+            R.mSeverity != *Options.opSeverityFilter)
             continue;
-        if (Options.opStatusFilter.has_value()
-            && R.mStatus != *Options.opStatusFilter)
+        if (Options.opStatusFilter.has_value() &&
+            R.mStatus != *Options.opStatusFilter)
             continue;
         Filtered.push_back(R);
+        OriginalIndices.push_back(I);
     }
 
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kListSchema, UTC, InRepoRoot);
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Filtered.size());
-    EmitRisksJson("risks", Filtered);
+    EmitRisksJson("risks", Filtered, true, &OriginalIndices);
     std::vector<std::string> Warnings;
     PrintJsonClose(Warnings);
     return 0;
@@ -351,12 +360,14 @@ int RunNextActionSetCommand(const std::vector<std::string> &InArgs,
     }
     if (!Options.mStatement.empty())
     {
-        Changes.push_back({"statement", {Entry.mStatement, Options.mStatement}});
+        Changes.push_back(
+            {"statement", {Entry.mStatement, Options.mStatement}});
         Entry.mStatement = Options.mStatement;
     }
     if (!Options.mRationale.empty())
     {
-        Changes.push_back({"rationale", {Entry.mRationale, Options.mRationale}});
+        Changes.push_back(
+            {"rationale", {Entry.mRationale, Options.mRationale}});
         Entry.mRationale = Options.mRationale;
     }
     if (!Options.mOwner.empty())
@@ -461,19 +472,22 @@ int RunNextActionListCommand(const std::vector<std::string> &InArgs,
     }
 
     std::vector<FNextActionEntry> Filtered;
-    for (const FNextActionEntry &A : Bundle.mNextActions)
+    std::vector<size_t> OriginalIndices;
+    for (size_t I = 0; I < Bundle.mNextActions.size(); ++I)
     {
-        if (Options.opStatusFilter.has_value()
-            && A.mStatus != *Options.opStatusFilter)
+        const FNextActionEntry &A = Bundle.mNextActions[I];
+        if (Options.opStatusFilter.has_value() &&
+            A.mStatus != *Options.opStatusFilter)
             continue;
         Filtered.push_back(A);
+        OriginalIndices.push_back(I);
     }
 
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kListSchema, UTC, InRepoRoot);
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Filtered.size());
-    EmitNextActionsJson("next_actions", Filtered);
+    EmitNextActionsJson("next_actions", Filtered, true, &OriginalIndices);
     std::vector<std::string> Warnings;
     PrintJsonClose(Warnings);
     return 0;
@@ -549,8 +563,8 @@ int RunAcceptanceCriterionSetCommand(const std::vector<std::string> &InArgs,
         return 1;
 
     FAcceptanceCriterionEntry &Entry =
-        Bundle.mMetadata.mAcceptanceCriteria[static_cast<size_t>(
-            Options.mIndex)];
+        Bundle.mMetadata
+            .mAcceptanceCriteria[static_cast<size_t>(Options.mIndex)];
     const std::string Target =
         "acceptance_criteria[" + std::to_string(Options.mIndex) + "]";
 
@@ -562,7 +576,8 @@ int RunAcceptanceCriterionSetCommand(const std::vector<std::string> &InArgs,
     }
     if (!Options.mStatement.empty())
     {
-        Changes.push_back({"statement", {Entry.mStatement, Options.mStatement}});
+        Changes.push_back(
+            {"statement", {Entry.mStatement, Options.mStatement}});
         Entry.mStatement = Options.mStatement;
     }
     if (Options.opStatus.has_value())
@@ -626,8 +641,8 @@ int RunAcceptanceCriterionRemoveCommand(const std::vector<std::string> &InArgs,
     const std::string Target =
         "acceptance_criteria[" + std::to_string(Options.mIndex) + "]";
     const FAcceptanceCriterionEntry Removed =
-        Bundle.mMetadata.mAcceptanceCriteria[static_cast<size_t>(
-            Options.mIndex)];
+        Bundle.mMetadata
+            .mAcceptanceCriteria[static_cast<size_t>(Options.mIndex)];
     Bundle.mMetadata.mAcceptanceCriteria.erase(
         Bundle.mMetadata.mAcceptanceCriteria.begin() + Options.mIndex);
 
@@ -670,20 +685,24 @@ int RunAcceptanceCriterionListCommand(const std::vector<std::string> &InArgs,
     }
 
     std::vector<FAcceptanceCriterionEntry> Filtered;
-    for (const FAcceptanceCriterionEntry &C :
-         Bundle.mMetadata.mAcceptanceCriteria)
+    std::vector<size_t> OriginalIndices;
+    for (size_t I = 0; I < Bundle.mMetadata.mAcceptanceCriteria.size(); ++I)
     {
-        if (Options.opStatusFilter.has_value()
-            && C.mStatus != *Options.opStatusFilter)
+        const FAcceptanceCriterionEntry &C =
+            Bundle.mMetadata.mAcceptanceCriteria[I];
+        if (Options.opStatusFilter.has_value() &&
+            C.mStatus != *Options.opStatusFilter)
             continue;
         Filtered.push_back(C);
+        OriginalIndices.push_back(I);
     }
 
     const std::string UTC = GetUtcNow();
     PrintJsonHeader(kListSchema, UTC, InRepoRoot);
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Filtered.size());
-    EmitAcceptanceCriteriaJson("acceptance_criteria", Filtered);
+    EmitAcceptanceCriteriaJson("acceptance_criteria", Filtered, true,
+                               &OriginalIndices);
     std::vector<std::string> Warnings;
     PrintJsonClose(Warnings);
     return 0;

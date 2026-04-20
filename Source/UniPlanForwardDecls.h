@@ -24,14 +24,17 @@ void EmitDependenciesJson(const char *InName,
                           const std::vector<FBundleReference> &InDependencies,
                           bool InTrailingComma = true);
 void EmitRisksJson(const char *InName, const std::vector<FRiskEntry> &InRisks,
-                   bool InTrailingComma = true);
-void EmitNextActionsJson(const char *InName,
-                         const std::vector<FNextActionEntry> &InActions,
-                         bool InTrailingComma = true);
+                   bool InTrailingComma = true,
+                   const std::vector<size_t> *InOriginalIndices = nullptr);
+void EmitNextActionsJson(
+    const char *InName, const std::vector<FNextActionEntry> &InActions,
+    bool InTrailingComma = true,
+    const std::vector<size_t> *InOriginalIndices = nullptr);
 void EmitAcceptanceCriteriaJson(
     const char *InName,
     const std::vector<FAcceptanceCriterionEntry> &InCriteria,
-    bool InTrailingComma = true);
+    bool InTrailingComma = true,
+    const std::vector<size_t> *InOriginalIndices = nullptr);
 
 // From DocCache.cpp
 fs::path ResolveExecutableDirectory();

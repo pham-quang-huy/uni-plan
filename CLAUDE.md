@@ -305,6 +305,25 @@ Use `uni-plan topic add` when:
 
 The hand-written-JSON path is no longer supported. Any agent flow that still reads a skill telling it to `json.load` or author `.Plan.json` directly is referencing stale documentation — update the skill.
 
+### v0.95.0 behavior note — stable `index` field on list/query output (index-drift fix)
+
+Closes a silent correctness bug where `uni-plan changelog` / `uni-plan verification` sorted or filtered their output before rendering while `changelog set --index N` / `changelog remove --index N` (and the verification analogues) addressed the raw storage index. An agent reading the query and citing `--index N` targeted the wrong row whenever storage order ≠ sort order — which is common, since auto-changelog appends accumulate in insertion order but the query renders `(phase ASC, date DESC)`. Same class-of-bug in the typed-array list commands (`risk list --severity high`, `next-action list --status pending`, `acceptance-criterion list --status met`) where the filter dropped rows and the surviving values lost their pre-filter position.
+
+- **New `index` field** on every emitted entry in:
+  - `uni-plan changelog` JSON (`"index": N`) and `--human` output (new `Idx` column).
+  - `uni-plan verification` JSON + `--human` (same).
+  - `uni-plan risk list` / `uni-plan next-action list` / `uni-plan acceptance-criterion list` JSON — a new `"index"` leads each entry emitted by the shared `EmitRisksJson` / `EmitNextActionsJson` / `EmitAcceptanceCriteriaJson` helpers.
+- **Index is the raw storage position** in the bundle's underlying `mChangeLogs` / `mVerifications` / `mRisks` / `mNextActions` / `mAcceptanceCriteria` vector — captured *before* any sort or filter. It is the stable target for `<entity> set --index N` / `<entity> remove --index N` regardless of render order.
+- **Emit helpers grew an optional `InOriginalIndices` parameter**. When nullptr (typical for `topic get`, which passes the full unfiltered vector), the loop counter is the storage index. When non-null, the caller (a filtered list runner) remaps per-row to the pre-filter storage position. Default parameter preserves backward compatibility for every existing caller.
+- **New constant `kTargetTopic`** from v0.94.0 is unaffected; this release adds no new mutation target tokens.
+- **Unchanged**: `job list`, `task list`, `lane list`, `testing list`, `manifest list` — these already emitted `phase_index` / `job_index` / `lane_index` / `testing_index` / `manifest_index`. The sweep verified them clean.
+- **kCliVersion bump**: 0.94.0 → 0.95.0. MINOR per SemVer discipline — a new output field is a backward-compatible addition (JSON consumers that don't know about `index` still parse cleanly; consumers that care gain a stable mutation target).
+- **Help-text update**: `uni-plan changelog --help`, `uni-plan verification --help`, and the `set` subcommand help for each now document the index contract explicitly ("render order ≠ storage order; cite the emitted `index` field, not the row number").
+
+Regression guards in [Test/UniPlanTestQuery.cpp](Test/UniPlanTestQuery.cpp) cover: the emitted `index` in a sorted changelog round-trips through `changelog set --index N` back to the same row; verification filtered by phase still emits pre-filter indices; risk / next-action / acceptance-criterion list commands with a status/severity filter expose the pre-filter storage position. Suite now 348 → 354 passing (+6 guards).
+
+Historical note: the bug was reported by an AI agent running a repair loop that concluded it was unsafe to keep using the CLI for changelog set/remove and switched to manual bundle edits. Agent was correct; this release closes the gap so the CLI is safe again.
+
 ## documentation_rules
 
 ### V4 bundle model

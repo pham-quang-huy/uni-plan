@@ -79,25 +79,37 @@ static int RunBundleChangelogJson(const fs::path &InRepoRoot,
         return 1;
     }
 
-    // Filter by phase
+    // Filter by phase. Capture the original storage index (position in
+    // Bundle.mChangeLogs) alongside each pointer so downstream consumers
+    // can target the row they see via `changelog set --index` / `remove
+    // --index` (v0.95.0+ — these indices are the stable mutation target;
+    // render order ≠ storage order after the sort below). Storage-order
+    // identity was the root cause of the pre-v0.95.0 drift bug where
+    // agents running repair loops would `set --index N` expecting the
+    // N-th rendered row and instead mutate whichever row happened to
+    // sit at position N in the underlying vector.
     const int PhaseFilter = InOptions.mbHasScopeFilter
                                 ? std::atoi(InOptions.mScopeFilter.c_str())
                                 : -2;
-    std::vector<const FChangeLogEntry *> Filtered;
-    for (const FChangeLogEntry &Entry : Bundle.mChangeLogs)
+    std::vector<std::pair<size_t, const FChangeLogEntry *>> Filtered;
+    for (size_t I = 0; I < Bundle.mChangeLogs.size(); ++I)
     {
+        const FChangeLogEntry &Entry = Bundle.mChangeLogs[I];
         if (PhaseFilter != -2 && Entry.mPhase != PhaseFilter)
             continue;
-        Filtered.push_back(&Entry);
+        Filtered.emplace_back(I, &Entry);
     }
 
-    // Sort: topic-level (-1) first, then ascending phase, then date desc
+    // Sort: topic-level (-1) first, then ascending phase, then date desc.
+    // `first` (storage index) rides along unchanged so the emitted
+    // `index` field stays bound to its source row regardless of sort.
     std::sort(Filtered.begin(), Filtered.end(),
-              [](const FChangeLogEntry *A, const FChangeLogEntry *B)
+              [](const std::pair<size_t, const FChangeLogEntry *> &A,
+                 const std::pair<size_t, const FChangeLogEntry *> &B)
               {
-                  if (A->mPhase != B->mPhase)
-                      return A->mPhase < B->mPhase;
-                  return A->mDate > B->mDate;
+                  if (A.second->mPhase != B.second->mPhase)
+                      return A.second->mPhase < B.second->mPhase;
+                  return A.second->mDate > B.second->mDate;
               });
 
     const std::string UTC = GetUtcNow();
@@ -109,9 +121,11 @@ static int RunBundleChangelogJson(const fs::path &InRepoRoot,
     std::cout << "\"entries\":[";
     for (size_t I = 0; I < Filtered.size(); ++I)
     {
-        const FChangeLogEntry &Entry = *Filtered[I];
+        const size_t StorageIndex = Filtered[I].first;
+        const FChangeLogEntry &Entry = *Filtered[I].second;
         PrintJsonSep(I);
         std::cout << "{";
+        EmitJsonFieldSizeT("index", StorageIndex);
         if (Entry.mPhase < 0)
             std::cout << "\"phase\":null,";
         else
@@ -149,21 +163,25 @@ static int RunBundleChangelogHuman(const fs::path &InRepoRoot,
     const int PhaseFilter = InOptions.mbHasScopeFilter
                                 ? std::atoi(InOptions.mScopeFilter.c_str())
                                 : -2;
-    std::vector<const FChangeLogEntry *> Filtered;
-    for (const FChangeLogEntry &Entry : Bundle.mChangeLogs)
+    std::vector<std::pair<size_t, const FChangeLogEntry *>> Filtered;
+    for (size_t I = 0; I < Bundle.mChangeLogs.size(); ++I)
     {
+        const FChangeLogEntry &Entry = Bundle.mChangeLogs[I];
         if (PhaseFilter != -2 && Entry.mPhase != PhaseFilter)
             continue;
-        Filtered.push_back(&Entry);
+        Filtered.emplace_back(I, &Entry);
     }
 
-    // Sort: topic-level (-1) first, then ascending phase, then date desc
+    // Sort: topic-level (-1) first, then ascending phase, then date desc.
+    // The `Idx` column below preserves storage-order identity so operators
+    // reading the table can cite it directly to `changelog set --index`.
     std::sort(Filtered.begin(), Filtered.end(),
-              [](const FChangeLogEntry *A, const FChangeLogEntry *B)
+              [](const std::pair<size_t, const FChangeLogEntry *> &A,
+                 const std::pair<size_t, const FChangeLogEntry *> &B)
               {
-                  if (A->mPhase != B->mPhase)
-                      return A->mPhase < B->mPhase;
-                  return A->mDate > B->mDate;
+                  if (A.second->mPhase != B.second->mPhase)
+                      return A.second->mPhase < B.second->mPhase;
+                  return A.second->mDate > B.second->mDate;
               });
 
     std::cout << kColorBold << "Changelog" << kColorReset
@@ -171,9 +189,12 @@ static int RunBundleChangelogHuman(const fs::path &InRepoRoot,
               << " count=" << Filtered.size() << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Phase", "Date", "Type", "Actor", "Affected", "Change"};
-    for (const FChangeLogEntry *rpEntry : Filtered)
+    Table.mHeaders = {"Idx",   "Phase",    "Date",  "Type",
+                      "Actor", "Affected", "Change"};
+    for (const std::pair<size_t, const FChangeLogEntry *> &Row : Filtered)
     {
+        const size_t StorageIndex = Row.first;
+        const FChangeLogEntry *rpEntry = Row.second;
         std::string Change = rpEntry->mChange;
         if (Change.size() > 80)
             Change = Change.substr(0, 77) + "...";
@@ -185,7 +206,8 @@ static int RunBundleChangelogHuman(const fs::path &InRepoRoot,
         std::string Affected = rpEntry->mAffected;
         if (Affected.size() > 40)
             Affected = Affected.substr(0, 37) + "...";
-        Table.AddRow({PhaseDisplay, rpEntry->mDate, ToString(rpEntry->mType),
+        Table.AddRow({std::to_string(StorageIndex), PhaseDisplay,
+                      rpEntry->mDate, ToString(rpEntry->mType),
                       ToString(rpEntry->mActor), Affected,
                       kColorDim + Change + kColorReset});
     }
@@ -265,15 +287,21 @@ RunBundleVerificationJson(const fs::path &InRepoRoot,
         return 1;
     }
 
+    // Capture the original storage index alongside each filtered entry
+    // — mirrors the changelog query contract (v0.95.0+). `verification
+    // set --index N` / `verification remove --index N` target the
+    // storage index in Bundle.mVerifications; the emitted `index` field
+    // here is that stable target regardless of filter.
     const int PhaseFilter = InOptions.mbHasScopeFilter
                                 ? std::atoi(InOptions.mScopeFilter.c_str())
                                 : -2;
-    std::vector<const FVerificationEntry *> Filtered;
-    for (const FVerificationEntry &Entry : Bundle.mVerifications)
+    std::vector<std::pair<size_t, const FVerificationEntry *>> Filtered;
+    for (size_t I = 0; I < Bundle.mVerifications.size(); ++I)
     {
+        const FVerificationEntry &Entry = Bundle.mVerifications[I];
         if (PhaseFilter != -2 && Entry.mPhase != PhaseFilter)
             continue;
-        Filtered.push_back(&Entry);
+        Filtered.emplace_back(I, &Entry);
     }
 
     const std::string UTC = GetUtcNow();
@@ -285,9 +313,11 @@ RunBundleVerificationJson(const fs::path &InRepoRoot,
     std::cout << "\"entries\":[";
     for (size_t I = 0; I < Filtered.size(); ++I)
     {
-        const FVerificationEntry &Entry = *Filtered[I];
+        const size_t StorageIndex = Filtered[I].first;
+        const FVerificationEntry &Entry = *Filtered[I].second;
         PrintJsonSep(I);
         std::cout << "{";
+        EmitJsonFieldSizeT("index", StorageIndex);
         if (Entry.mPhase < 0)
             std::cout << "\"phase\":null,";
         else
@@ -323,12 +353,13 @@ RunBundleVerificationHuman(const fs::path &InRepoRoot,
     const int VPhaseFilter = InOptions.mbHasScopeFilter
                                  ? std::atoi(InOptions.mScopeFilter.c_str())
                                  : -2;
-    std::vector<const FVerificationEntry *> Filtered;
-    for (const FVerificationEntry &Entry : Bundle.mVerifications)
+    std::vector<std::pair<size_t, const FVerificationEntry *>> Filtered;
+    for (size_t I = 0; I < Bundle.mVerifications.size(); ++I)
     {
+        const FVerificationEntry &Entry = Bundle.mVerifications[I];
         if (VPhaseFilter != -2 && Entry.mPhase != VPhaseFilter)
             continue;
-        Filtered.push_back(&Entry);
+        Filtered.emplace_back(I, &Entry);
     }
 
     std::cout << kColorBold << "Verification" << kColorReset
@@ -336,9 +367,11 @@ RunBundleVerificationHuman(const fs::path &InRepoRoot,
               << " count=" << Filtered.size() << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Phase", "Date", "Check", "Result", "Detail"};
-    for (const FVerificationEntry *rpEntry : Filtered)
+    Table.mHeaders = {"Idx", "Phase", "Date", "Check", "Result", "Detail"};
+    for (const std::pair<size_t, const FVerificationEntry *> &Row : Filtered)
     {
+        const size_t StorageIndex = Row.first;
+        const FVerificationEntry *rpEntry = Row.second;
         std::string Check = rpEntry->mCheck;
         if (Check.size() > 60)
             Check = Check.substr(0, 57) + "...";
@@ -347,9 +380,9 @@ RunBundleVerificationHuman(const fs::path &InRepoRoot,
             Detail = Detail.substr(0, 57) + "...";
         const std::string PhaseDisplay =
             rpEntry->mPhase < 0 ? "(topic)" : std::to_string(rpEntry->mPhase);
-        Table.AddRow({PhaseDisplay, rpEntry->mDate,
-                      kColorDim + Check + kColorReset, rpEntry->mResult,
-                      Detail});
+        Table.AddRow({std::to_string(StorageIndex), PhaseDisplay,
+                      rpEntry->mDate, kColorDim + Check + kColorReset,
+                      rpEntry->mResult, Detail});
     }
     Table.Print();
     return 0;
