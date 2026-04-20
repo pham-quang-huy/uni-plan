@@ -167,16 +167,21 @@ int DocWatchApp::Run()
 
             auto rightRow0 = PanelPlanDetail.Render(SelectedPlan);
 
-            auto rightPane = vbox({
-                rightRow0,
-                rightRow1,
-                rightRow2,
-                rightRow3,
-                hbox({
-                    rightRow4 | flex,
-                    rightRow5 | flex,
-                }),
-            });
+            // Focus mode drops the plan-detail header row so execution detail
+            // (phase / taxonomy / manifest / blockers) gets the vertical space.
+            Elements RightPaneRows;
+            if (!mbFocusMode)
+            {
+                RightPaneRows.push_back(rightRow0);
+            }
+            RightPaneRows.push_back(rightRow1);
+            RightPaneRows.push_back(rightRow2);
+            RightPaneRows.push_back(rightRow3);
+            RightPaneRows.push_back(hbox({
+                rightRow4 | flex,
+                rightRow5 | flex,
+            }));
+            auto rightPane = vbox(std::move(RightPaneRows));
 
             // ── Status bar ────────────────────────────────────────
             auto bar = PanelStatusBar.Render(
@@ -190,7 +195,6 @@ int DocWatchApp::Run()
                 mSnapshot.mSnapshotAtUTC + " ";
 
             // ── Layout (2/3/4-pane with schema and/or impl) ─────
-            Element MainContent;
             const bool bHasSchema = mbShowSchemaPane;
             const bool bHasImpl = mbShowImplPane;
             const int LeftWidth = (bHasSchema && bHasImpl) ? 50 : 80;
@@ -204,50 +208,29 @@ int DocWatchApp::Run()
                 PanelPBVerification.Render(SelectedPlan, mSelectedPhaseIndex),
             });
 
-            if (bHasSchema && bHasImpl)
+            // Compose horizontally. Focus mode drops the left overview pane;
+            // the schema / impl middle panes only appear when their own
+            // toggles (`s` / `i`) are on. Right pane is always present.
+            Elements MainRow;
+            if (!mbFocusMode)
             {
-                auto middlePane =
-                    PanelSchema.Render(SelectedPlan, mSelectedPhaseIndex);
-                MainContent = hbox({
-                    leftPane | size(WIDTH, EQUAL, LeftWidth),
-                    separator(),
-                    middlePane | size(WIDTH, EQUAL, 120),
-                    separator(),
-                    implPane | size(WIDTH, EQUAL, 60),
-                    separator(),
-                    rightPane | flex,
-                });
+                MainRow.push_back(leftPane | size(WIDTH, EQUAL, LeftWidth));
+                MainRow.push_back(separator());
             }
-            else if (bHasSchema)
+            if (bHasSchema)
             {
-                auto middlePane =
-                    PanelSchema.Render(SelectedPlan, mSelectedPhaseIndex);
-                MainContent = hbox({
-                    leftPane | size(WIDTH, EQUAL, LeftWidth),
-                    separator(),
-                    middlePane | size(WIDTH, EQUAL, 120),
-                    separator(),
-                    rightPane | flex,
-                });
+                MainRow.push_back(
+                    PanelSchema.Render(SelectedPlan, mSelectedPhaseIndex) |
+                    size(WIDTH, EQUAL, 120));
+                MainRow.push_back(separator());
             }
-            else if (bHasImpl)
+            if (bHasImpl)
             {
-                MainContent = hbox({
-                    leftPane | size(WIDTH, EQUAL, LeftWidth),
-                    separator(),
-                    implPane | size(WIDTH, EQUAL, 60),
-                    separator(),
-                    rightPane | flex,
-                });
+                MainRow.push_back(implPane | size(WIDTH, EQUAL, 60));
+                MainRow.push_back(separator());
             }
-            else
-            {
-                MainContent = hbox({
-                    leftPane | size(WIDTH, EQUAL, LeftWidth),
-                    separator(),
-                    rightPane | flex,
-                });
-            }
+            MainRow.push_back(rightPane | flex);
+            Element MainContent = hbox(std::move(MainRow));
 
             return vbox({
                        text(Title) | bold | hcenter | color(Color::Yellow),
@@ -557,6 +540,11 @@ int DocWatchApp::Run()
             if (InEvent == Event::Character('i'))
             {
                 mbShowImplPane = !mbShowImplPane;
+                return true;
+            }
+            if (InEvent == Event::Character('`'))
+            {
+                mbFocusMode = !mbFocusMode;
                 return true;
             }
             if (InEvent == Event::Character('r'))

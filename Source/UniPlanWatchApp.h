@@ -14,16 +14,17 @@ namespace UniPlan
 
 class DocWatchApp
 {
-public:
-    explicit DocWatchApp(const std::string& InRepoRoot, const DocConfig& InConfig);
+  public:
+    explicit DocWatchApp(const std::string &InRepoRoot,
+                         const DocConfig &InConfig);
     ~DocWatchApp();
 
-    DocWatchApp(const DocWatchApp&) = delete;
-    DocWatchApp& operator=(const DocWatchApp&) = delete;
+    DocWatchApp(const DocWatchApp &) = delete;
+    DocWatchApp &operator=(const DocWatchApp &) = delete;
 
     int Run();
 
-private:
+  private:
     void RequestStop();
     bool WaitForNextPoll();
 
@@ -45,11 +46,14 @@ private:
     int mSelectedLaneIndex = -1;
     bool mbShowSchemaPane = false;
     bool mbShowImplPane = false;
+    // Focus mode (toggled via `): hides the left overview pane and the plan
+    // detail row of the right pane to give execution detail more space.
+    bool mbFocusMode = false;
     int mFilePageIndex = 0;
     uint64_t mLastSignature = 0;
     std::atomic<bool> mbForceRefresh{false};
 };
 
-int RunDocWatch(const std::string& InRepoRoot, const DocConfig& InConfig);
+int RunDocWatch(const std::string &InRepoRoot, const DocConfig &InConfig);
 
 } // namespace UniPlan

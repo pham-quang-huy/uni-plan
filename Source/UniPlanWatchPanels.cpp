@@ -389,7 +389,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
     // gridbox layout — auto-aligns columns without Table's flex_shrink override
     std::vector<Elements> GridRows;
     GridRows.push_back(PadGridRow({
-        text("Phase") | bold | size(WIDTH, EQUAL, 14),
+        text("P") | bold | size(WIDTH, EQUAL, 3),
         text("Status") | bold | size(WIDTH, EQUAL, 14),
         text("Design") | bold | size(WIDTH, EQUAL, 16),
         text("Taxonomy") | bold | size(WIDTH, EQUAL, 30),
@@ -504,7 +504,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         }
 
         Elements RowCells = PadGridRow({
-            text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 14),
+            text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 3),
             ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 14),
             DesignCharsBar(Phase.mV4DesignChars) | size(WIDTH, EQUAL, 16),
             text(TaxSummary) | dim | size(WIDTH, EQUAL, 30),
