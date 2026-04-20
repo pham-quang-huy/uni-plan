@@ -126,10 +126,16 @@ After audit:
 ## Status Transitions
 
 ```
-not_started → in_progress → completed → closed (optional)
-                    ↓
-                 blocked (with explicit blocker reason)
+not_started ─┬─ in_progress ─┬─ completed → closed (optional)
+             │               │
+             │               └─ blocked ─┬─ in_progress (unblock)
+             │                           │
+             │                           └─ canceled (v0.89.0+)
+             │
+             └───────────────────────────── canceled (v0.89.0+)
 ```
+
+`canceled` covers superseded phases (migration aliases, renumbered scopes, work shipped elsewhere) — terminal-but-not-completed. Unlike `completed`, no `completed_at` is stamped. Use `uni-plan phase cancel --topic <T> --phase <N> --reason <text>`; gates reject `completed` and `canceled` as starting states.
 
 ## Build Verification
 

@@ -294,6 +294,141 @@ TEST_F(FBundleTestFixture, PhaseUnblockRejectsNotBlocked)
 }
 
 // ===================================================================
+// phase cancel (v0.89.0)
+// ===================================================================
+
+TEST_F(FBundleTestFixture, PhaseCancelHappyPathFromNotStarted)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "0", "--reason",
+         "Superseded by phases[21]", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["target"], "phases[0]");
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::Canceled);
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mBlockers,
+              "Superseded by phases[21]");
+    // Canceled phases do NOT stamp completed_at — the phase never
+    // actually finished.
+    EXPECT_TRUE(Bundle.mPhases[0].mLifecycle.mCompletedAt.empty());
+
+    // Auto-changelog should record the cancellation with reason.
+    ASSERT_FALSE(Bundle.mChangeLogs.empty());
+    bool bFoundCancelEntry = false;
+    for (const auto &Entry : Bundle.mChangeLogs)
+    {
+        if (Entry.mAffected == "phases[0]" &&
+            Entry.mChange.find("canceled") != std::string::npos &&
+            Entry.mChange.find("Superseded by phases[21]") !=
+                std::string::npos)
+        {
+            bFoundCancelEntry = true;
+        }
+    }
+    EXPECT_TRUE(bFoundCancelEntry)
+        << "auto-changelog must record the cancellation reason";
+}
+
+TEST_F(FBundleTestFixture, PhaseCancelHappyPathFromInProgress)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "0", "--reason", "Scope dropped",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::Canceled);
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mBlockers, "Scope dropped");
+}
+
+TEST_F(FBundleTestFixture, PhaseCancelHappyPathFromBlocked)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::Blocked);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "0", "--reason", "Blocker now permanent",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::Canceled);
+    // Reason replaces prior blocker text.
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mBlockers,
+              "Blocker now permanent");
+}
+
+TEST_F(FBundleTestFixture, PhaseCancelRejectsCompleted)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::Completed);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "0", "--reason", "Should fail",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("completed"), std::string::npos)
+        << "must explain why the cancel was refused";
+
+    // Phase still completed on disk — the refusal is atomic.
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::Completed);
+}
+
+TEST_F(FBundleTestFixture, PhaseCancelRejectsAlreadyCanceled)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    // First cancel: succeeds.
+    StartCapture();
+    const int Code1 = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "0", "--reason", "First", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code1, 0);
+
+    // Second cancel: rejected.
+    StartCapture();
+    const int Code2 = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "0", "--reason", "Second", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code2, 1);
+    EXPECT_NE(mCapturedStderr.find("already canceled"), std::string::npos);
+
+    // Reason on disk should still be "First" — second call did not mutate.
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mBlockers, "First");
+}
+
+// ===================================================================
 // phase progress
 // ===================================================================
 
@@ -423,7 +558,63 @@ TEST_F(FBundleTestFixture, TopicCompleteRejectsIncompletePhases)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
-    EXPECT_TRUE(mCapturedStderr.find("not completed") != std::string::npos);
+    EXPECT_TRUE(mCapturedStderr.find("not terminal") != std::string::npos);
+}
+
+// v0.89.0: canceled phases count as terminal for the topic-complete gate.
+TEST_F(FBundleTestFixture, TopicCompleteAcceptsCanceledPhases)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::Completed);
+    // Cancel phase 1 — reuse the happy path by first flipping to
+    // NotStarted then canceling (canceling from Completed is rejected
+    // by design).
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[1].mLifecycle.mStatus =
+        UniPlan::EExecutionStatus::NotStarted;
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int CancelCode = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "1", "--reason", "Scope moved",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(CancelCode, 0);
+
+    // The cancel cascade should have already auto-completed the topic —
+    // one Completed + one Canceled = all terminal with at least one
+    // shipped.
+    UniPlan::FTopicBundle Final;
+    ASSERT_TRUE(ReloadBundle("T", Final));
+    EXPECT_EQ(Final.mStatus, UniPlan::ETopicStatus::Completed)
+        << "phase cancel should auto-cascade topic to Completed when all "
+           "phases are terminal and at least one shipped";
+}
+
+// v0.89.0: all-canceled topic does NOT auto-cascade to Completed because
+// nothing was ever delivered. Caller must decide (topic complete / topic
+// block / reactivate).
+TEST_F(FBundleTestFixture, PhaseCancelDoesNotAutoCascadeAllCanceledTopic)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCancelCommand(
+        {"--topic", "T", "--phase", "0", "--reason", "Whole topic dropped",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    // Topic stays in_progress — nothing shipped, so auto-completion
+    // would be semantically wrong.
+    EXPECT_EQ(Bundle.mStatus, UniPlan::ETopicStatus::InProgress);
 }
 
 // ===================================================================

@@ -142,7 +142,7 @@ All skills live under `.claude/skills/` with `implicit_invocation: true`, so the
 | Family | Purpose | Representative commands |
 | --- | --- | --- |
 | `query` | Read-only inspection; JSON by default, `--human` for ANSI tables | `topic list / get / status`, `phase list / get / next / readiness / wave-status / drift`, `changelog`, `verification`, `timeline`, `blockers`, `validate` |
-| `semantic_lifecycle` | Gated state transitions — prefer these over raw `set` | `topic start / complete / block`, `phase start / complete / block / unblock / progress / complete-jobs`, `phase log`, `phase verify` |
+| `semantic_lifecycle` | Gated state transitions — prefer these over raw `set` | `topic start / complete / block`, `phase start / complete / block / unblock / cancel / progress / complete-jobs`, `phase log`, `phase verify` |
 | `raw_mutation` | Low-level field setters; use only when a semantic command doesn't fit | `topic set`, `phase set / add / remove / normalize`, `job set`, `task set`, `changelog add / set / remove`, `verification add / set`, `lane set / add`, `testing add / set`, `manifest add / remove / list / set` |
 | `utility` | Operational commands | `cache info / clear / config`, `watch` |
 
@@ -324,6 +324,25 @@ uni-plan phase unblock --topic A --phase N
 ```
 
 `phase block --reason` **replaces** `mBlockers`; it does not append. `phase unblock` flips `blocked → in_progress`, clears `mBlockers`, and auto-logs the transition. Typed dependencies are not touched by block/unblock — they remain as historical record.
+
+### cancel_superseded_phase
+
+> Target: a phase entry exists as a migration alias — the actual work shipped under a different phase number (renumbering, scope moved). The phase should be terminal but NOT counted as completed, because it itself never executed.
+
+```bash
+# Flip the phase to canceled; reason is required and replaces any prior mBlockers
+uni-plan phase cancel --topic A --phase 18 \
+  --reason "Superseded by phases[21] (migration alias from earlier numbering)"
+```
+
+Gates (v0.89.0+):
+- Phase must not already be `completed` — historical corrections of completed work must go through raw `phase set --status canceled` with awareness of the audit trail that implies.
+- Phase must not already be `canceled` — idempotency-as-error, so the caller knows the state.
+
+Effects:
+- `mStatus` flips to `canceled`. `completed_at` is NOT stamped (the phase never finished).
+- Reason text is recorded in `mBlockers` (reused as "why it's no longer active") and in an auto-changelog entry.
+- Canceled phases are skipped by `phase drift`, `phase_status_lane_alignment`, `file_manifest_required_for_code_phases`, and `no_hollow_completed_phase`. They still count toward the topic's terminal-phase gate, so a topic with every phase in `{completed, canceled}` satisfies `topic status=completed`.
 
 ### backfill_missing_phase_timestamps
 

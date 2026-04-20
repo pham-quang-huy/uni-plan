@@ -1139,6 +1139,8 @@ void EvalFileManifestRequiredForCodePhases(
             const FPhaseRecord &Phase = B.mPhases[PI];
             if (!IsCodeBearingPhase(Phase))
                 continue;
+            if (Phase.mLifecycle.mStatus == EExecutionStatus::Canceled)
+                continue; // superseded phase; never executed, never will
             if (!Phase.mFileManifest.empty())
                 continue;
             if (Phase.mbNoFileManifest)

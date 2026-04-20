@@ -266,6 +266,26 @@ Regression tests in `Test/UniPlanTestOptionParsing.cpp` round-trip shell-hostile
 
 The inline `--<field> <text>` path is unchanged — short, shell-safe values still work via the original form. Both paths are interchangeable when the content is clean; the file form is mandatory only when the content could contain `$`, `` ` ``, `"`, `\`, or newlines.
 
+### v0.89.0 behavior note — `phase cancel` semantic command + `EExecutionStatus::Canceled`
+
+The phase-level execution-status enum gains a 5th value — `Canceled` — covering the "superseded / won't-execute" terminal state for phases that will not run (migration aliases from earlier phase numbering, scope moved to another phase, renumbered). Prior to v0.89.0, `EExecutionStatus` was intentionally closed at 4 values (`NotStarted`, `InProgress`, `Completed`, `Blocked`) and `canceled` was topic-level only. Real-world usage surfaced migration-alias phases that genuinely needed a terminal-but-not-completed state at the phase level — a state where the phase is "done" from the topic's perspective (no pending work, no drift warnings) but was never actually executed (`completed_at` stays empty). The `--status <s>` help text already advertised `canceled` for phases; that text turned out to be stale/wrong (`ExecutionStatusFromString` rejected `"canceled"`), and this release makes it honest.
+
+Along with the enum change:
+
+- **New semantic wrapper `phase cancel`** joins `phase start / complete / block / unblock` as a gated lifecycle transition. Required flag: `--reason <text>` (also accepts `--reason-file <path>`). Gates: the phase must not already be `completed` (completed work cannot be retroactively canceled via the semantic command — use raw `phase set --status canceled` if a historical correction is truly required, accepting the audit trail that implies) and must not already be `canceled` (idempotency-as-error).
+- **Effects**: `mStatus` → `Canceled`. Reason text → `mBlockers` (reused as "why it's no longer active"). Auto-changelog records `"Phase N canceled: <reason>"`. Does NOT stamp `completed_at` because the phase never actually finished.
+- **Raw `phase set --status canceled`** also works now that the enum accepts the value. The semantic wrapper is preferred because it enforces the gates and mandates a reason.
+- **Downstream consumers** that exhaustively match on `EExecutionStatus` were updated: `UniPlanValidation.cpp` (`topic_phase_status_alignment`), `UniPlanCommandValidate.cpp` (status distribution — now emits a `canceled` count), `UniPlanWatchSnapshot.h/.cpp` (new `mPhaseCanceled` field). `phase_status_lane_alignment` and `phase drift` only fire for `NotStarted` / `Completed`, so canceled phases are automatically skipped — the right behavior. `file_manifest_required_for_code_phases` now skips canceled phases (they won't execute, so no manifest is ever coming) and `no_hollow_completed_phase` is unchanged (only fires on `Completed`).
+- **Topic alignment**: `topic_phase_status_alignment` now considers a topic "terminal" when every phase is in `{Completed, Canceled}`, not just `Completed`. This matches the semantic expectation: a topic whose every phase is either shipped or superseded has no pending work. Canceled phases still count as "progressed past not_started" for the strict `topic=not_started` invariant.
+- **Help-text cleanup**: the stale `dropped` token (never a valid `EExecutionStatus` or `ETopicStatus` value) was removed from every `--status` help blurb it appeared in across `phase set`, `phase list`, `topic list`, `topic set`, `job set`, `task set`, `lane set`. The help-surface now reflects the enum truth.
+
+Use `phase cancel` when:
+
+- A phase entry is a migration alias whose work shipped under a different phase number (renumbering, scope moved).
+- A phase will definitively not execute and should be terminal-but-not-completed (e.g. a prerequisite was dropped, the scope was merged into another phase).
+
+Do NOT use `phase cancel` as a shortcut for "I gave up on this phase" when the work was partially done and the progress has value — in that case, prefer `phase complete` (if the delivered scope is itself shippable) or leave the phase `blocked` with a reason pointing at the unblocker.
+
 ## documentation_rules
 
 ### V4 bundle model

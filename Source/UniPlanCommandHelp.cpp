@@ -50,7 +50,7 @@ static const FSubcommandHelpEntry kTopicSubs[] = {
         "List every topic in the repo with status + phase count.\n\n",
         nullptr, // required
         "  --status <filter>       Filter by status: not_started|in_progress|\n"
-        "                          completed|blocked|dropped|canceled|all\n"
+        "                          completed|blocked|canceled|all\n"
         "                          (default: all)\n",
         nullptr, // modes
         "uni-plan-topic-list-v1",
@@ -95,7 +95,7 @@ static const FSubcommandHelpEntry kTopicSubs[] = {
         "Required:\n"
         "  --topic <T>             Topic key\n\n",
         "  --status <s>            Set status: not_started | in_progress |\n"
-        "                          completed | blocked | dropped | canceled\n"
+        "                          completed | blocked | canceled\n"
         "  --next-actions <text>   Set next actions\n"
         "  --summary <text>        Set plan summary\n"
         "  --goals <text>          Set plan goals\n"
@@ -204,7 +204,8 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "Required:\n"
         "  --topic <T>             Topic key\n\n",
         "  --status <filter>       Filter by status: not_started|in_progress|\n"
-        "                          completed|blocked|dropped|canceled|all\n",
+        "                          completed|blocked|canceled|all\n"
+        "                          (canceled available for phases v0.89.0+)\n",
         nullptr,
         "uni-plan-phase-list-v2",
         "Examples:\n"
@@ -271,7 +272,7 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  --topic <T>             Topic key\n"
         "  --phase <N>             Phase index\n\n",
         "  --status <s>            not_started|in_progress|completed|blocked|\n"
-        "                          dropped|canceled\n"
+        "                          canceled\n"
         "  --context <text>        Agent continuation prompt\n"
         "  --done <text>           Completed-work summary\n"
         "  --done-clear            Clear done field (revert stale prose)\n"
@@ -470,6 +471,34 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         false,
     },
     {
+        "cancel",
+        "Usage: uni-plan phase cancel --topic <T> --phase <N>\n"
+        "                             --reason <text> [--reason-file <path>]\n"
+        "\n",
+        "Transition phase to canceled — a terminal-but-not-completed state\n"
+        "for superseded / won't-execute phases (migration aliases,\n"
+        "renumbered scopes, scope moved to another phase). Records the\n"
+        "reason in the auto-changelog and in the phase's blockers field\n"
+        "(reused as \"why it's no longer active\"). Does not stamp\n"
+        "completed_at because the phase never actually finished. Gate:\n"
+        "phase must not already be completed or canceled; use raw\n"
+        "`phase set --status canceled` if a historical correction of a\n"
+        "completed phase is truly required.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --reason <text>         Why the phase is canceled (e.g.\n"
+        "                          'superseded by phases[21]')\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan phase cancel --topic X --phase 18 \\\n"
+        "                        --reason 'superseded by phases[21]'\n",
+        true,
+        false,
+    },
+    {
         "progress",
         "Usage: uni-plan phase progress --topic <T> --phase <N>\n"
         "                               --done <text> --remaining <text>\n"
@@ -646,7 +675,7 @@ static const FSubcommandHelpEntry kJobSubs[] = {
         "  --phase <N>             Phase index\n"
         "  --job <J>               Job index within the phase\n\n",
         "  --status <s>            not_started|in_progress|completed|blocked|\n"
-        "                          dropped|canceled\n"
+        "                          canceled\n"
         "  --scope <text>          Job scope\n"
         "  --output <text>         Job output\n"
         "  --exit-criteria <text>  Job exit criteria\n"
@@ -675,7 +704,7 @@ static const FSubcommandHelpEntry kTaskSubs[] = {
         "  --job <J>               Job index\n"
         "  --task <K>              Task index\n\n",
         "  --status <s>            not_started|in_progress|completed|blocked|\n"
-        "                          dropped|canceled\n"
+        "                          canceled\n"
         "  --evidence <text>       Completion proof (commit SHA, URL, log)\n"
         "  --notes <text>          Agent working notes\n",
         nullptr,
@@ -858,7 +887,7 @@ static const FSubcommandHelpEntry kLaneSubs[] = {
         "  --phase <N>             Phase index\n"
         "  --lane <L>              Lane index within the phase\n\n",
         "  --status <s>            not_started|in_progress|completed|blocked|\n"
-        "                          dropped|canceled\n"
+        "                          canceled\n"
         "  --scope <text>          Lane scope\n"
         "  --exit-criteria <text>  Lane exit criteria\n",
         nullptr,
@@ -1179,6 +1208,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan phase complete --topic <T> --phase <N> --done <t>\n"
         "  uni-plan phase block --topic <T> --phase <N> --reason <t>\n"
         "  uni-plan phase unblock --topic <T> --phase <N>\n"
+        "  uni-plan phase cancel --topic <T> --phase <N> --reason <t>\n"
         "  uni-plan phase progress --topic <T> --phase <N>\n"
         "                         --done <t> --remaining <t>\n"
         "  uni-plan phase complete-jobs --topic <T> --phase <N>\n"
@@ -1202,6 +1232,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  complete         Transition to completed + stamp completed_at\n"
         "  block            Transition to blocked\n"
         "  unblock          Transition from blocked back to in_progress\n"
+        "  cancel           Transition to canceled (superseded / terminal)\n"
         "  progress         Update done + remaining atomically\n"
         "  complete-jobs    Bulk-mark every job as completed\n"
         "  log              Append a changelog entry scoped to the phase\n"

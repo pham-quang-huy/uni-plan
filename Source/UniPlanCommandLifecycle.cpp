@@ -203,21 +203,30 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
         Bundle.mVerifications.push_back(std::move(VEntry));
     }
 
-    // Auto-cascade: if ALL phases completed → topic completed
-    bool AllCompleted = true;
+    // Auto-cascade: topic completes when every phase is terminal
+    // (`Completed` or `Canceled` v0.89.0+) AND at least one phase actually
+    // shipped (`Completed`). A topic where every phase was canceled
+    // delivered nothing, so the caller should decide — don't auto-flip
+    // that case to Completed.
+    bool AllTerminal = true;
+    bool AnyCompleted = false;
     for (const auto &P : Bundle.mPhases)
     {
-        if (P.mLifecycle.mStatus != EExecutionStatus::Completed)
+        const EExecutionStatus S = P.mLifecycle.mStatus;
+        if (S != EExecutionStatus::Completed &&
+            S != EExecutionStatus::Canceled)
         {
-            AllCompleted = false;
+            AllTerminal = false;
             break;
         }
+        if (S == EExecutionStatus::Completed)
+            AnyCompleted = true;
     }
-    if (AllCompleted)
+    if (AllTerminal && AnyCompleted)
     {
         Bundle.mStatus = ETopicStatus::Completed;
         AppendAutoChangelog(Bundle, kTargetPlan,
-                            "Topic auto-completed (all phases done)");
+                            "Topic auto-completed (all phases terminal)");
     }
 
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
@@ -337,6 +346,110 @@ int RunPhaseUnblockCommand(const std::vector<std::string> &InArgs,
     AppendAutoChangelog(Bundle, Target,
                         "Phase " + std::to_string(Options.mPhaseIndex) +
                             " unblocked");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// phase cancel — mark a phase as superseded / won't-execute. Terminal but
+// not completed. Reason is REQUIRED and recorded both in the blockers
+// field (why the phase is no longer active) and in the auto-changelog.
+// Gates: phase must not already be completed or canceled.
+// ---------------------------------------------------------------------------
+
+int RunPhaseCancelCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot)
+{
+    const FPhaseCancelOptions Options = ParsePhaseCancelOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string Target = MakePhaseTarget(Options.mPhaseIndex);
+
+    // Gates: completed phases cannot be canceled (use `phase set` for
+    // historical corrections, with the audit trail that implies). Already-
+    // canceled phases are a no-op we treat as a usage error for
+    // idempotency discipline — the caller should know the state.
+    if (Phase.mLifecycle.mStatus == EExecutionStatus::Completed)
+    {
+        std::cerr << "Cannot cancel phase " << Options.mPhaseIndex
+                  << ": status is completed. Completed work cannot be "
+                     "retroactively canceled via the semantic command "
+                     "(use raw `phase set --status canceled` with full "
+                     "audit-trail awareness if this is truly required)\n";
+        return 1;
+    }
+    if (Phase.mLifecycle.mStatus == EExecutionStatus::Canceled)
+    {
+        std::cerr << "Cannot cancel phase " << Options.mPhaseIndex
+                  << ": status is already canceled\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+
+    const std::string FromStatus = ToString(Phase.mLifecycle.mStatus);
+    Changes.push_back({"status", {FromStatus, "canceled"}});
+    Phase.mLifecycle.mStatus = EExecutionStatus::Canceled;
+    Changes.push_back(
+        {"blockers", {Phase.mLifecycle.mBlockers, Options.mReason}});
+    Phase.mLifecycle.mBlockers = Options.mReason;
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Phase " + std::to_string(Options.mPhaseIndex) +
+                            " canceled: " + Options.mReason);
+
+    // Auto-cascade: mirrors `phase complete` — if canceling this phase
+    // leaves every phase terminal (Completed/Canceled) AND at least one
+    // shipped, flip the topic to Completed so it exits the "active" pane
+    // in watch / `topic list --status in_progress`. If every phase is
+    // Canceled (nothing ever shipped), leave the topic alone — the
+    // caller should decide whether to `topic complete`, `topic block`,
+    // or reactivate a phase.
+    bool AllTerminal = true;
+    bool AnyCompleted = false;
+    for (const auto &P : Bundle.mPhases)
+    {
+        const EExecutionStatus S = P.mLifecycle.mStatus;
+        if (S != EExecutionStatus::Completed &&
+            S != EExecutionStatus::Canceled)
+        {
+            AllTerminal = false;
+            break;
+        }
+        if (S == EExecutionStatus::Completed)
+            AnyCompleted = true;
+    }
+    if (AllTerminal && AnyCompleted &&
+        Bundle.mStatus != ETopicStatus::Completed)
+    {
+        Bundle.mStatus = ETopicStatus::Completed;
+        AppendAutoChangelog(Bundle, kTargetPlan,
+                            "Topic auto-completed (all phases terminal)");
+    }
+
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
@@ -539,22 +652,29 @@ int RunTopicCompleteCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
-    // Gate: all phases must be completed
-    std::vector<int> NonCompleted;
+    // Gate: every phase must be terminal (Completed or Canceled v0.89.0+).
+    // Canceled phases count as terminal because they will never execute —
+    // the topic has no pending work. A topic where every phase is canceled
+    // (no Completed) still passes this gate; if that's semantically wrong
+    // the caller can `topic block` or reactivate a phase instead.
+    std::vector<int> NonTerminal;
     for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
     {
-        if (Bundle.mPhases[I].mLifecycle.mStatus != EExecutionStatus::Completed)
-            NonCompleted.push_back(static_cast<int>(I));
+        const EExecutionStatus S = Bundle.mPhases[I].mLifecycle.mStatus;
+        if (S != EExecutionStatus::Completed &&
+            S != EExecutionStatus::Canceled)
+            NonTerminal.push_back(static_cast<int>(I));
     }
-    if (!NonCompleted.empty())
+    if (!NonTerminal.empty())
     {
         std::cerr << "Cannot complete topic " << Options.mTopic << ": "
-                  << NonCompleted.size() << " phase(s) not completed: [";
-        for (size_t I = 0; I < NonCompleted.size(); ++I)
+                  << NonTerminal.size()
+                  << " phase(s) not terminal (completed or canceled): [";
+        for (size_t I = 0; I < NonTerminal.size(); ++I)
         {
             if (I > 0)
                 std::cerr << ", ";
-            std::cerr << NonCompleted[I];
+            std::cerr << NonTerminal[I];
         }
         std::cerr << "]\n";
         return 1;

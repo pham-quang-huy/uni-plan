@@ -170,7 +170,8 @@ inline EPairState PairStateFromString(const std::string &InValue)
 
 // ---------------------------------------------------------------------------
 // EExecutionStatus — execution entity status (phase/lane/job/task).
-// Closed set: no Unknown, no Canceled (those are topic-level concerns).
+// Canceled covers the "superseded / won't execute" terminal state (migration
+// aliases, renumbered scopes) without implying the work was completed.
 // ---------------------------------------------------------------------------
 
 enum class EExecutionStatus : uint8_t
@@ -178,7 +179,8 @@ enum class EExecutionStatus : uint8_t
     NotStarted,
     InProgress,
     Completed,
-    Blocked
+    Blocked,
+    Canceled
 };
 
 inline const char *ToString(EExecutionStatus InValue)
@@ -193,6 +195,8 @@ inline const char *ToString(EExecutionStatus InValue)
         return "completed";
     case EExecutionStatus::Blocked:
         return "blocked";
+    case EExecutionStatus::Canceled:
+        return "canceled";
     }
     return "not_started";
 }
@@ -218,6 +222,11 @@ inline bool ExecutionStatusFromString(const std::string &InValue,
     if (InValue == "blocked")
     {
         OutValue = EExecutionStatus::Blocked;
+        return true;
+    }
+    if (InValue == "canceled")
+    {
+        OutValue = EExecutionStatus::Canceled;
         return true;
     }
     return false;

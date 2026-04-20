@@ -75,6 +75,7 @@ struct FWatchPlanSummary
     int mPhaseInProgress = 0;
     int mPhaseNotStarted = 0;
     int mPhaseBlocked = 0;
+    int mPhaseCanceled = 0;
     std::vector<PhaseItem> mPhases;
     std::vector<BlockerItem> mBlockers;
     std::vector<std::string> mSummaryLines;

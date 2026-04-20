@@ -1437,6 +1437,38 @@ ParsePhaseUnblockOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FPhaseCancelOptions
+ParsePhaseCancelOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseCancelOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--reason",
+                                         "--reason-file", Options.mReason))
+            continue;
+        throw UsageError("Unknown option for phase cancel: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase cancel requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("phase cancel requires --phase");
+    if (Options.mReason.empty())
+        throw UsageError("phase cancel requires --reason");
+    return Options;
+}
+
 FPhaseProgressOptions
 ParsePhaseProgressOptions(const std::vector<std::string> &InTokens)
 {

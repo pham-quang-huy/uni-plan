@@ -521,6 +521,7 @@ EvalTopicPhaseStatusAlignment(const std::vector<FTopicBundle> &InBundles,
 
         int CompletedCount = 0;
         int NotStartedCount = 0;
+        int CanceledCount = 0;
         int StartedCount = 0; // in_progress / completed / blocked
         for (const FPhaseRecord &P : B.mPhases)
         {
@@ -537,18 +538,29 @@ EvalTopicPhaseStatusAlignment(const std::vector<FTopicBundle> &InBundles,
             case EExecutionStatus::Blocked:
                 ++StartedCount;
                 break;
+            case EExecutionStatus::Canceled:
+                // Canceled phases are terminal-but-not-completed. They
+                // satisfy the "topic=completed" gate (no pending work)
+                // without inflating CompletedCount, and they are a
+                // transition past not_started so they block the strict
+                // "topic=not_started" invariant.
+                ++CanceledCount;
+                break;
             }
         }
         const int Total = static_cast<int>(B.mPhases.size());
+        const int TerminalCount = CompletedCount + CanceledCount;
 
-        if (TopicStatus == ETopicStatus::Completed && CompletedCount != Total)
+        if (TopicStatus == ETopicStatus::Completed && TerminalCount != Total)
         {
             Fail(OutChecks, "topic_phase_status_alignment",
                  EValidationSeverity::Warning, B.mTopicKey, "status",
                  "topic status=completed but " +
-                     std::to_string(Total - CompletedCount) + " of " +
-                     std::to_string(Total) + " phase(s) are not completed (" +
-                     std::to_string(NotStartedCount) + " not_started)");
+                     std::to_string(Total - TerminalCount) + " of " +
+                     std::to_string(Total) +
+                     " phase(s) are not terminal (" +
+                     std::to_string(NotStartedCount) + " not_started, " +
+                     std::to_string(CanceledCount) + " canceled)");
         }
         else if (TopicStatus == ETopicStatus::NotStarted &&
                  NotStartedCount != Total)

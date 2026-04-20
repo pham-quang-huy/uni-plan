@@ -307,6 +307,13 @@ struct FPhaseUnblockOptions : BaseOptions
     int mPhaseIndex = -1;
 };
 
+struct FPhaseCancelOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mReason;
+};
+
 struct FPhaseProgressOptions : BaseOptions
 {
     std::string mTopic;

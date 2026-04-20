@@ -112,6 +112,8 @@ FPhaseBlockOptions
 ParsePhaseBlockOptions(const std::vector<std::string> &InTokens);
 FPhaseUnblockOptions
 ParsePhaseUnblockOptions(const std::vector<std::string> &InTokens);
+FPhaseCancelOptions
+ParsePhaseCancelOptions(const std::vector<std::string> &InTokens);
 FPhaseProgressOptions
 ParsePhaseProgressOptions(const std::vector<std::string> &InTokens);
 FPhaseCompleteJobsOptions
@@ -330,6 +332,8 @@ int RunPhaseBlockCommand(const std::vector<std::string> &InArgs,
                          const std::string &InRepoRoot);
 int RunPhaseUnblockCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot);
+int RunPhaseCancelCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
 int RunPhaseProgressCommand(const std::vector<std::string> &InArgs,
                             const std::string &InRepoRoot);
 int RunPhaseCompleteJobsCommand(const std::vector<std::string> &InArgs,

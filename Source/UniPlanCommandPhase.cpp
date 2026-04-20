@@ -786,6 +786,8 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseBlockCommand(SubArgs, InRepoRoot);
     if (Sub == "unblock")
         return RunPhaseUnblockCommand(SubArgs, InRepoRoot);
+    if (Sub == "cancel")
+        return RunPhaseCancelCommand(SubArgs, InRepoRoot);
     if (Sub == "progress")
         return RunPhaseProgressCommand(SubArgs, InRepoRoot);
     if (Sub == "complete-jobs")
@@ -805,8 +807,9 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
 
     throw UsageError("Unknown phase subcommand: " + Sub +
                      ". Expected: list, get, set, add, remove, start, "
-                     "complete, block, unblock, progress, complete-jobs, "
-                     "log, verify, next, readiness, wave-status, drift");
+                     "complete, block, unblock, cancel, progress, "
+                     "complete-jobs, log, verify, next, readiness, "
+                     "wave-status, drift");
 }
 
 } // namespace UniPlan

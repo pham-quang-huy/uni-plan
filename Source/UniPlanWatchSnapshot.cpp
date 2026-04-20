@@ -67,6 +67,9 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
         case EExecutionStatus::Blocked:
             Summary.mPhaseBlocked++;
             break;
+        case EExecutionStatus::Canceled:
+            Summary.mPhaseCanceled++;
+            break;
         }
     }
 

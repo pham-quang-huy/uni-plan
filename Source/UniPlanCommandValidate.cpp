@@ -211,7 +211,8 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
         EmitJsonFieldSizeT("phase_count", B.mPhases.size());
 
         // Status distribution
-        size_t cNotStarted = 0, cInProgress = 0, cCompleted = 0, cBlocked = 0;
+        size_t cNotStarted = 0, cInProgress = 0, cCompleted = 0, cBlocked = 0,
+               cCanceled = 0;
         for (const FPhaseRecord &P : B.mPhases)
         {
             switch (P.mLifecycle.mStatus)
@@ -228,13 +229,17 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
             case EExecutionStatus::Blocked:
                 ++cBlocked;
                 break;
+            case EExecutionStatus::Canceled:
+                ++cCanceled;
+                break;
             }
         }
         std::cout << "\"status_distribution\":{";
         EmitJsonFieldSizeT("not_started", cNotStarted);
         EmitJsonFieldSizeT("in_progress", cInProgress);
         EmitJsonFieldSizeT("completed", cCompleted);
-        EmitJsonFieldSizeT("blocked", cBlocked, false);
+        EmitJsonFieldSizeT("blocked", cBlocked);
+        EmitJsonFieldSizeT("canceled", cCanceled, false);
         std::cout << "},";
 
         // Per-phase stats
