@@ -115,11 +115,10 @@ static int DispatchLaneCommand(const std::vector<std::string> &InArgs,
 static int DispatchTestingCommand(const std::vector<std::string> &InArgs,
                                   const std::string &InCwd)
 {
-    static const FCommandEntry kSubs[] = {
-        {"add", &RunTestingAddCommand},
-        {"set", &RunTestingSetCommand},
-        {"remove", &RunTestingRemoveCommand},
-        {"list", &RunTestingListCommand}};
+    static const FCommandEntry kSubs[] = {{"add", &RunTestingAddCommand},
+                                          {"set", &RunTestingSetCommand},
+                                          {"remove", &RunTestingRemoveCommand},
+                                          {"list", &RunTestingListCommand}};
     return DispatchSubcommand("testing", InArgs, InCwd, kSubs,
                               "add, set, remove, list");
 }
@@ -239,6 +238,8 @@ void PrintUsage(std::ostream &Out)
            "[--result <text>]\n";
     Out << "\n";
     Out << "Raw mutation commands:\n";
+    Out << "  uni-plan topic add --topic <T> --title <text> "
+           "[--summary <t>] [--goals <t>] ...\n";
     Out << "  uni-plan topic set --topic <T> "
            "[--status <s>] [--summary <t>] "
            "[--goals <t>] ...\n";

@@ -19,6 +19,85 @@ namespace UniPlan
 // ===================================================================
 
 // ---------------------------------------------------------------------------
+// topic add (v0.94.0) — create a brand-new .Plan.json bundle file.
+//
+// Creates Docs/Plans/<TopicKey>.Plan.json with an empty-phases shell.
+// Follow-up `phase add` seeds Phase 0 (required — fresh bundles fail the
+// `phases_present` ErrorMajor evaluator until at least one phase exists).
+// Closes the CLI gap where `upl-plan-creation` skill previously told
+// authors to hand-write the JSON, violating CLAUDE.md's hard_rule_cli_only.
+// ---------------------------------------------------------------------------
+
+int RunTopicAddCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot)
+{
+    const FTopicAddOptions Options = ParseTopicAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    // Collision check: refuse if any bundle with this topic key already
+    // exists anywhere under the repo root (recursive discovery, same as
+    // TryLoadBundleByTopic uses for every read).
+    {
+        FTopicBundle Existing;
+        std::string LoadError;
+        if (TryLoadBundleByTopic(RepoRoot, Options.mTopic, Existing, LoadError))
+        {
+            std::cerr << "Bundle already exists at " << Existing.mBundlePath
+                      << "\n";
+            return 1;
+        }
+    }
+
+    FTopicBundle Bundle;
+    Bundle.mTopicKey = Options.mTopic;
+    Bundle.mStatus = Options.opStatus.value_or(ETopicStatus::NotStarted);
+    Bundle.mMetadata.mTitle = Options.mTitle;
+    Bundle.mMetadata.mSummary = Options.mSummary;
+    Bundle.mMetadata.mGoals = Options.mGoals;
+    Bundle.mMetadata.mNonGoals = Options.mNonGoals;
+    Bundle.mMetadata.mProblemStatement = Options.mProblemStatement;
+    Bundle.mMetadata.mBaselineAudit = Options.mBaselineAudit;
+    Bundle.mMetadata.mExecutionStrategy = Options.mExecutionStrategy;
+    Bundle.mMetadata.mLockedDecisions = Options.mLockedDecisions;
+    Bundle.mMetadata.mSourceReferences = Options.mSourceReferences;
+
+    // Canonical write location. No --out override by design — see plan
+    // decision 3 (non-canonical bundles complicate discovery + INDEX.md).
+    const fs::path PlansDir = RepoRoot / "Docs" / "Plans";
+    std::error_code DirError;
+    fs::create_directories(PlansDir, DirError);
+    if (DirError)
+    {
+        std::cerr << "Failed to create directory " << PlansDir.string() << ": "
+                  << DirError.message() << "\n";
+        return 1;
+    }
+    Bundle.mBundlePath = (PlansDir / (Options.mTopic + ".Plan.json")).string();
+
+    // Auto-changelog against kTargetPlan because AppendAutoChangelog maps
+    // any non-"phases[N]" target to mPhase=-1 (topic-scoped). Matches the
+    // phase add precedent in RunPhaseAddCommand below.
+    AppendAutoChangelog(Bundle, kTargetPlan,
+                        "Topic " + Options.mTopic +
+                            " created: " + Options.mTitle);
+
+    std::string WriteError;
+    if (WriteBundleBack(Bundle, RepoRoot, WriteError) != 0)
+    {
+        std::cerr << WriteError << "\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back({"topic", {"(new)", Options.mTopic}});
+    Changes.push_back({"title", {"(new)", Options.mTitle}});
+    EmitMutationJson(Options.mTopic, kTargetTopic, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // topic set
 // ---------------------------------------------------------------------------
 
@@ -394,28 +473,26 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
     if (Options.mbFileManifestSkipReasonClear &&
         !Phase.mFileManifestSkipReason.empty())
     {
-        Changes.push_back({"file_manifest_skip_reason",
-                           {Phase.mFileManifestSkipReason, ""}});
+        Changes.push_back(
+            {"file_manifest_skip_reason", {Phase.mFileManifestSkipReason, ""}});
         Phase.mFileManifestSkipReason.clear();
         if (Desc.empty())
             Desc = Target + " cleared file_manifest_skip_reason";
     }
     else if (!Options.mFileManifestSkipReason.empty() &&
-             Phase.mFileManifestSkipReason !=
-                 Options.mFileManifestSkipReason)
+             Phase.mFileManifestSkipReason != Options.mFileManifestSkipReason)
     {
-        Changes.push_back({"file_manifest_skip_reason",
-                           {Phase.mFileManifestSkipReason,
-                            Options.mFileManifestSkipReason}});
+        Changes.push_back(
+            {"file_manifest_skip_reason",
+             {Phase.mFileManifestSkipReason, Options.mFileManifestSkipReason}});
         Phase.mFileManifestSkipReason = Options.mFileManifestSkipReason;
         if (Desc.empty())
             Desc = Target + " set file_manifest_skip_reason";
     }
     if (Phase.mbNoFileManifest && Phase.mFileManifestSkipReason.empty())
     {
-        std::cerr
-            << "phase set: --no-file-manifest=true requires a non-empty "
-               "--no-file-manifest-reason (set both in the same call)\n";
+        std::cerr << "phase set: --no-file-manifest=true requires a non-empty "
+                     "--no-file-manifest-reason (set both in the same call)\n";
         return 1;
     }
     if (!Phase.mbNoFileManifest && !Phase.mFileManifestSkipReason.empty())

@@ -23,8 +23,7 @@ void EmitValidationCommandsJson(
 void EmitDependenciesJson(const char *InName,
                           const std::vector<FBundleReference> &InDependencies,
                           bool InTrailingComma = true);
-void EmitRisksJson(const char *InName,
-                   const std::vector<FRiskEntry> &InRisks,
+void EmitRisksJson(const char *InName, const std::vector<FRiskEntry> &InRisks,
                    bool InTrailingComma = true);
 void EmitNextActionsJson(const char *InName,
                          const std::vector<FNextActionEntry> &InActions,
@@ -101,6 +100,7 @@ FBundleBlockersOptions
 ParseBundleBlockersOptions(const std::vector<std::string> &InTokens);
 FBundleValidateOptions
 ParseBundleValidateOptions(const std::vector<std::string> &InTokens);
+FTopicAddOptions ParseTopicAddOptions(const std::vector<std::string> &InTokens);
 FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens);
 FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens);
 FPhaseAddOptions ParsePhaseAddOptions(const std::vector<std::string> &InTokens);
@@ -295,9 +295,8 @@ void EvalNextActionHasEntries(const std::vector<FTopicBundle> &InBundles,
 void EvalAcceptanceCriterionWellformed(
     const std::vector<FTopicBundle> &InBundles,
     std::vector<ValidateCheck> &OutChecks);
-void EvalAcceptanceCriterionIdUnique(
-    const std::vector<FTopicBundle> &InBundles,
-    std::vector<ValidateCheck> &OutChecks);
+void EvalAcceptanceCriterionIdUnique(const std::vector<FTopicBundle> &InBundles,
+                                     std::vector<ValidateCheck> &OutChecks);
 void EvalAcceptanceCriteriaHasEntries(
     const std::vector<FTopicBundle> &InBundles,
     std::vector<ValidateCheck> &OutChecks);
@@ -366,6 +365,8 @@ int RunBundleBlockersCommand(const std::vector<std::string> &InArgs,
                              const std::string &InRepoRoot);
 int RunBundleValidateCommand(const std::vector<std::string> &InArgs,
                              const std::string &InRepoRoot);
+int RunTopicAddCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
 int RunTopicSetCommand(const std::vector<std::string> &InArgs,
                        const std::string &InRepoRoot);
 int RunPhaseSetCommand(const std::vector<std::string> &InArgs,

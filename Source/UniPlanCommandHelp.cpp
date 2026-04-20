@@ -87,6 +87,45 @@ static const FSubcommandHelpEntry kTopicSubs[] = {
         true,
     },
     {
+        "add",
+        "Usage: uni-plan topic add --topic <T> --title <text> [options]\n\n",
+        "Create a brand-new .Plan.json topic bundle (v0.94.0+). Writes the\n"
+        "file to Docs/Plans/<TopicKey>.Plan.json with an empty-phases\n"
+        "shell; follow up with `uni-plan phase add` to seed Phase 0.\n"
+        "The fresh bundle fails `uni-plan validate` with `phases_present`\n"
+        "until the first phase exists — that's the expected governance\n"
+        "signal that a topic is incomplete.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key — PascalCase; must match\n"
+        "                          ^[A-Z][A-Za-z0-9]*$ (parse-time regex)\n"
+        "  --title <text>          Descriptive title (also --title-file)\n\n",
+        "  --status <s>            Initial status (default not_started):\n"
+        "                          not_started | in_progress | completed |\n"
+        "                          blocked | canceled\n"
+        "  --summary <text>        Plan summary (also --summary-file)\n"
+        "  --goals <text>          Plan goals (also --goals-file)\n"
+        "  --non-goals <text>      Plan non-goals (also --non-goals-file)\n"
+        "  --problem-statement     Problem statement (also -file)\n"
+        "  --baseline-audit        Baseline audit (also -file)\n"
+        "  --execution-strategy    Execution strategy (also -file)\n"
+        "  --locked-decisions      Locked decisions (also -file)\n"
+        "  --source-references     Source references (also -file)\n"
+        "\n"
+        "  Exit codes:\n"
+        "    0   bundle created\n"
+        "    1   collision — bundle already exists at a discoverable path\n"
+        "    2   usage error (bad key regex, missing --topic / --title)\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan topic add --topic NewFeature --title \"add caching\"\n"
+        "  uni-plan topic add --topic X --title \"X\" \\\n"
+        "                     --summary-file summary.txt \\\n"
+        "                     --goals-file goals.txt\n",
+        /*mbIsProseCommand*/ true,
+        /*mbSupportsHuman*/ false,
+    },
+    {
         "set",
         "Usage: uni-plan topic set --topic <T> [options]\n\n",
         "Mutate topic-level fields. Appends an auto-changelog entry for\n"
@@ -712,7 +751,8 @@ static const FSubcommandHelpEntry kJobSubs[] = {
         "Examples:\n"
         "  uni-plan job add --topic X --phase 0 --scope 'Bootstrap'\n"
         "  uni-plan job add --topic X --phase 0 --lane 1 --wave 0 \\\n"
-        "                   --scope 'Render path' --exit-criteria 'PR merged'\n",
+        "                   --scope 'Render path' --exit-criteria 'PR "
+        "merged'\n",
         true,
         false,
     },
@@ -851,7 +891,8 @@ static const FSubcommandHelpEntry kTaskSubs[] = {
         "Required:\n"
         "  --topic <T>             Topic key\n\n",
         "  --phase <N>             Filter to a specific phase\n"
-        "  --job <J>               Filter to a specific job (requires --phase)\n",
+        "  --job <J>               Filter to a specific job (requires "
+        "--phase)\n",
         nullptr,
         "uni-plan-list-v1",
         "Examples:\n"
@@ -1309,7 +1350,8 @@ static const FSubcommandHelpEntry kManifestSubs[] = {
         "uni-plan-manifest-suggest-v1",
         "Examples:\n"
         "  uni-plan manifest suggest --topic X --phase 3            # dry-run\n"
-        "  uni-plan manifest suggest --topic X --phase 3 --apply    # backfill\n",
+        "  uni-plan manifest suggest --topic X --phase 3 --apply    # "
+        "backfill\n",
         false,
         false,
     },
@@ -1637,6 +1679,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "Usage:\n"
         "  uni-plan topic list [--status <filter>]\n"
         "  uni-plan topic get --topic <T> [--sections <csv>]\n"
+        "  uni-plan topic add --topic <T> --title <text> [options]\n"
         "  uni-plan topic set --topic <T> [options]\n"
         "  uni-plan topic normalize --topic <T> [--dry-run]\n"
         "  uni-plan topic start --topic <T>\n"
@@ -1647,6 +1690,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         nullptr, // mRequiredOptions
         "  list          List topics with status + phase counts\n"
         "  get           Retrieve one topic's metadata + phase summary\n"
+        "  add           Create a new .Plan.json bundle (v0.94.0+)\n"
         "  set           Mutate topic-level fields\n"
         "  normalize     Replace dashes/quotes/NBSP in topic prose "
         "(v0.93.0+)\n"
@@ -2061,8 +2105,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan acceptance-criterion set --topic X --index 0 "
         "--status met\n",
         kAcceptanceCriterionSubs,
-        sizeof(kAcceptanceCriterionSubs) /
-            sizeof(kAcceptanceCriterionSubs[0]),
+        sizeof(kAcceptanceCriterionSubs) / sizeof(kAcceptanceCriterionSubs[0]),
     },
     {
         "cache",

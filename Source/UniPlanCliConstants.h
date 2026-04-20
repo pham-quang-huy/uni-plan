@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.93.0";
+static constexpr const char *kCliVersion = "0.94.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -57,6 +57,12 @@ static constexpr const char *kSectionContentSchema =
 // ---------------------------------------------------------------------------
 
 static constexpr const char *kTargetPlan = "plan";
+// kTargetTopic — emitted by `uni-plan topic add` (v0.94.0) in the mutation
+// envelope's `target` field. Distinguishes "topic bundle created" from
+// "plan-level field mutated on an existing bundle" (which emits kTargetPlan).
+// Mutation consumers parsing `target` as a structural path should recognize
+// this as an opaque bundle-creation token, not an indexed reference.
+static constexpr const char *kTargetTopic = "topic";
 static constexpr const char *kTargetChangelogs = "changelogs";
 static constexpr const char *kTargetVerifications = "verifications";
 

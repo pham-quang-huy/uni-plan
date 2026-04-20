@@ -286,6 +286,25 @@ Use `phase cancel` when:
 
 Do NOT use `phase cancel` as a shortcut for "I gave up on this phase" when the work was partially done and the progress has value — in that case, prefer `phase complete` (if the delivered scope is itself shippable) or leave the phase `blocked` with a reason pointing at the unblocker.
 
+### v0.94.0 behavior note — `topic add` command + `topic_key_matches_filename` validator
+
+Closes the "cannot create a bundle via CLI" gap. Before v0.94.0, `upl-plan-creation` instructed authors to hand-write the JSON file from a template, which directly contradicted the `hard_rule_cli_only` at the top of this file. The v0.93.0 "CRUD Symmetry" release added `add/remove` to every entity group except topic; this release closes that asymmetry.
+
+- **New command `uni-plan topic add --topic <PascalCase> --title <text> [prose flags]`**. Instantiates `Docs/Plans/<TopicKey>.Plan.json` as an empty-phases shell through the typed serializer, auto-stamps one creation changelog (`target=topic`, `uni-plan-mutation-v1` envelope with new `kTargetTopic` token), and refuses collisions. Every metadata prose field has the v0.76.0 `--<field>-file` sibling (`--summary-file`, `--goals-file`, `--non-goals-file`, `--problem-statement-file`, `--baseline-audit-file`, `--execution-strategy-file`, `--locked-decisions-file`, `--source-references-file`).
+- **Topic-key regex enforced at parse time**: `^[A-Z][A-Za-z0-9]*$` → `UsageError` (exit 2). `topic add` is the only command that *chooses* a new key, so it's the correct single enforcement point. Existing bundles keep whatever key they have.
+- **Empty-phases shell by design**: the fresh bundle fails `uni-plan validate` with `phases_present` ErrorMajor until the first `phase add` seeds Phase 0 — that's the expected governance signal, not a bug. `topic add` does not auto-seed because CRUD symmetry (`job add` doesn't seed a task, `lane add` doesn't seed a job); each creator adds exactly one entity.
+- **Exit codes**: `0` bundle created; `1` runtime error (collision — bundle already discoverable under repo root, or directory-write failure); `2` UsageError (bad key regex, missing `--topic`/`--title`).
+- **Mutation target `kTargetTopic = "topic"`**: new constant alongside `kTargetPlan`. Mutation consumers parsing `target` as a structural path should treat `"topic"` as an opaque bundle-creation token, distinct from `"plan"` (plan-level field mutation) or `"phases[N]"` (indexed structural path).
+- **New `topic_key_matches_filename` validator (ErrorMinor)**: defense-in-depth for legacy / hand-edited bundles where `"topic": "Bar"` drifted into `Foo.Plan.json`. Parse-time regex prevents new drift; the evaluator catches inherited drift. Structural tier count 15 → 16; total evaluators 34 → 35.
+- **Skill rewrite**: `.claude/skills/upl-plan-creation/SKILL.md` Step 2 now calls `uni-plan topic add` instead of prescribing a hand-written JSON template.
+
+Use `uni-plan topic add` when:
+
+- Creating a new plan topic from scratch (replaces every prior skill that asked you to hand-write `Docs/Plans/<Key>.Plan.json`).
+- Migrating a topic from a different governance system into a V4 bundle — create the shell first, then layer phases via `phase add`, then layer design material via `phase set`.
+
+The hand-written-JSON path is no longer supported. Any agent flow that still reads a skill telling it to `json.load` or author `.Plan.json` directly is referencing stale documentation — update the skill.
+
 ## documentation_rules
 
 ### V4 bundle model
@@ -313,7 +332,7 @@ Bundle entity references should use `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n
 
 ## schema_files
 
-The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 34 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
+The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan lint` for markdown filename pattern checking. V4 bundle validation uses `ValidateAllBundles()` with 35 evaluator functions against `FTopicBundle` data — it does not read Schema.md files.
 
 | Schema | Purpose (lint only) |
 |--------|---------------------|
@@ -326,9 +345,9 @@ The 10 schema files in `Schemas/` are V3 legacy artifacts used only by `uni-plan
 
 ## validation_checks
 
-`uni-plan validate [--topic <T>] [--strict] [--human]` runs 34 evaluator functions against every `.Plan.json` bundle. Checks are split into three tiers:
+`uni-plan validate [--topic <T>] [--strict] [--human]` runs 35 evaluator functions against every `.Plan.json` bundle. Checks are split into three tiers:
 
-### Structural checks (ErrorMajor + ErrorMinor) — 15 checks
+### Structural checks (ErrorMajor + ErrorMinor) — 16 checks
 
 Required fields, index references, enum values, timestamp format, and referential integrity. `ErrorMajor` always flips `valid=false`; `ErrorMinor` only does so under `--strict`.
 
@@ -336,6 +355,7 @@ Required fields, index references, enum values, timestamp format, and referentia
 |---|---|---|
 | `required_fields` | ErrorMajor | topic key + title |
 | `phases_present` | ErrorMajor | ≥1 phase |
+| `topic_key_matches_filename` | ErrorMinor | disk filename stem equals topic key (v0.94.0+) |
 | `phase_scope` | ErrorMinor | per-phase scope non-empty |
 | `job_required_fields` / `task_required_fields` / `lane_required_fields` | ErrorMinor | required child fields |
 | `job_lane_ref` | ErrorMinor | job→lane index valid |
@@ -434,7 +454,7 @@ uni-plan <cmd> <sub> --help                      # per-subcommand detail
 
 | Group | Subcommands | Purpose |
 |---|---|---|
-| `topic` | list, get, set, start, complete, block, status | Topic-level queries + lifecycle |
+| `topic` | list, get, add, set, normalize, start, complete, block, status | Topic-level queries + lifecycle (v0.94.0+ adds `add` — create a new bundle) |
 | `phase` | list, get, set, add, remove, normalize, start, complete, block, unblock, progress, complete-jobs, log, verify, next, readiness, wave-status, drift | Phase queries + lifecycle |
 | `job` | set | Mutate a job |
 | `task` | set | Mutate a task |

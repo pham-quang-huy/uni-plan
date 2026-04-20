@@ -82,7 +82,7 @@ struct FPhaseGetOptions : BaseOptions
     int mPhaseIndex = -1;
     std::vector<int> mPhaseIndices; // --phases <csv>: batch mode (v0.84.0)
                                     // mutually exclusive with --phase <N>
-    bool mbBrief = false;     // --brief: compact view for session resume
+    bool mbBrief = false;           // --brief: compact view for session resume
     bool mbExecution = false; // --execution: jobs/tasks/lanes + structural
                               //              dependencies / validation_commands
     bool mbDesign = false;    // --design: only the fields that feed
@@ -129,6 +129,28 @@ struct FBundleValidateOptions : BaseOptions
 // ---------------------------------------------------------------------------
 // Mutation option structs
 // ---------------------------------------------------------------------------
+
+// FTopicAddOptions — v0.94.0 CLI gap closure for `uni-plan topic add`. Creates
+// a brand-new .Plan.json bundle file at Docs/Plans/<TopicKey>.Plan.json. Every
+// prose field has a --<field>-file sibling parsed via
+// TryConsumeStringOrFileOption (see v0.76.0 notes). The fresh bundle is an
+// empty-phases shell — `phase add` is called next to seed Phase 0. Symmetric
+// with `phase add`, `risk add`, etc.
+struct FTopicAddOptions : BaseOptions
+{
+    std::string mTopic; // required — must match ^[A-Z][A-Za-z0-9]*$
+    std::string mTitle; // required — enforced by required_fields evaluator
+    std::optional<ETopicStatus> opStatus; // unset -> NotStarted
+    // Metadata prose fields (mirror FTopicSetOptions; all optional)
+    std::string mSummary;
+    std::string mGoals;
+    std::string mNonGoals;
+    std::string mProblemStatement;
+    std::string mBaselineAudit;
+    std::string mExecutionStrategy;
+    std::string mLockedDecisions;
+    std::string mSourceReferences;
+};
 
 struct FTopicSetOptions : BaseOptions
 {

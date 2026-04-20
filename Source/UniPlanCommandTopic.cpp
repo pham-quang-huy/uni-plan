@@ -87,8 +87,7 @@ void EmitDependenciesJson(const char *InName,
 // Emits an empty array when the input vector is empty (never null).
 // ---------------------------------------------------------------------------
 
-void EmitRisksJson(const char *InName,
-                   const std::vector<FRiskEntry> &InRisks,
+void EmitRisksJson(const char *InName, const std::vector<FRiskEntry> &InRisks,
                    bool InTrailingComma)
 {
     std::cout << "\"" << InName << "\":[";
@@ -409,8 +408,8 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
         RiskTable.Print();
         std::cout << "\n";
     }
-    if (Wants("acceptance_criteria")
-        && !Bundle.mMetadata.mAcceptanceCriteria.empty())
+    if (Wants("acceptance_criteria") &&
+        !Bundle.mMetadata.mAcceptanceCriteria.empty())
     {
         std::cout << kColorBold << "Acceptance Criteria" << kColorReset << "\n";
         HumanTable ACTable;
@@ -539,6 +538,11 @@ int RunTopicCommand(const std::vector<std::string> &InArgs,
         return RunTopicGetJson(RepoRoot, Options);
     }
 
+    if (Sub == "add")
+    {
+        return RunTopicAddCommand(SubArgs, InRepoRoot);
+    }
+
     if (Sub == "set")
     {
         return RunTopicSetCommand(SubArgs, InRepoRoot);
@@ -558,8 +562,8 @@ int RunTopicCommand(const std::vector<std::string> &InArgs,
         return RunTopicStatusCommand(SubArgs, InRepoRoot);
 
     throw UsageError("Unknown topic subcommand: " + Sub +
-                     ". Expected: list, get, set, normalize, start, complete, "
-                     "block, status");
+                     ". Expected: list, get, add, set, normalize, start, "
+                     "complete, block, status");
 }
 
 // ---------------------------------------------------------------------------
@@ -660,10 +664,9 @@ int RunTopicNormalizeCommand(const std::vector<std::string> &InArgs,
         return 0;
     }
 
-    const std::string Desc = "Normalized topic prose (" +
-                             std::to_string(TotalReplacements) +
-                             " replacements in " +
-                             std::to_string(FieldsChanged) + " fields)";
+    const std::string Desc =
+        "Normalized topic prose (" + std::to_string(TotalReplacements) +
+        " replacements in " + std::to_string(FieldsChanged) + " fields)";
     AppendAutoChangelog(Bundle, kTargetPlan, Desc);
 
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)

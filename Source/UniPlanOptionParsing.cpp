@@ -5,6 +5,7 @@
 #include "UniPlanTypes.h"
 
 #include <algorithm>
+#include <regex>
 #include <set>
 #include <string>
 #include <vector>
@@ -136,8 +137,7 @@ TryConsumeStringOrFileOption(const std::vector<std::string> &InTokens,
 // Returns true iff the token at InOutIndex matched either flag.
 inline bool
 TryConsumeValidationCommandsProse(const std::vector<std::string> &InTokens,
-                                  size_t &InOutIndex,
-                                  bool &OutbValidationClear,
+                                  size_t &InOutIndex, bool &OutbValidationClear,
                                   std::vector<FValidationCommand> &OutAdd)
 {
     const std::string &Token = InTokens[InOutIndex];
@@ -149,7 +149,8 @@ TryConsumeValidationCommandsProse(const std::vector<std::string> &InTokens,
     std::string Raw;
     if (bIsString)
     {
-        Raw = ConsumeValuedOption(InTokens, InOutIndex, "--validation-commands");
+        Raw =
+            ConsumeValuedOption(InTokens, InOutIndex, "--validation-commands");
     }
     else
     {
@@ -385,13 +386,20 @@ ParseTopicListOptions(const std::vector<std::string> &InTokens)
 // sectionable. Unknown names throw UsageError at parse time.
 static bool IsValidTopicSection(const std::string &InName)
 {
-    static const char *const kValid[] = {
-        "summary",           "goals",          "non_goals",
-        "risks",             "acceptance_criteria",
-        "problem_statement", "validation_commands",
-        "baseline_audit",    "execution_strategy",
-        "locked_decisions",  "source_references",
-        "dependencies",      "next_actions",   "phases"};
+    static const char *const kValid[] = {"summary",
+                                         "goals",
+                                         "non_goals",
+                                         "risks",
+                                         "acceptance_criteria",
+                                         "problem_statement",
+                                         "validation_commands",
+                                         "baseline_audit",
+                                         "execution_strategy",
+                                         "locked_decisions",
+                                         "source_references",
+                                         "dependencies",
+                                         "next_actions",
+                                         "phases"};
     for (const char *V : kValid)
     {
         if (InName == V)
@@ -720,6 +728,83 @@ static void ParseRequiredIntIndex(const std::vector<std::string> &InRemaining,
     OutIndex = std::atoi(Val.c_str());
 }
 
+FTopicAddOptions ParseTopicAddOptions(const std::vector<std::string> &InTokens)
+{
+    FTopicAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--title",
+                                         "--title-file", Options.mTitle))
+            continue;
+        if (Token == "--status")
+        {
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            ETopicStatus Value;
+            if (!TopicStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid topic status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked, canceled)");
+            }
+            Options.opStatus = Value;
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--summary",
+                                         "--summary-file", Options.mSummary))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--goals",
+                                         "--goals-file", Options.mGoals))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--non-goals",
+                                         "--non-goals-file", Options.mNonGoals))
+            continue;
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--problem-statement",
+                "--problem-statement-file", Options.mProblemStatement))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--baseline-audit",
+                                         "--baseline-audit-file",
+                                         Options.mBaselineAudit))
+            continue;
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--execution-strategy",
+                "--execution-strategy-file", Options.mExecutionStrategy))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--locked-decisions",
+                                         "--locked-decisions-file",
+                                         Options.mLockedDecisions))
+            continue;
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--source-references",
+                "--source-references-file", Options.mSourceReferences))
+            continue;
+        throw UsageError("Unknown option for topic add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("topic add requires --topic");
+    if (Options.mTitle.empty())
+        throw UsageError("topic add requires --title");
+    // Parse-time PascalCase enforcement. `topic add` is the only command that
+    // chooses a new topic key, so this is the correct single enforcement
+    // point. Matches the convention documented in every skill + NAMING.md.
+    static const std::regex kTopicKeyRegex(R"(^[A-Z][A-Za-z0-9]*$)");
+    if (!std::regex_match(Options.mTopic, kTopicKeyRegex))
+    {
+        throw UsageError("Invalid topic key '" + Options.mTopic +
+                         "' (must match ^[A-Z][A-Za-z0-9]*$; use PascalCase)");
+    }
+    return Options;
+}
+
 FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
 {
     FTopicSetOptions Options;
@@ -775,8 +860,8 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
                 "`uni-plan next-action add --topic <T> --statement <text>` "
                 "instead (see `uni-plan next-action --help`)");
         }
-        if (Token == "--acceptance-criteria"
-            || Token == "--acceptance-criteria-file")
+        if (Token == "--acceptance-criteria" ||
+            Token == "--acceptance-criteria-file")
         {
             throw UsageError(
                 "--acceptance-criteria / --acceptance-criteria-file removed "
@@ -1039,15 +1124,14 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             else if (Raw == "false")
                 Options.opNoFileManifest = false;
             else
-                throw UsageError(
-                    "Invalid --no-file-manifest value: '" + Raw +
-                    "', expected 'true' or 'false'");
+                throw UsageError("Invalid --no-file-manifest value: '" + Raw +
+                                 "', expected 'true' or 'false'");
             continue;
         }
-        if (TryConsumeStringOrFileOption(
-                Remaining, Index, "--no-file-manifest-reason",
-                "--no-file-manifest-reason-file",
-                Options.mFileManifestSkipReason))
+        if (TryConsumeStringOrFileOption(Remaining, Index,
+                                         "--no-file-manifest-reason",
+                                         "--no-file-manifest-reason-file",
+                                         Options.mFileManifestSkipReason))
             continue;
         if (Token == "--no-file-manifest-reason-clear")
         {
@@ -2970,13 +3054,13 @@ static void ParseRiskSeverityFlag(const std::vector<std::string> &InTokens,
                                   size_t &InOutIndex,
                                   std::optional<ERiskSeverity> &OutOp)
 {
-    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--severity");
+    const std::string Raw =
+        ConsumeValuedOption(InTokens, InOutIndex, "--severity");
     ERiskSeverity Value = ERiskSeverity::Medium;
     if (!RiskSeverityFromString(Raw, Value))
     {
-        throw UsageError(
-            "Invalid risk severity '" + Raw +
-            "' (expected: low, medium, high, critical)");
+        throw UsageError("Invalid risk severity '" + Raw +
+                         "' (expected: low, medium, high, critical)");
     }
     OutOp = Value;
 }
@@ -2985,13 +3069,13 @@ static void ParseRiskStatusFlag(const std::vector<std::string> &InTokens,
                                 size_t &InOutIndex,
                                 std::optional<ERiskStatus> &OutOp)
 {
-    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--status");
+    const std::string Raw =
+        ConsumeValuedOption(InTokens, InOutIndex, "--status");
     ERiskStatus Value = ERiskStatus::Open;
     if (!RiskStatusFromString(Raw, Value))
     {
-        throw UsageError(
-            "Invalid risk status '" + Raw +
-            "' (expected: open, mitigated, accepted, closed)");
+        throw UsageError("Invalid risk status '" + Raw +
+                         "' (expected: open, mitigated, accepted, closed)");
     }
     OutOp = Value;
 }
@@ -3000,7 +3084,8 @@ static void ParseActionStatusFlag(const std::vector<std::string> &InTokens,
                                   size_t &InOutIndex,
                                   std::optional<EActionStatus> &OutOp)
 {
-    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--status");
+    const std::string Raw =
+        ConsumeValuedOption(InTokens, InOutIndex, "--status");
     EActionStatus Value = EActionStatus::Pending;
     if (!ActionStatusFromString(Raw, Value))
     {
@@ -3011,18 +3096,17 @@ static void ParseActionStatusFlag(const std::vector<std::string> &InTokens,
     OutOp = Value;
 }
 
-static void
-ParseCriterionStatusFlag(const std::vector<std::string> &InTokens,
-                         size_t &InOutIndex,
-                         std::optional<ECriterionStatus> &OutOp)
+static void ParseCriterionStatusFlag(const std::vector<std::string> &InTokens,
+                                     size_t &InOutIndex,
+                                     std::optional<ECriterionStatus> &OutOp)
 {
-    const std::string Raw = ConsumeValuedOption(InTokens, InOutIndex, "--status");
+    const std::string Raw =
+        ConsumeValuedOption(InTokens, InOutIndex, "--status");
     ECriterionStatus Value = ECriterionStatus::NotMet;
     if (!CriterionStatusFromString(Raw, Value))
     {
-        throw UsageError(
-            "Invalid criterion status '" + Raw +
-            "' (expected: not_met, met, partial, not_applicable)");
+        throw UsageError("Invalid criterion status '" + Raw +
+                         "' (expected: not_met, met, partial, not_applicable)");
     }
     OutOp = Value;
 }
@@ -3043,7 +3127,8 @@ FRiskAddOptions ParseRiskAddOptions(const std::vector<std::string> &InTokens)
                                          Options.mId))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
-                                         "--statement-file", Options.mStatement))
+                                         "--statement-file",
+                                         Options.mStatement))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--mitigation",
                                          "--mitigation-file",
@@ -3092,7 +3177,8 @@ FRiskSetOptions ParseRiskSetOptions(const std::vector<std::string> &InTokens)
                                          Options.mId))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
-                                         "--statement-file", Options.mStatement))
+                                         "--statement-file",
+                                         Options.mStatement))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--mitigation",
                                          "--mitigation-file",
@@ -3207,10 +3293,12 @@ ParseNextActionAddOptions(const std::vector<std::string> &InTokens)
             continue;
         }
         if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
-                                         "--statement-file", Options.mStatement))
+                                         "--statement-file",
+                                         Options.mStatement))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--rationale",
-                                         "--rationale-file", Options.mRationale))
+                                         "--rationale-file",
+                                         Options.mRationale))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--owner",
                                          "--owner-file", Options.mOwner))
@@ -3269,10 +3357,12 @@ ParseNextActionSetOptions(const std::vector<std::string> &InTokens)
             continue;
         }
         if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
-                                         "--statement-file", Options.mStatement))
+                                         "--statement-file",
+                                         Options.mStatement))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--rationale",
-                                         "--rationale-file", Options.mRationale))
+                                         "--rationale-file",
+                                         Options.mRationale))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--owner",
                                          "--owner-file", Options.mOwner))
@@ -3347,8 +3437,8 @@ ParseNextActionListOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
-FAcceptanceCriterionAddOptions ParseAcceptanceCriterionAddOptions(
-    const std::vector<std::string> &InTokens)
+FAcceptanceCriterionAddOptions
+ParseAcceptanceCriterionAddOptions(const std::vector<std::string> &InTokens)
 {
     FAcceptanceCriterionAddOptions Options;
     const auto Remaining = ConsumeCommonOptions(InTokens, Options);
@@ -3364,7 +3454,8 @@ FAcceptanceCriterionAddOptions ParseAcceptanceCriterionAddOptions(
                                          Options.mId))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
-                                         "--statement-file", Options.mStatement))
+                                         "--statement-file",
+                                         Options.mStatement))
             continue;
         if (Token == "--status")
         {
@@ -3387,8 +3478,8 @@ FAcceptanceCriterionAddOptions ParseAcceptanceCriterionAddOptions(
     return Options;
 }
 
-FAcceptanceCriterionSetOptions ParseAcceptanceCriterionSetOptions(
-    const std::vector<std::string> &InTokens)
+FAcceptanceCriterionSetOptions
+ParseAcceptanceCriterionSetOptions(const std::vector<std::string> &InTokens)
 {
     FAcceptanceCriterionSetOptions Options;
     const auto Remaining = ConsumeCommonOptions(InTokens, Options);
@@ -3409,7 +3500,8 @@ FAcceptanceCriterionSetOptions ParseAcceptanceCriterionSetOptions(
                                          Options.mId))
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--statement",
-                                         "--statement-file", Options.mStatement))
+                                         "--statement-file",
+                                         Options.mStatement))
             continue;
         if (Token == "--status")
         {
@@ -3432,8 +3524,8 @@ FAcceptanceCriterionSetOptions ParseAcceptanceCriterionSetOptions(
     return Options;
 }
 
-FAcceptanceCriterionRemoveOptions ParseAcceptanceCriterionRemoveOptions(
-    const std::vector<std::string> &InTokens)
+FAcceptanceCriterionRemoveOptions
+ParseAcceptanceCriterionRemoveOptions(const std::vector<std::string> &InTokens)
 {
     FAcceptanceCriterionRemoveOptions Options;
     const auto Remaining = ConsumeCommonOptions(InTokens, Options);
@@ -3460,8 +3552,8 @@ FAcceptanceCriterionRemoveOptions ParseAcceptanceCriterionRemoveOptions(
     return Options;
 }
 
-FAcceptanceCriterionListOptions ParseAcceptanceCriterionListOptions(
-    const std::vector<std::string> &InTokens)
+FAcceptanceCriterionListOptions
+ParseAcceptanceCriterionListOptions(const std::vector<std::string> &InTokens)
 {
     FAcceptanceCriterionListOptions Options;
     const auto Remaining = ConsumeCommonOptions(InTokens, Options);

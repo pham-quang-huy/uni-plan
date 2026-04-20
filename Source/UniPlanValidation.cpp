@@ -133,6 +133,36 @@ static void EvalRequiredFields(const std::vector<FTopicBundle> &InBundles,
 // 2. topic_status_enum — now enforced by ETopicStatus enum at
 // deserialization time. No runtime check needed.
 
+// 2a. topic_key_matches_filename (ErrorMinor, v0.94.0)
+//
+// The disk filename (<Key>.Plan.json) is the primary discovery key for
+// TryLoadBundleByTopic, and every intra-bundle cross-reference indexes on
+// mTopicKey. If these drift, a bundle silently fails to be found by its
+// key and any `--topic Foo` lookup hits whichever file happens to match.
+// No existing evaluator caught this class pre-v0.94.0. Parse-time regex
+// in `uni-plan topic add` prevents new drift; this evaluator is the
+// defense-in-depth check for legacy / hand-edited bundles.
+static void
+EvalTopicKeyMatchesFilename(const std::vector<FTopicBundle> &InBundles,
+                            std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        if (B.mTopicKey.empty() || B.mBundlePath.empty())
+            continue; // separate evaluators cover these missing-field cases
+        const std::string Filename =
+            fs::path(B.mBundlePath).filename().string();
+        const std::string Expected = B.mTopicKey + ".Plan.json";
+        if (Filename != Expected)
+        {
+            Fail(OutChecks, "topic_key_matches_filename",
+                 EValidationSeverity::ErrorMinor, B.mTopicKey, "topic",
+                 "filename '" + Filename + "' does not match topic key '" +
+                     B.mTopicKey + "' (expected '" + Expected + "')");
+        }
+    }
+}
+
 // 3. phases_present (ErrorMajor)
 static void EvalPhasesPresent(const std::vector<FTopicBundle> &InBundles,
                               std::vector<ValidateCheck> &OutChecks)
@@ -557,8 +587,7 @@ EvalTopicPhaseStatusAlignment(const std::vector<FTopicBundle> &InBundles,
                  EValidationSeverity::Warning, B.mTopicKey, "status",
                  "topic status=completed but " +
                      std::to_string(Total - TerminalCount) + " of " +
-                     std::to_string(Total) +
-                     " phase(s) are not terminal (" +
+                     std::to_string(Total) + " phase(s) are not terminal (" +
                      std::to_string(NotStartedCount) + " not_started, " +
                      std::to_string(CanceledCount) + " canceled)");
         }
@@ -925,6 +954,7 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
     EvalPhasesPresent(InBundles, Checks);
 
     // ErrorMinor
+    EvalTopicKeyMatchesFilename(InBundles, Checks);
     EvalPhaseScope(InBundles, Checks);
     // phase_status_enum removed in v0.69.0 - EExecutionStatus is enforced
     // at JSON parse time; the separate post-parse check was a no-op.

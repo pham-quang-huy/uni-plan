@@ -110,6 +110,17 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {},
            {0, 2}},
           {"status", kTopicListSchema, {}, {"human"}, {}, {0, 2}},
+          // v0.94.0 — create a brand-new .Plan.json bundle file.
+          {"add",
+           kMutationSchema,
+           {"topic", "title"},
+           {"status", "summary", "goals", "non-goals", "problem-statement",
+            "baseline-audit", "execution-strategy", "locked-decisions",
+            "source-references"},
+           {"title", "summary", "goals", "non-goals", "problem-statement",
+            "baseline-audit", "execution-strategy", "locked-decisions",
+            "source-references"},
+           {0, 1, 2}},
           {"set",
            kMutationSchema,
            {"topic"},
@@ -121,12 +132,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
             "validation-commands", "baseline-audit", "execution-strategy",
             "locked-decisions", "source-references"},
            {0, 1, 2}},
-          {"normalize",
-           kMutationSchema,
-           {"topic"},
-           {"dry-run"},
-           {},
-           {0, 1, 2}},
+          {"normalize", kMutationSchema, {"topic"}, {"dry-run"}, {}, {0, 1, 2}},
           {"start", kMutationSchema, {"topic"}, {}, {}, {0, 1, 2}},
           {"complete",
            kMutationSchema,
@@ -164,20 +170,34 @@ static std::vector<FCatalogVerb> BuildCatalog()
           {"set",
            kMutationSchema,
            {"topic", "phase"},
-           {"status",         "context",
-            "done",           "done-clear",
-            "remaining",      "remaining-clear",
-            "blockers",       "blockers-clear",
-            "scope",          "output",
-            "investigation",  "code-entity-contract",
-            "code-snippets",  "best-practices",
-            "multi-platforming", "readiness-gate",
-            "handoff",        "validation-commands",
-            "validation-clear", "validation-add",
-            "dependency-clear", "dependency-add",
-            "started-at",     "completed-at",
-            "origin",         "no-file-manifest",
-            "no-file-manifest-reason", "no-file-manifest-reason-clear"},
+           {"status",
+            "context",
+            "done",
+            "done-clear",
+            "remaining",
+            "remaining-clear",
+            "blockers",
+            "blockers-clear",
+            "scope",
+            "output",
+            "investigation",
+            "code-entity-contract",
+            "code-snippets",
+            "best-practices",
+            "multi-platforming",
+            "readiness-gate",
+            "handoff",
+            "validation-commands",
+            "validation-clear",
+            "validation-add",
+            "dependency-clear",
+            "dependency-add",
+            "started-at",
+            "completed-at",
+            "origin",
+            "no-file-manifest",
+            "no-file-manifest-reason",
+            "no-file-manifest-reason-clear"},
            {"context", "done", "remaining", "blockers", "scope", "output",
             "investigation", "code-entity-contract", "code-snippets",
             "best-practices", "multi-platforming", "readiness-gate", "handoff",
@@ -214,12 +234,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {"reason"},
            {"reason"},
            {0, 1, 2}},
-          {"unblock",
-           kMutationSchema,
-           {"topic", "phase"},
-           {},
-           {},
-           {0, 1, 2}},
+          {"unblock", kMutationSchema, {"topic", "phase"}, {}, {}, {0, 1, 2}},
           {"cancel",
            kMutationSchema,
            {"topic", "phase"},
@@ -273,35 +288,29 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {"phase", "date", "change", "type", "affected"},
            {"change", "affected"},
            {0, 1, 2}},
-          {"remove",
-           kMutationSchema,
-           {"topic", "index"},
-           {},
-           {},
-           {0, 1, 2}}}});
+          {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}}}});
 
     // ---- verification ----
-    Verbs.push_back(
-        {"verification",
-         "Query or mutate verification entries.",
-         {{"query",
-           kVerificationSchemaV2,
-           {"topic"},
-           {"phase", "human"},
-           {},
-           {0, 2}},
-          {"add",
-           kMutationSchema,
-           {"topic", "check"},
-           {"phase", "result", "detail"},
-           {"check", "result", "detail"},
-           {0, 1, 2}},
-          {"set",
-           kMutationSchema,
-           {"topic", "index"},
-           {"check", "result", "detail"},
-           {"check", "result", "detail"},
-           {0, 1, 2}}}});
+    Verbs.push_back({"verification",
+                     "Query or mutate verification entries.",
+                     {{"query",
+                       kVerificationSchemaV2,
+                       {"topic"},
+                       {"phase", "human"},
+                       {},
+                       {0, 2}},
+                      {"add",
+                       kMutationSchema,
+                       {"topic", "check"},
+                       {"phase", "result", "detail"},
+                       {"check", "result", "detail"},
+                       {0, 1, 2}},
+                      {"set",
+                       kMutationSchema,
+                       {"topic", "index"},
+                       {"check", "result", "detail"},
+                       {"check", "result", "detail"},
+                       {0, 1, 2}}}});
 
     // ---- timeline / blockers / validate / legacy-gap ----
     Verbs.push_back({"timeline",
@@ -315,12 +324,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
     Verbs.push_back(
         {"blockers",
          "List phases with blocked status or non-empty blockers prose.",
-         {{"query",
-           kBlockersSchema,
-           {},
-           {"topic", "human"},
-           {},
-           {0, 2}}}});
+         {{"query", kBlockersSchema, {}, {"topic", "human"}, {}, {0, 2}}}});
     Verbs.push_back(
         {"validate",
          "Validate every bundle against schema + content-hygiene evaluators.",
@@ -361,12 +365,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {},
            {},
            {0, 1, 2}},
-          {"list",
-           kListSchema,
-           {"topic"},
-           {"phase"},
-           {},
-           {0, 2}}}});
+          {"list", kListSchema, {"topic"}, {"phase"}, {}, {0, 2}}}});
 
     // ---- task ----
     Verbs.push_back(
@@ -390,12 +389,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {},
            {},
            {0, 1, 2}},
-          {"list",
-           kListSchema,
-           {"topic"},
-           {"phase", "job"},
-           {},
-           {0, 2}}}});
+          {"list", kListSchema, {"topic"}, {"phase", "job"}, {}, {0, 2}}}});
 
     // ---- lane ----
     Verbs.push_back(
@@ -419,12 +413,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {},
            {},
            {0, 1, 2}},
-          {"list",
-           kListSchema,
-           {"topic"},
-           {"phase"},
-           {},
-           {0, 2}}}});
+          {"list", kListSchema, {"topic"}, {"phase"}, {}, {0, 2}}}});
 
     // ---- testing ----
     Verbs.push_back(
@@ -448,12 +437,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {},
            {},
            {0, 1, 2}},
-          {"list",
-           kListSchema,
-           {"topic"},
-           {"phase"},
-           {},
-           {0, 2}}}});
+          {"list", kListSchema, {"topic"}, {"phase"}, {}, {0, 2}}}});
 
     // ---- manifest ----
     Verbs.push_back(
@@ -506,12 +490,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {"id", "statement", "mitigation", "severity", "status", "notes"},
            {"statement", "mitigation", "notes"},
            {0, 1, 2}},
-          {"remove",
-           kMutationSchema,
-           {"topic", "index"},
-           {},
-           {},
-           {0, 1, 2}},
+          {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}},
           {"list",
            kListSchema,
            {"topic"},
@@ -534,18 +513,8 @@ static std::vector<FCatalogVerb> BuildCatalog()
             "target-date"},
            {"statement", "rationale"},
            {0, 1, 2}},
-          {"remove",
-           kMutationSchema,
-           {"topic", "index"},
-           {},
-           {},
-           {0, 1, 2}},
-          {"list",
-           kListSchema,
-           {"topic"},
-           {"status"},
-           {},
-           {0, 2}}}});
+          {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}},
+          {"list", kListSchema, {"topic"}, {"status"}, {}, {0, 2}}}});
     Verbs.push_back(
         {"acceptance-criterion",
          "Manage typed acceptance-criterion entries.",
@@ -561,43 +530,31 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {"id", "statement", "status", "measure", "evidence"},
            {"statement", "measure", "evidence"},
            {0, 1, 2}},
-          {"remove",
-           kMutationSchema,
-           {"topic", "index"},
-           {},
-           {},
-           {0, 1, 2}},
-          {"list",
-           kListSchema,
-           {"topic"},
-           {"status"},
-           {},
-           {0, 2}}}});
+          {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}},
+          {"list", kListSchema, {"topic"}, {"status"}, {}, {0, 2}}}});
 
     // ---- migrate / cache / watch / _catalog ----
     Verbs.push_back(
         {"migrate",
          "Eager bundle normalization after typed-array schema change.",
          {{"query", kMutationSchema, {}, {"topic"}, {}, {0, 1, 2}}}});
-    Verbs.push_back(
-        {"cache",
-         "Cache directory / size / config.",
-         {{"info", kCacheInfoSchema, {}, {"human"}, {}, {0, 2}},
-          {"clear", kCacheClearSchema, {}, {"human"}, {}, {0, 2}},
-          {"config",
-           kCacheConfigSchema,
-           {},
-           {"dir", "enabled", "verbose", "human"},
-           {},
-           {0, 2}}}});
+    Verbs.push_back({"cache",
+                     "Cache directory / size / config.",
+                     {{"info", kCacheInfoSchema, {}, {"human"}, {}, {0, 2}},
+                      {"clear", kCacheClearSchema, {}, {"human"}, {}, {0, 2}},
+                      {"config",
+                       kCacheConfigSchema,
+                       {},
+                       {"dir", "enabled", "verbose", "human"},
+                       {},
+                       {0, 2}}}});
     Verbs.push_back(
         {"watch",
          "Terminal dashboard of every topic's current state.",
          {{"query", kMutationSchema, {}, {"repo-root"}, {}, {0, 1, 2}}}});
-    Verbs.push_back(
-        {"_catalog",
-         "Machine-readable CLI surface dump (v0.93.0+).",
-         {{"query", kCatalogSchema, {}, {}, {}, {0}}}});
+    Verbs.push_back({"_catalog",
+                     "Machine-readable CLI surface dump (v0.93.0+).",
+                     {{"query", kCatalogSchema, {}, {}, {}, {0}}}});
 
     return Verbs;
 }

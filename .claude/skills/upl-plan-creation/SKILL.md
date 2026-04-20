@@ -31,78 +31,56 @@ Use index-based entity references inside the bundle (`phases[n]`, `lanes[n]`, `w
 | C5 | Does this require a version bump? |
 | C6 | Does this affect existing plan topics? |
 
-### Step 2: Author the .Plan.json Bundle
+### Step 2: Create The Bundle Via CLI (v0.94.0+)
 
-Create `Docs/Plans/<TopicPascalCase>.Plan.json` with the V4 bundle schema.
-
-**FTopicBundle structure**:
-
-```json
-{
-  "$schema": "plan-v4",
-  "topic": "TopicPascalCase",
-  "status": "not_started",
-  "title": "descriptive_snake_case_title",
-  "summary": "Prose paragraph describing the plan goals and approach.",
-  "goals": "Goal 1\nGoal 2\nGoal 3",
-  "non_goals": "Non-goal 1\nNon-goal 2",
-  "risks": "Risk | Impact | Mitigation (pipe-separated rows)",
-  "acceptance_criteria": "AC-1 | Description\nAC-2 | Description",
-  "problem_statement": "",
-  "validation_commands": "",
-  "baseline_audit": "",
-  "execution_strategy": "",
-  "locked_decisions": "",
-  "source_references": "",
-  "dependencies": "",
-  "phases": [
-    {
-      "scope": "Phase 0 scope description",
-      "output": "Expected deliverables",
-      "status": "not_started",
-      "done": "",
-      "remaining": "",
-      "blockers": "",
-      "started_at": "",
-      "completed_at": "",
-      "agent_context": "",
-      "lanes": [],
-      "jobs": [],
-      "testing": [],
-      "file_manifest": [],
-      "investigation": "",
-      "code_snippets": "",
-      "dependencies": "",
-      "readiness_gate": "",
-      "handoff": "",
-      "code_entity_contract": "",
-      "best_practices": "",
-      "validation_commands": "",
-      "multi_platforming": ""
-    }
-  ],
-  "next_actions": "Prioritized next steps",
-  "changelogs": [],
-  "verifications": []
-}
-```
-
-### Step 3: Register Initial Evidence
+Use `uni-plan topic add` to instantiate `Docs/Plans/<TopicPascalCase>.Plan.json`. The CLI writes through the typed serializer, auto-stamps a creation changelog, enforces PascalCase key regex at parse time, and refuses collisions. **Do not hand-write the JSON** — that path violates `hard_rule_cli_only` in `CLAUDE.md`.
 
 ```bash
-uni-plan changelog add --topic <topic> --change "Plan created" --type feat
-uni-plan verification add --topic <topic> --check "Bundle validates" --result pass --detail "uni-plan validate passes"
+uni-plan topic add --topic <TopicPascalCase> --title "<descriptive title>" \
+  [--summary-file <path>] [--goals-file <path>] \
+  [--non-goals-file <path>] [--problem-statement-file <path>] \
+  [--baseline-audit-file <path>] [--execution-strategy-file <path>] \
+  [--locked-decisions-file <path>] [--source-references-file <path>]
 ```
 
-### Optional: Extend with Additional Phases
+Flags:
+- `--topic <PascalCase>` — topic key, must match `^[A-Z][A-Za-z0-9]*$` (regex enforced at parse time, `UsageError` exit 2 on violation). Key also becomes the disk filename stem.
+- `--title <text>` — required. Enforced by the `required_fields` ErrorMajor evaluator.
+- All prose flags have `--<flag>-file <path>` siblings (read raw bytes, no shell expansion).
 
-Use `uni-plan phase add` to append trailing phases via CLI (auto-changelog, typed serializer) instead of hand-editing JSON:
+Exit codes: `0` bundle created · `1` collision (bundle already exists under repo root) · `2` UsageError (bad key regex, missing `--topic`/`--title`).
+
+### Step 3: Seed Phase 0
+
+A fresh bundle has no phases and fails `uni-plan validate` with `phases_present` ErrorMajor — that is the expected governance signal. Seed the first phase next:
 
 ```bash
-uni-plan phase add --topic <topic> --scope "Phase scope" --output "Expected deliverables"
+uni-plan phase add --topic <TopicPascalCase> \
+  --scope-file <phase0-scope.txt> --output-file <phase0-output.txt>
 ```
 
 Default status is `not_started`. Follow with `uni-plan phase set` to populate design material fields (`--investigation`, `--readiness-gate`, `--handoff`, etc.).
+
+### Step 4: Register Initial Evidence
+
+The creation changelog is auto-stamped by `topic add`. Add a verification entry manually:
+
+```bash
+uni-plan verification add --topic <topic> --check "Bundle validates" \
+  --result pass --detail "uni-plan validate passes after Phase 0 seed"
+```
+
+### Optional: Extend With Additional Phases
+
+Call `uni-plan phase add` again for each trailing phase. Auto-changelog + typed serializer handle the rest.
+
+### Step 5: Validation
+
+```bash
+uni-plan validate --topic <topic> --human
+```
+
+Fix all findings before considering the plan bundle complete.
 
 ### Optional: Normalize Smart Characters
 
@@ -113,14 +91,6 @@ uni-plan phase normalize --topic <topic> --phase <N> [--dry-run]
 ```
 
 This replaces em/en/figure dashes with `-`, smart quotes with straight quotes, and NBSP with regular space — keeps the bundle clean against `no_smart_quotes`.
-
-### Step 4: Validation
-
-```bash
-uni-plan validate --topic <topic> --human
-```
-
-Fix all findings before considering the plan bundle complete.
 
 ## Placement Rules
 

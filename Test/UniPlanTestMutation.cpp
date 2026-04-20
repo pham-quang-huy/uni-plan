@@ -109,14 +109,15 @@ TEST_F(FBundleTestFixture, TopicSetMetadataMultipleFields)
 // v0.89.0: --risks and --acceptance-criteria (and their -file variants)
 // removed from `topic set`. Regression test: the removed flags surface a
 // UsageError with a migration pointer.
-TEST_F(FBundleTestFixture, TopicSetRisksAndAcceptanceCriteriaFlagsRemovedInV0_89_0)
+TEST_F(FBundleTestFixture,
+       TopicSetRisksAndAcceptanceCriteriaFlagsRemovedInV0_89_0)
 {
     CopyFixture("SampleTopic");
-    EXPECT_THROW(UniPlan::RunTopicSetCommand(
-                     {"--topic", "SampleTopic", "--risks", "R1", "--repo-root",
-                      mRepoRoot.string()},
-                     mRepoRoot.string()),
-                 UniPlan::UsageError);
+    EXPECT_THROW(
+        UniPlan::RunTopicSetCommand({"--topic", "SampleTopic", "--risks", "R1",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        UniPlan::UsageError);
     EXPECT_THROW(UniPlan::RunTopicSetCommand(
                      {"--topic", "SampleTopic", "--acceptance-criteria",
                       "completed", "--repo-root", mRepoRoot.string()},
@@ -950,21 +951,20 @@ TEST_F(FBundleTestFixture, PhaseSetStatusCompletedWithStartedAtSucceeds)
 // class bodies like the TEST_F blocks themselves.
 // ===================================================================
 
-#define RESET_TYPED_ARRAYS(TOPIC)                                             \
-    do                                                                        \
-    {                                                                         \
-        UniPlan::FTopicBundle _ResetBundle;                                   \
-        ASSERT_TRUE(ReloadBundle((TOPIC), _ResetBundle));                     \
-        _ResetBundle.mMetadata.mRisks.clear();                                \
-        _ResetBundle.mMetadata.mAcceptanceCriteria.clear();                   \
-        _ResetBundle.mNextActions.clear();                                    \
-        const fs::path _ResetPath =                                           \
-            mRepoRoot / "Docs" / "Plans" / ((TOPIC) + ".Plan.json");          \
-        std::string _ResetError;                                              \
-        ASSERT_TRUE(                                                          \
-            UniPlan::TryWriteTopicBundle(_ResetBundle, _ResetPath,            \
-                                         _ResetError))                        \
-            << _ResetError;                                                   \
+#define RESET_TYPED_ARRAYS(TOPIC)                                              \
+    do                                                                         \
+    {                                                                          \
+        UniPlan::FTopicBundle _ResetBundle;                                    \
+        ASSERT_TRUE(ReloadBundle((TOPIC), _ResetBundle));                      \
+        _ResetBundle.mMetadata.mRisks.clear();                                 \
+        _ResetBundle.mMetadata.mAcceptanceCriteria.clear();                    \
+        _ResetBundle.mNextActions.clear();                                     \
+        const fs::path _ResetPath =                                            \
+            mRepoRoot / "Docs" / "Plans" / ((TOPIC) + ".Plan.json");           \
+        std::string _ResetError;                                               \
+        ASSERT_TRUE(UniPlan::TryWriteTopicBundle(_ResetBundle, _ResetPath,     \
+                                                 _ResetError))                 \
+            << _ResetError;                                                    \
     } while (0)
 
 // --- risk group -----------------------------------------------------
@@ -991,7 +991,8 @@ TEST_F(FBundleTestFixture, RiskAddAppendsTypedEntryAndWritesArrayForm)
     EXPECT_EQ(After.mMetadata.mRisks[0].mId, "R1");
     EXPECT_EQ(After.mMetadata.mRisks[0].mStatement, "Listener drift");
     EXPECT_EQ(After.mMetadata.mRisks[0].mMitigation, "Pin endpoint");
-    EXPECT_EQ(After.mMetadata.mRisks[0].mSeverity, UniPlan::ERiskSeverity::High);
+    EXPECT_EQ(After.mMetadata.mRisks[0].mSeverity,
+              UniPlan::ERiskSeverity::High);
     EXPECT_EQ(After.mMetadata.mRisks[0].mStatus, UniPlan::ERiskStatus::Open);
 }
 
@@ -1000,14 +1001,14 @@ TEST_F(FBundleTestFixture, RiskSetMutatesOnlyPassedFields)
     CopyFixture("SampleTopic");
     RESET_TYPED_ARRAYS(std::string("SampleTopic"));
     // Seed two risks so we can verify only index 0 changes.
-    UniPlan::RunRiskAddCommand(
-        {"--topic", "SampleTopic", "--statement", "First", "--severity",
-         "medium", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    UniPlan::RunRiskAddCommand(
-        {"--topic", "SampleTopic", "--statement", "Second", "--severity",
-         "low", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
+    UniPlan::RunRiskAddCommand({"--topic", "SampleTopic", "--statement",
+                                "First", "--severity", "medium", "--repo-root",
+                                mRepoRoot.string()},
+                               mRepoRoot.string());
+    UniPlan::RunRiskAddCommand({"--topic", "SampleTopic", "--statement",
+                                "Second", "--severity", "low", "--repo-root",
+                                mRepoRoot.string()},
+                               mRepoRoot.string());
 
     StartCapture();
     const int Code = UniPlan::RunRiskSetCommand(
@@ -1038,10 +1039,10 @@ TEST_F(FBundleTestFixture, RiskRemoveShiftsSubsequentIndicesDown)
     }
 
     StartCapture();
-    const int Code = UniPlan::RunRiskRemoveCommand(
-        {"--topic", "SampleTopic", "--index", "1", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
+    const int Code =
+        UniPlan::RunRiskRemoveCommand({"--topic", "SampleTopic", "--index", "1",
+                                       "--repo-root", mRepoRoot.string()},
+                                      mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
 
@@ -1066,10 +1067,10 @@ TEST_F(FBundleTestFixture, RiskListFiltersBySeverity)
                                mRepoRoot.string());
 
     StartCapture();
-    const int Code = UniPlan::RunRiskListCommand(
-        {"--topic", "SampleTopic", "--severity", "high", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
+    const int Code =
+        UniPlan::RunRiskListCommand({"--topic", "SampleTopic", "--severity",
+                                     "high", "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
@@ -1104,10 +1105,10 @@ TEST_F(FBundleTestFixture, NextActionSetUpdatesStatusAndOrderByIndex)
 {
     CopyFixture("SampleTopic");
     RESET_TYPED_ARRAYS(std::string("SampleTopic"));
-    UniPlan::RunNextActionAddCommand(
-        {"--topic", "SampleTopic", "--statement", "Do X", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
+    UniPlan::RunNextActionAddCommand({"--topic", "SampleTopic", "--statement",
+                                      "Do X", "--repo-root",
+                                      mRepoRoot.string()},
+                                     mRepoRoot.string());
 
     StartCapture();
     const int Code = UniPlan::RunNextActionSetCommand(
@@ -1120,8 +1121,7 @@ TEST_F(FBundleTestFixture, NextActionSetUpdatesStatusAndOrderByIndex)
     UniPlan::FTopicBundle After;
     ASSERT_TRUE(ReloadBundle("SampleTopic", After));
     EXPECT_EQ(After.mNextActions[0].mOrder, 7);
-    EXPECT_EQ(After.mNextActions[0].mStatus,
-              UniPlan::EActionStatus::Completed);
+    EXPECT_EQ(After.mNextActions[0].mStatus, UniPlan::EActionStatus::Completed);
     EXPECT_EQ(After.mNextActions[0].mStatement, "Do X"); // unchanged
 }
 
@@ -1129,14 +1129,14 @@ TEST_F(FBundleTestFixture, NextActionRemoveByIndex)
 {
     CopyFixture("SampleTopic");
     RESET_TYPED_ARRAYS(std::string("SampleTopic"));
-    UniPlan::RunNextActionAddCommand(
-        {"--topic", "SampleTopic", "--statement", "Alpha", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
-    UniPlan::RunNextActionAddCommand(
-        {"--topic", "SampleTopic", "--statement", "Beta", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
+    UniPlan::RunNextActionAddCommand({"--topic", "SampleTopic", "--statement",
+                                      "Alpha", "--repo-root",
+                                      mRepoRoot.string()},
+                                     mRepoRoot.string());
+    UniPlan::RunNextActionAddCommand({"--topic", "SampleTopic", "--statement",
+                                      "Beta", "--repo-root",
+                                      mRepoRoot.string()},
+                                     mRepoRoot.string());
 
     StartCapture();
     const int Code = UniPlan::RunNextActionRemoveCommand(
@@ -1156,14 +1156,14 @@ TEST_F(FBundleTestFixture, NextActionListFiltersByStatus)
 {
     CopyFixture("SampleTopic");
     RESET_TYPED_ARRAYS(std::string("SampleTopic"));
-    UniPlan::RunNextActionAddCommand(
-        {"--topic", "SampleTopic", "--statement", "P", "--status", "pending",
-         "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
-    UniPlan::RunNextActionAddCommand(
-        {"--topic", "SampleTopic", "--statement", "D", "--status",
-         "completed", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
+    UniPlan::RunNextActionAddCommand({"--topic", "SampleTopic", "--statement",
+                                      "P", "--status", "pending", "--repo-root",
+                                      mRepoRoot.string()},
+                                     mRepoRoot.string());
+    UniPlan::RunNextActionAddCommand({"--topic", "SampleTopic", "--statement",
+                                      "D", "--status", "completed",
+                                      "--repo-root", mRepoRoot.string()},
+                                     mRepoRoot.string());
 
     StartCapture();
     const int Code = UniPlan::RunNextActionListCommand(
@@ -1392,4 +1392,162 @@ TEST_F(FBundleTestFixture, DualReadLegacyAcceptanceCriteriaMapsCompletedToMet)
     EXPECT_EQ(Reloaded.mMetadata.mAcceptanceCriteria[1].mId, "AC2");
     EXPECT_EQ(Reloaded.mMetadata.mAcceptanceCriteria[1].mStatus,
               UniPlan::ECriterionStatus::NotMet); // "pending" → NotMet
+}
+
+// ===================================================================
+// topic add (v0.94.0) — create a brand-new .Plan.json bundle
+// ===================================================================
+
+TEST_F(FBundleTestFixture, TopicAddCreatesFreshBundleWithEmptyPhases)
+{
+    // Note: no CreateMinimalFixture — the command must cope with a fresh
+    // repo where Docs/Plans/ does not yet exist.
+    StartCapture();
+    const int Code = UniPlan::RunTopicAddCommand(
+        {"--topic", "NewThing", "--title", "A new topic", "--summary",
+         "Plan summary prose", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "NewThing.Plan.json";
+    ASSERT_TRUE(fs::exists(Path));
+
+    UniPlan::FTopicBundle Reloaded;
+    ASSERT_TRUE(ReloadBundle("NewThing", Reloaded));
+    EXPECT_EQ(Reloaded.mTopicKey, "NewThing");
+    EXPECT_EQ(Reloaded.mMetadata.mTitle, "A new topic");
+    EXPECT_EQ(Reloaded.mMetadata.mSummary, "Plan summary prose");
+    EXPECT_EQ(Reloaded.mStatus, UniPlan::ETopicStatus::NotStarted);
+    EXPECT_TRUE(Reloaded.mPhases.empty());
+    ASSERT_EQ(Reloaded.mChangeLogs.size(), 1u);
+    EXPECT_EQ(Reloaded.mChangeLogs[0].mPhase, -1); // topic-scoped
+    EXPECT_NE(Reloaded.mChangeLogs[0].mChange.find("created"),
+              std::string::npos);
+
+    // Mutation envelope target is the new kTargetTopic token.
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["ok"].get<bool>());
+    EXPECT_EQ(Json["target"].get<std::string>(), "topic");
+    EXPECT_EQ(Json["topic"].get<std::string>(), "NewThing");
+}
+
+TEST_F(FBundleTestFixture, TopicAddRejectsCollision)
+{
+    // First add succeeds.
+    const int First =
+        UniPlan::RunTopicAddCommand({"--topic", "Dup", "--title", "first",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string());
+    ASSERT_EQ(First, 0);
+
+    StartCapture();
+    const int Second =
+        UniPlan::RunTopicAddCommand({"--topic", "Dup", "--title", "second",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Second, 1);
+    EXPECT_NE(mCapturedStderr.find("already exists"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, TopicAddRejectsNonPascalCaseKey)
+{
+    // lowercase-first
+    EXPECT_THROW(
+        UniPlan::RunTopicAddCommand({"--topic", "lower", "--title", "x",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        UniPlan::UsageError);
+    // digit-first
+    EXPECT_THROW(
+        UniPlan::RunTopicAddCommand({"--topic", "123Foo", "--title", "x",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        UniPlan::UsageError);
+    // hyphen
+    EXPECT_THROW(
+        UniPlan::RunTopicAddCommand({"--topic", "foo-bar", "--title", "x",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        UniPlan::UsageError);
+    // dot
+    EXPECT_THROW(
+        UniPlan::RunTopicAddCommand({"--topic", "A.B", "--title", "x",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        UniPlan::UsageError);
+}
+
+TEST_F(FBundleTestFixture, TopicAddAcceptsValidPascalCaseKeys)
+{
+    EXPECT_EQ(UniPlan::RunTopicAddCommand({"--topic", "Simple", "--title", "x",
+                                           "--repo-root", mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+    EXPECT_EQ(
+        UniPlan::RunTopicAddCommand({"--topic", "WithNumbers42", "--title", "x",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        0);
+    EXPECT_EQ(UniPlan::RunTopicAddCommand({"--topic", "LongerPascalCaseName",
+                                           "--title", "x", "--repo-root",
+                                           mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+}
+
+TEST_F(FBundleTestFixture, TopicAddRequiresTitle)
+{
+    EXPECT_THROW(UniPlan::RunTopicAddCommand(
+                     {"--topic", "Foo", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+}
+
+TEST_F(FBundleTestFixture, TopicAddRequiresTopic)
+{
+    EXPECT_THROW(UniPlan::RunTopicAddCommand(
+                     {"--title", "x", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+}
+
+TEST_F(FBundleTestFixture, TopicAddProseFileFlagRoundTripsShellHostileContent)
+{
+    // Mirrors the v0.76.0 regression pattern: content containing $VAR,
+    // $(cmd), backticks, and quotes must survive byte-identical through
+    // the --X-file path.
+    const std::string Hostile =
+        "`$PATH`, $(pwd), and \"quoted\" text with em-dash \xE2\x80\x94";
+    const fs::path SummaryPath = mRepoRoot / "summary.txt";
+    {
+        std::ofstream Out(SummaryPath, std::ios::binary);
+        Out << Hostile;
+    }
+
+    const int Code = UniPlan::RunTopicAddCommand(
+        {"--topic", "Hostile", "--title", "x", "--summary-file",
+         SummaryPath.string(), "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    ASSERT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Reloaded;
+    ASSERT_TRUE(ReloadBundle("Hostile", Reloaded));
+    EXPECT_EQ(Reloaded.mMetadata.mSummary, Hostile);
+}
+
+TEST_F(FBundleTestFixture, TopicAddFreshBundleFailsPhasesPresentValidator)
+{
+    // Documents the expected governance signal: a just-created bundle has
+    // no phases and must fail `phases_present` ErrorMajor until `phase
+    // add` seeds Phase 0. This is by design — see plan decision 1.
+    ASSERT_EQ(
+        UniPlan::RunTopicAddCommand({"--topic", "NoPhases", "--title", "x",
+                                     "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        0);
+    UniPlan::FTopicBundle Reloaded;
+    ASSERT_TRUE(ReloadBundle("NoPhases", Reloaded));
+    EXPECT_TRUE(Reloaded.mPhases.empty());
 }

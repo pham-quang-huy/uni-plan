@@ -28,7 +28,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.88.0`) |
+| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.94.0`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |
@@ -143,7 +143,7 @@ All skills live under `.claude/skills/` with `implicit_invocation: true`, so the
 | --- | --- | --- |
 | `query` | Read-only inspection; JSON by default, `--human` for ANSI tables | `topic list / get / status`, `phase list / get / next / readiness / wave-status / drift`, `changelog`, `verification`, `timeline`, `blockers`, `validate` |
 | `semantic_lifecycle` | Gated state transitions — prefer these over raw `set` | `topic start / complete / block`, `phase start / complete / block / unblock / cancel / progress / complete-jobs`, `phase log`, `phase verify` |
-| `raw_mutation` | Low-level field setters; use only when a semantic command doesn't fit | `topic set`, `phase set / add / remove / normalize`, `job set`, `task set`, `changelog add / set / remove`, `verification add / set`, `lane set / add`, `testing add / set`, `manifest add / remove / list / set`, `risk add / set / remove / list` (v0.89.0+), `next-action add / set / remove / list` (v0.89.0+), `acceptance-criterion add / set / remove / list` (v0.89.0+) |
+| `raw_mutation` | Low-level field setters; use only when a semantic command doesn't fit | `topic add` (v0.94.0+ — create a new bundle) / `topic set` / `topic normalize`, `phase set / add / remove / normalize`, `job set`, `task set`, `changelog add / set / remove`, `verification add / set`, `lane set / add`, `testing add / set`, `manifest add / remove / list / set`, `risk add / set / remove / list` (v0.89.0+), `next-action add / set / remove / list` (v0.89.0+), `acceptance-criterion add / set / remove / list` (v0.89.0+) |
 | `utility` | Operational commands | `cache info / clear / config`, `watch` |
 
 Default output is JSON with two top-level sections — `issues[]` and `summary` — so agents can consume any command without raw file reads.
