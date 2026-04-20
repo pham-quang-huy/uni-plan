@@ -782,7 +782,37 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
     const FPhaseTaxonomy &Tax = *rpTax;
 
     // --- LANES sub-panel (gridbox for fixed column widths) ---
+    // Count done lanes across the full set (summary line shows the total).
     int LanesDone = 0;
+    for (const FLaneRecord &Lane : Tax.mLanes)
+    {
+        if (Lane.mStatus == EExecutionStatus::Completed)
+        {
+            LanesDone++;
+        }
+    }
+
+    // Scroll window: keep InSelectedLaneIndex centered when Count exceeds the
+    // on-screen cap. Without this, pressing 'l'/'L' moves the selection past
+    // the visible cut line and the highlight disappears.
+    const int LaneCount = static_cast<int>(Tax.mLanes.size());
+    const int MaxVisibleLanes = 8;
+    int LaneScrollOffset = 0;
+    if (LaneCount > MaxVisibleLanes && InSelectedLaneIndex >= 0)
+    {
+        LaneScrollOffset = InSelectedLaneIndex - MaxVisibleLanes / 2;
+        if (LaneScrollOffset < 0)
+        {
+            LaneScrollOffset = 0;
+        }
+        if (LaneScrollOffset > LaneCount - MaxVisibleLanes)
+        {
+            LaneScrollOffset = LaneCount - MaxVisibleLanes;
+        }
+    }
+    const int LaneVisibleEnd =
+        std::min(LaneScrollOffset + MaxVisibleLanes, LaneCount);
+
     std::vector<Elements> LaneGridRows;
     LaneGridRows.push_back(PadGridRow({
         text("Lane") | bold,
@@ -791,13 +821,9 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         text("Exit Criteria") | bold | flex,
     }));
 
-    for (int Index = 0; Index < static_cast<int>(Tax.mLanes.size()); ++Index)
+    for (int Index = LaneScrollOffset; Index < LaneVisibleEnd; ++Index)
     {
         const FLaneRecord &Lane = Tax.mLanes[static_cast<size_t>(Index)];
-        if (Lane.mStatus == EExecutionStatus::Completed)
-        {
-            LanesDone++;
-        }
         const bool LaneSel = (Index == InSelectedLaneIndex);
         const std::string Marker;
 
@@ -817,11 +843,29 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         LaneGridRows.push_back(std::move(RowCells));
     }
 
+    Elements LaneFinalRows;
+    if (LaneScrollOffset > 0)
+    {
+        LaneFinalRows.push_back(text("  \xe2\x86\x91 " +
+                                     std::to_string(LaneScrollOffset) +
+                                     " above") |
+                                dim);
+    }
+    LaneFinalRows.push_back(gridbox(std::move(LaneGridRows)) | flex);
+    if (LaneVisibleEnd < LaneCount)
+    {
+        LaneFinalRows.push_back(
+            text("  \xe2\x86\x93 " +
+                 std::to_string(LaneCount - LaneVisibleEnd) + " below") |
+            dim);
+    }
+
     auto LanesPanel =
         window(text(" [L]ANES: " + ("P" + std::to_string(Tax.mPhaseIndex)) +
-                    " (" + std::to_string(Tax.mLanes.size()) + ") ") |
+                    " (" + std::to_string(LaneCount) + ") ") |
                    bold,
-               gridbox(std::move(LaneGridRows)) | flex);
+               vbox(std::move(LaneFinalRows))) |
+        size(HEIGHT, EQUAL, 13);
 
     // --- JOB BOARD sub-panel (using ftxui::Table) ---
     // Collect unique waves for filtering
