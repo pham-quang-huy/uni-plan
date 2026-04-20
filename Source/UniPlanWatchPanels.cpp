@@ -1515,8 +1515,11 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
 
     Rows.push_back(text(""));
 
-    // Scope sub-section (goals)
-    Rows.push_back(text("  Scope") | bold);
+    // Goals sub-section — matches schema `goals` field. Label must
+    // match the schema vocabulary so AI agents reading the watch TUI
+    // and the CLI/JSON see the same noun. Pre-v0.90.0 this was labeled
+    // "Scope" which collided with the per-phase/lane/job `scope` field.
+    Rows.push_back(text("  Goals") | bold);
     if (InPlan.mGoalStatements.empty())
     {
         Rows.push_back(text("    (none)") | dim);
@@ -1532,8 +1535,9 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
 
     Rows.push_back(text(""));
 
-    // Non-Scope sub-section (non-goals)
-    Rows.push_back(text("  Non-Scope") | bold);
+    // Non-Goals sub-section — matches schema `non_goals` field. See
+    // note above for the rename rationale.
+    Rows.push_back(text("  Non-Goals") | bold);
     if (InPlan.mNonGoalStatements.empty())
     {
         Rows.push_back(text("    (none)") | dim);
