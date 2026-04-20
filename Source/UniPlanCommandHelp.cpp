@@ -196,6 +196,26 @@ static const FSubcommandHelpEntry kTopicSubs[] = {
         false,
         true,
     },
+    {
+        "normalize",
+        "Usage: uni-plan topic normalize --topic <T> [--dry-run]\n\n",
+        "Sweep every topic-level prose field + typed-array entry prose\n"
+        "subfield (risks[i].statement / .mitigation / .notes,\n"
+        "next_actions[i].statement / .rationale,\n"
+        "acceptance_criteria[i].statement / .measure / .evidence) and\n"
+        "replace smart quotes / em-en dashes / NBSP with ASCII\n"
+        "equivalents. Parallels `phase normalize` for phase-scoped prose.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n\n",
+        "  --dry-run               Report replacements without writing\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan topic normalize --topic X --dry-run\n"
+        "  uni-plan topic normalize --topic X\n",
+        false,
+        false,
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -673,6 +693,30 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
 // ---------------------------------------------------------------------------
 static const FSubcommandHelpEntry kJobSubs[] = {
     {
+        "add",
+        "Usage: uni-plan job add --topic <T> --phase <N> [options]\n\n",
+        "Append a trailing job to a phase's jobs[] array. Added v0.93.0 to\n"
+        "close the CRUD-symmetry gap that forced authors to stuff job-level\n"
+        "content into lane `scope` / `exit_criteria` text.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n\n",
+        "  --status <s>            Initial status (default: not_started)\n"
+        "  --scope <text>          Job scope\n"
+        "  --output <text>         Job output\n"
+        "  --exit-criteria <text>  Job exit criteria\n"
+        "  --lane <N>              Assign to lane index N\n"
+        "  --wave <N>              Assign to wave index N\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan job add --topic X --phase 0 --scope 'Bootstrap'\n"
+        "  uni-plan job add --topic X --phase 0 --lane 1 --wave 0 \\\n"
+        "                   --scope 'Render path' --exit-criteria 'PR merged'\n",
+        true,
+        false,
+    },
+    {
         "set",
         "Usage: uni-plan job set --topic <T> --phase <N> --job <J> [options]\n"
         "\n",
@@ -697,9 +741,67 @@ static const FSubcommandHelpEntry kJobSubs[] = {
         true,
         false,
     },
+    {
+        "remove",
+        "Usage: uni-plan job remove --topic <T> --phase <N> --job <J>\n\n",
+        "Remove a job from a phase by index; shifts later jobs down by one.\n"
+        "Tasks inside the job are erased with it. Lane / wave are integer\n"
+        "hints, not reverse references — callers rewriting wave layout\n"
+        "should follow up with `uni-plan job set --wave <W>` on the\n"
+        "shifted siblings.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --job <J>               Job index to remove\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan job remove --topic X --phase 2 --job 3\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan job list --topic <T> [--phase <N>]\n\n",
+        "Enumerate jobs across a topic (optionally filtered to one phase).\n"
+        "Read-only JSON array of {phase_index, job_index, status, scope,\n"
+        "output, exit_criteria, lane, wave, task_count}.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n\n",
+        "  --phase <N>             Filter to a specific phase\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan job list --topic X\n"
+        "  uni-plan job list --topic X --phase 2\n",
+        false,
+        false,
+    },
 };
 
 static const FSubcommandHelpEntry kTaskSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan task add --topic <T> --phase <N> --job <J>\n"
+        "                         --description <text> [options]\n\n",
+        "Append a task to a job's tasks[] array. Added v0.93.0.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --job <J>               Job index\n"
+        "  --description <text>    Task description\n\n",
+        "  --status <s>            Initial status (default: not_started)\n"
+        "  --evidence <text>       Completion proof (commit SHA, URL, log)\n"
+        "  --notes <text>          Agent working notes\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan task add --topic X --phase 0 --job 0 \\\n"
+        "                    --description 'Write unit tests'\n",
+        true,
+        false,
+    },
     {
         "set",
         "Usage: uni-plan task set --topic <T> --phase <N> --job <J>\n"
@@ -720,6 +822,42 @@ static const FSubcommandHelpEntry kTaskSubs[] = {
         "  uni-plan task set --topic X --phase 2 --job 0 --task 1 \\\n"
         "                    --status completed --evidence 'commit abc123'\n",
         true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan task remove --topic <T> --phase <N> --job <J>\n"
+        "                            --task <K>\n\n",
+        "Remove a task by index; shifts later tasks down by one.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --job <J>               Job index\n"
+        "  --task <K>              Task index\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan task remove --topic X --phase 2 --job 0 --task 4\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan task list --topic <T> [--phase <N>] [--job <J>]\n\n",
+        "Enumerate tasks across a topic (optionally filtered to one phase /\n"
+        "job). Read-only JSON array of {phase_index, job_index, task_index,\n"
+        "status, description, evidence, notes}.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n\n",
+        "  --phase <N>             Filter to a specific phase\n"
+        "  --job <J>               Filter to a specific job (requires --phase)\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan task list --topic X\n"
+        "  uni-plan task list --topic X --phase 2 --job 0\n",
+        false,
         false,
     },
 };
@@ -921,6 +1059,45 @@ static const FSubcommandHelpEntry kLaneSubs[] = {
         true,
         false,
     },
+    {
+        "remove",
+        "Usage: uni-plan lane remove --topic <T> --phase <N> --lane <L>\n\n",
+        "Remove a lane from a phase by index. Refuses removal when any\n"
+        "job in the phase still references the lane — reassign those\n"
+        "jobs via `uni-plan job set --lane <new>` or drop them with\n"
+        "`uni-plan job remove` first. Higher-indexed lane references on\n"
+        "surviving jobs are automatically shifted down by one. Added\n"
+        "v0.93.0.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --lane <L>              Lane index to remove\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan lane remove --topic X --phase 2 --lane 3\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan lane list --topic <T> [--phase <N>]\n\n",
+        "Enumerate lanes across a topic (optionally filtered to one phase).\n"
+        "Read-only JSON array of {phase_index, lane_index, status, scope,\n"
+        "exit_criteria, job_count}. job_count counts jobs whose mLane\n"
+        "references this lane index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n\n",
+        "  --phase <N>             Filter to a specific phase\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan lane list --topic X\n"
+        "  uni-plan lane list --topic X --phase 2\n",
+        false,
+        false,
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -975,6 +1152,41 @@ static const FSubcommandHelpEntry kTestingSubs[] = {
         "  uni-plan testing set --topic X --phase 2 --index 0 \\\n"
         "                       --evidence 'build.log sha=abc123'\n",
         true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan testing remove --topic <T> --phase <N> --index <I>\n"
+        "\n",
+        "Remove a testing entry from a phase by index; shifts later entries\n"
+        "down by one. Added v0.93.0.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --index <I>             Zero-based index into testing[]\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan testing remove --topic X --phase 2 --index 1\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan testing list --topic <T> [--phase <N>]\n\n",
+        "Enumerate testing entries across a topic (optionally filtered to\n"
+        "one phase). Read-only JSON array of {phase_index, testing_index,\n"
+        "actor, session, step, action, expected, evidence}.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n\n",
+        "  --phase <N>             Filter to a specific phase\n",
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan testing list --topic X\n"
+        "  uni-plan testing list --topic X --phase 2\n",
+        false,
         false,
     },
 };
@@ -1426,6 +1638,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan topic list [--status <filter>]\n"
         "  uni-plan topic get --topic <T> [--sections <csv>]\n"
         "  uni-plan topic set --topic <T> [options]\n"
+        "  uni-plan topic normalize --topic <T> [--dry-run]\n"
         "  uni-plan topic start --topic <T>\n"
         "  uni-plan topic complete --topic <T> [--verification <text>]\n"
         "  uni-plan topic block --topic <T> --reason <text>\n"
@@ -1435,6 +1648,8 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  list          List topics with status + phase counts\n"
         "  get           Retrieve one topic's metadata + phase summary\n"
         "  set           Mutate topic-level fields\n"
+        "  normalize     Replace dashes/quotes/NBSP in topic prose "
+        "(v0.93.0+)\n"
         "  start         Transition topic to in_progress (semantic)\n"
         "  complete      Transition topic to completed (semantic)\n"
         "  block         Transition topic to blocked (semantic)\n"
@@ -1509,28 +1724,47 @@ static const FCommandHelpEntry kCommandHelp[] = {
     {
         "job",
         "Usage:\n"
-        "  uni-plan job set --topic <T> --phase <N> --job <J> [options]\n\n",
-        "Mutate job fields within a phase.\n\n",
+        "  uni-plan job add --topic <T> --phase <N> [options]\n"
+        "  uni-plan job set --topic <T> --phase <N> --job <J> [options]\n"
+        "  uni-plan job remove --topic <T> --phase <N> --job <J>\n"
+        "  uni-plan job list --topic <T> [--phase <N>]\n\n",
+        "Manage jobs within a phase. Jobs are the atomic units scheduled\n"
+        "into waves + lanes; each job holds its own tasks[] array.\n\n",
         nullptr,
-        "  set              Update job status / scope / output / criteria\n\n"
-        "Run `uni-plan job set --help` for flag detail.\n",
+        "  add              Append a trailing job to a phase\n"
+        "  set              Update an existing job's fields\n"
+        "  remove           Remove a job by index (v0.93.0+)\n"
+        "  list             Enumerate jobs across the topic (v0.93.0+)\n\n"
+        "Run `uni-plan job <sub> --help` for flag detail.\n",
         nullptr, // no --human renderer
         "Examples:\n"
-        "  uni-plan job set --topic X --phase 2 --job 0 --status completed\n",
+        "  uni-plan job add --topic X --phase 0 --scope 'Bootstrap'\n"
+        "  uni-plan job set --topic X --phase 2 --job 0 --status completed\n"
+        "  uni-plan job list --topic X --phase 2\n",
         kJobSubs,
         sizeof(kJobSubs) / sizeof(kJobSubs[0]),
     },
     {
         "task",
         "Usage:\n"
+        "  uni-plan task add --topic <T> --phase <N> --job <J>\n"
+        "                    --description <t> [options]\n"
         "  uni-plan task set --topic <T> --phase <N> --job <J> --task <K>\n"
-        "                    [options]\n\n",
-        "Mutate task fields within a job.\n\n",
+        "                    [options]\n"
+        "  uni-plan task remove --topic <T> --phase <N> --job <J> --task <K>\n"
+        "  uni-plan task list --topic <T> [--phase <N>] [--job <J>]\n\n",
+        "Manage tasks within a job. Tasks are the finest-grained work\n"
+        "units; each records description, status, evidence, and notes.\n\n",
         nullptr,
-        "  set              Update task status / evidence / notes\n\n"
-        "Run `uni-plan task set --help` for flag detail.\n",
+        "  add              Append a trailing task to a job (v0.93.0+)\n"
+        "  set              Update an existing task's fields\n"
+        "  remove           Remove a task by index (v0.93.0+)\n"
+        "  list             Enumerate tasks across the topic (v0.93.0+)\n\n"
+        "Run `uni-plan task <sub> --help` for flag detail.\n",
         nullptr,
         "Examples:\n"
+        "  uni-plan task add --topic X --phase 0 --job 0 \\\n"
+        "                    --description 'Write unit tests'\n"
         "  uni-plan task set --topic X --phase 2 --job 0 --task 1 \\\n"
         "                    --status completed --evidence 'commit abc'\n",
         kTaskSubs,
@@ -1658,17 +1892,23 @@ static const FCommandHelpEntry kCommandHelp[] = {
     {
         "lane",
         "Usage:\n"
+        "  uni-plan lane add --topic <T> --phase <N> [options]\n"
         "  uni-plan lane set --topic <T> --phase <N> --lane <L> [options]\n"
-        "  uni-plan lane add --topic <T> --phase <N> [options]\n\n",
+        "  uni-plan lane remove --topic <T> --phase <N> --lane <L>\n"
+        "  uni-plan lane list --topic <T> [--phase <N>]\n\n",
         "Manage lanes within a phase. Lanes group jobs that can execute\n"
         "in parallel within a wave.\n\n",
         nullptr,
+        "  add              Append a trailing lane to a phase\n"
         "  set              Update an existing lane's fields\n"
-        "  add              Append a trailing lane to a phase\n\n"
+        "  remove           Remove a lane by index — refuses when jobs still\n"
+        "                   reference it (v0.93.0+)\n"
+        "  list             Enumerate lanes across the topic (v0.93.0+)\n\n"
         "Run `uni-plan lane <sub> --help` for flag detail.\n",
         nullptr,
         "Examples:\n"
-        "  uni-plan lane add --topic X --phase 2 --scope 'Integration'\n",
+        "  uni-plan lane add --topic X --phase 2 --scope 'Integration'\n"
+        "  uni-plan lane list --topic X --phase 2\n",
         kLaneSubs,
         sizeof(kLaneSubs) / sizeof(kLaneSubs[0]),
     },
@@ -1681,17 +1921,22 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "                       [--actor <human|ai|automated>]\n"
         "                       [--evidence <t>]\n"
         "  uni-plan testing set --topic <T> --phase <N> --index <I> [options]\n"
-        "\n",
+        "  uni-plan testing remove --topic <T> --phase <N> --index <I>\n"
+        "  uni-plan testing list --topic <T> [--phase <N>]\n\n",
         "Manage testing records within a phase.\n\n",
         nullptr,
         "  add              Append a new testing record\n"
-        "  set              Update an existing testing record by index\n\n"
+        "  set              Update an existing testing record by index\n"
+        "  remove           Remove a testing record by index (v0.93.0+)\n"
+        "  list             Enumerate testing records across the topic\n"
+        "                   (v0.93.0+)\n\n"
         "Run `uni-plan testing <sub> --help` for flag detail.\n",
         nullptr,
         "Examples:\n"
         "  uni-plan testing add --topic X --phase 2 --session smoke \\\n"
         "                       --step 'build' --action 'run build.sh' \\\n"
-        "                       --expected '0 errors' --actor ai\n",
+        "                       --expected '0 errors' --actor ai\n"
+        "  uni-plan testing list --topic X --phase 2\n",
         kTestingSubs,
         sizeof(kTestingSubs) / sizeof(kTestingSubs[0]),
     },

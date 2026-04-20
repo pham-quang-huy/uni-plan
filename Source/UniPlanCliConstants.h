@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.92.0";
+static constexpr const char *kCliVersion = "0.93.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -135,6 +135,20 @@ static constexpr const char *kPhaseDriftSchema = "uni-plan-phase-drift-v1";
 // auto-add).
 static constexpr const char *kManifestSuggestSchema =
     "uni-plan-manifest-suggest-v1";
+
+// Catalog command schema (v0.93.0). Dump the full CLI verb / subcommand /
+// flag surface as machine-readable JSON. External tooling — notably the
+// FIE skill-recipe linter — consumes this to detect drift between
+// documented recipes and the shipping CLI without having to parse
+// `--help` prose.
+static constexpr const char *kCatalogSchema = "uni-plan-catalog-v1";
+
+// catalog_schema_version is independent from kCliVersion and from
+// uni-plan-catalog-v1: it tracks the SHAPE of the catalog record
+// (field names, nesting), not the CLI content. Bumping kCliVersion
+// leaves this at 1; renaming a top-level field or dropping a nested
+// column requires bumping this + the consumer-side min-version gate.
+static constexpr int kCatalogSchemaVersion = 1;
 
 // ---------------------------------------------------------------------------
 // ANSI color codes for --human mode

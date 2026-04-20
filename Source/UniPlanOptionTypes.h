@@ -475,6 +475,98 @@ struct FLaneAddOptions : BaseOptions
     std::string mExitCriteria;
 };
 
+// ---------------------------------------------------------------------------
+// Tier 7 — CRUD symmetry (v0.93.0+)
+//
+// Fills the gaps left by the original Tier 5 entity surface: job/task had
+// only `set`; lane/testing lacked `remove`/`list`; topic lacked
+// `normalize`. Mirror `FLaneAddOptions` + `FManifestRemoveOptions` +
+// `FManifestListOptions` patterns.
+// ---------------------------------------------------------------------------
+
+struct FJobAddOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::optional<EExecutionStatus> opStatus; // unset -> NotStarted
+    std::string mScope;
+    std::string mOutput;
+    std::string mExitCriteria;
+    int mLaneIndex = -1; // -1 means unassigned
+    int mWave = -1;      // -1 means unassigned
+};
+
+struct FJobRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mJobIndex = -1;
+};
+
+struct FJobListOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1; // optional — filters to single phase
+};
+
+struct FTaskAddOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mJobIndex = -1;
+    std::optional<EExecutionStatus> opStatus; // unset -> NotStarted
+    std::string mDescription;
+    std::string mEvidence;
+    std::string mNotes;
+};
+
+struct FTaskRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mJobIndex = -1;
+    int mTaskIndex = -1;
+};
+
+struct FTaskListOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1; // optional — filters to single phase
+    int mJobIndex = -1;   // optional — filters to single job within phase
+};
+
+struct FLaneRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mLaneIndex = -1;
+};
+
+struct FLaneListOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1; // optional — filters to single phase
+};
+
+struct FTestingRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mIndex = -1;
+};
+
+struct FTestingListOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1; // optional — filters to single phase
+};
+
+struct FTopicNormalizeOptions : BaseOptions
+{
+    std::string mTopic;
+    bool mbDryRun = false;
+};
+
 struct FChangelogRemoveOptions : BaseOptions
 {
     std::string mTopic;

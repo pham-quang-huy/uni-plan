@@ -165,6 +165,25 @@ ParseChangelogSetOptions(const std::vector<std::string> &InTokens);
 FChangelogRemoveOptions
 ParseChangelogRemoveOptions(const std::vector<std::string> &InTokens);
 
+// v0.93.0 CRUD symmetry — option parsers for the new entity CRUD surface.
+FJobAddOptions ParseJobAddOptions(const std::vector<std::string> &InTokens);
+FJobRemoveOptions
+ParseJobRemoveOptions(const std::vector<std::string> &InTokens);
+FJobListOptions ParseJobListOptions(const std::vector<std::string> &InTokens);
+FTaskAddOptions ParseTaskAddOptions(const std::vector<std::string> &InTokens);
+FTaskRemoveOptions
+ParseTaskRemoveOptions(const std::vector<std::string> &InTokens);
+FTaskListOptions ParseTaskListOptions(const std::vector<std::string> &InTokens);
+FLaneRemoveOptions
+ParseLaneRemoveOptions(const std::vector<std::string> &InTokens);
+FLaneListOptions ParseLaneListOptions(const std::vector<std::string> &InTokens);
+FTestingRemoveOptions
+ParseTestingRemoveOptions(const std::vector<std::string> &InTokens);
+FTestingListOptions
+ParseTestingListOptions(const std::vector<std::string> &InTokens);
+FTopicNormalizeOptions
+ParseTopicNormalizeOptions(const std::vector<std::string> &InTokens);
+
 // Legacy-gap option parser (stateless V3 <-> V4 parity audit, 0.75.0+)
 FLegacyGapOptions
 ParseLegacyGapOptions(const std::vector<std::string> &InTokens);
@@ -440,6 +459,39 @@ int RunLaneAddCommand(const std::vector<std::string> &InArgs,
                       const std::string &InRepoRoot);
 int RunChangelogSetCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot);
+
+// v0.93.0 CRUD symmetry — command runners filling the add/remove/list
+// gaps for job/task/lane/testing and topic normalize. Mutation runners
+// live in UniPlanCommandEntityCrud.cpp + UniPlanCommandTopic.cpp.
+int RunJobAddCommand(const std::vector<std::string> &InArgs,
+                     const std::string &InRepoRoot);
+int RunJobRemoveCommand(const std::vector<std::string> &InArgs,
+                        const std::string &InRepoRoot);
+int RunJobListCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+int RunTaskAddCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
+int RunTaskRemoveCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunTaskListCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
+int RunLaneRemoveCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunLaneListCommand(const std::vector<std::string> &InArgs,
+                       const std::string &InRepoRoot);
+int RunTestingRemoveCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot);
+int RunTestingListCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
+int RunTopicNormalizeCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot);
+
+// v0.93.0 — _catalog dumps the full CLI verb/sub/flag surface as JSON so
+// external tooling (skill-recipe linter, docs generators) can detect
+// drift without parsing human-oriented help prose. Lives in
+// UniPlanCommandCatalog.cpp.
+int RunCatalogCommand(const std::vector<std::string> &InArgs,
+                      const std::string &InRepoRoot);
 
 // Semantic commands — Tier 6: Plan-entry CLI groups (v0.89.0+)
 //

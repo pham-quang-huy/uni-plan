@@ -46,6 +46,8 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanCommandMutation.cpp
     Source/UniPlanCommandLifecycle.cpp
     Source/UniPlanCommandEntity.cpp
+    Source/UniPlanCommandEntityCrud.cpp
+    Source/UniPlanCommandCatalog.cpp
     Source/UniPlanCommandPlanEntries.cpp
     Source/UniPlanCommandMigrate.cpp
     Source/UniPlanCommandSemanticQuery.cpp

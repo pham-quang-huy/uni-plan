@@ -120,6 +120,101 @@ TryConsumeStringOrFileOption(const std::vector<std::string> &InTokens,
     return false;
 }
 
+// ConsumeValidationCommandsProse — handler for `--validation-commands <text>`
+// and `--validation-commands-file <path>` on `phase set` / `topic set`.
+// The documented CLI surface listed these flags since v0.76.0, but the
+// parser never wired them — users who typed them got `Unknown option`.
+// v0.93.0 closes the gap: the text is read raw (file form) or as a literal
+// (string form), then split on newlines. Each non-empty, non-`#`-prefixed
+// line is parsed as `<platform>|<command>|<description>` — identical to the
+// `--validation-add` shape. Semantics are REPLACE (mirrors the "Set" verb):
+// the first line both sets `mbValidationClear=true` and pushes its entry,
+// and subsequent lines append. The parser is shared between phase set and
+// topic set because both commands carry the same pair of fields
+// (`mbValidationClear` + `mValidationAdd`).
+//
+// Returns true iff the token at InOutIndex matched either flag.
+inline bool
+TryConsumeValidationCommandsProse(const std::vector<std::string> &InTokens,
+                                  size_t &InOutIndex,
+                                  bool &OutbValidationClear,
+                                  std::vector<FValidationCommand> &OutAdd)
+{
+    const std::string &Token = InTokens[InOutIndex];
+    const bool bIsString = Token == "--validation-commands";
+    const bool bIsFile = Token == "--validation-commands-file";
+    if (!bIsString && !bIsFile)
+        return false;
+
+    std::string Raw;
+    if (bIsString)
+    {
+        Raw = ConsumeValuedOption(InTokens, InOutIndex, "--validation-commands");
+    }
+    else
+    {
+        const std::string Path = ConsumeValuedOption(
+            InTokens, InOutIndex, "--validation-commands-file");
+        std::string Error;
+        if (!TryReadFileToString(fs::path(Path), Raw, Error))
+        {
+            throw UsageError("--validation-commands-file '" + Path +
+                             "': " + Error);
+        }
+    }
+
+    OutbValidationClear = true;
+    std::string Current;
+    const auto FlushLine = [&]()
+    {
+        std::string Line = Trim(Current);
+        Current.clear();
+        if (Line.empty())
+            return;
+        if (Line[0] == '#')
+            return;
+        FValidationCommand C;
+        const size_t Pipe1 = Line.find('|');
+        const std::string Plat =
+            Pipe1 == std::string::npos ? "" : Line.substr(0, Pipe1);
+        if (!PlatformScopeFromString(Plat, C.mPlatform))
+            C.mPlatform = EPlatformScope::Any;
+        if (Pipe1 == std::string::npos)
+        {
+            C.mCommand = Line;
+        }
+        else
+        {
+            const size_t Pipe2 = Line.find('|', Pipe1 + 1);
+            if (Pipe2 == std::string::npos)
+            {
+                C.mCommand = Line.substr(Pipe1 + 1);
+            }
+            else
+            {
+                C.mCommand = Line.substr(Pipe1 + 1, Pipe2 - Pipe1 - 1);
+                C.mDescription = Line.substr(Pipe2 + 1);
+            }
+        }
+        if (C.mCommand.empty())
+        {
+            throw UsageError(
+                "--validation-commands: line has empty <command> segment; "
+                "expected '<platform>|<command>|<description>' (one per line)");
+        }
+        OutAdd.push_back(std::move(C));
+    };
+    for (const char C : Raw)
+    {
+        if (C == '\n')
+            FlushLine();
+        else
+            Current.push_back(C);
+    }
+    FlushLine();
+    return true;
+}
+
 bool ContainsHelpFlag(const std::vector<std::string> &InTokens)
 {
     for (const std::string &Token : InTokens)
@@ -693,6 +788,10 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
                 Remaining, Index, "--problem-statement",
                 "--problem-statement-file", Options.mProblemStatement))
             continue;
+        if (TryConsumeValidationCommandsProse(Remaining, Index,
+                                              Options.mbValidationClear,
+                                              Options.mValidationAdd))
+            continue;
         if (Token == "--validation-clear")
         {
             Options.mbValidationClear = true;
@@ -997,6 +1096,10 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--handoff",
                                          "--handoff-file", Options.mHandoff))
+            continue;
+        if (TryConsumeValidationCommandsProse(Remaining, Index,
+                                              Options.mbValidationClear,
+                                              Options.mValidationAdd))
             continue;
         if (Token == "--validation-clear")
         {
@@ -2411,6 +2514,408 @@ ParsePhaseNormalizeOptions(const std::vector<std::string> &InTokens)
         throw UsageError("phase normalize requires --topic");
     if (Options.mPhaseIndex < 0)
         throw UsageError("phase normalize requires --phase");
+    return Options;
+}
+
+// ---------------------------------------------------------------------------
+// v0.93.0 CRUD symmetry — parsers for job / task / lane / testing
+// add/remove/list and topic normalize. Mirrors the existing lane add +
+// manifest remove/list patterns above.
+// ---------------------------------------------------------------------------
+
+FJobAddOptions ParseJobAddOptions(const std::vector<std::string> &InTokens)
+{
+    FJobAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid job status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--scope",
+                                         "--scope-file", Options.mScope))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--output",
+                                         "--output-file", Options.mOutput))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--exit-criteria",
+                                         "--exit-criteria-file",
+                                         Options.mExitCriteria))
+            continue;
+        if (Token == "--lane")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--lane",
+                                  Options.mLaneIndex);
+            continue;
+        }
+        if (Token == "--wave")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--wave", Options.mWave);
+            continue;
+        }
+        throw UsageError("Unknown option for job add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("job add requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("job add requires --phase");
+    return Options;
+}
+
+FJobRemoveOptions
+ParseJobRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FJobRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--job")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--job", Options.mJobIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for job remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("job remove requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("job remove requires --phase");
+    if (Options.mJobIndex < 0)
+        throw UsageError("job remove requires --job");
+    return Options;
+}
+
+FJobListOptions ParseJobListOptions(const std::vector<std::string> &InTokens)
+{
+    FJobListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for job list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("job list requires --topic");
+    return Options;
+}
+
+FTaskAddOptions ParseTaskAddOptions(const std::vector<std::string> &InTokens)
+{
+    FTaskAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--job")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--job", Options.mJobIndex);
+            continue;
+        }
+        if (Token == "--status")
+        {
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            EExecutionStatus Value;
+            if (!ExecutionStatusFromString(Raw, Value))
+            {
+                throw UsageError(
+                    "Invalid task status '" + Raw +
+                    "' (expected: not_started, in_progress, completed, "
+                    "blocked)");
+            }
+            Options.opStatus = Value;
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--description",
+                                         "--description-file",
+                                         Options.mDescription))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--evidence",
+                                         "--evidence-file", Options.mEvidence))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--notes",
+                                         "--notes-file", Options.mNotes))
+            continue;
+        throw UsageError("Unknown option for task add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("task add requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("task add requires --phase");
+    if (Options.mJobIndex < 0)
+        throw UsageError("task add requires --job");
+    if (Options.mDescription.empty())
+        throw UsageError("task add requires --description");
+    return Options;
+}
+
+FTaskRemoveOptions
+ParseTaskRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FTaskRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--job")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--job", Options.mJobIndex);
+            continue;
+        }
+        if (Token == "--task")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--task",
+                                  Options.mTaskIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for task remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("task remove requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("task remove requires --phase");
+    if (Options.mJobIndex < 0)
+        throw UsageError("task remove requires --job");
+    if (Options.mTaskIndex < 0)
+        throw UsageError("task remove requires --task");
+    return Options;
+}
+
+FTaskListOptions ParseTaskListOptions(const std::vector<std::string> &InTokens)
+{
+    FTaskListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--job")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--job", Options.mJobIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for task list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("task list requires --topic");
+    if (Options.mJobIndex >= 0 && Options.mPhaseIndex < 0)
+        throw UsageError("task list: --job requires --phase");
+    return Options;
+}
+
+FLaneRemoveOptions
+ParseLaneRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FLaneRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--lane")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--lane",
+                                  Options.mLaneIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for lane remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("lane remove requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("lane remove requires --phase");
+    if (Options.mLaneIndex < 0)
+        throw UsageError("lane remove requires --lane");
+    return Options;
+}
+
+FLaneListOptions ParseLaneListOptions(const std::vector<std::string> &InTokens)
+{
+    FLaneListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for lane list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("lane list requires --topic");
+    return Options;
+}
+
+FTestingRemoveOptions
+ParseTestingRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FTestingRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for testing remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("testing remove requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("testing remove requires --phase");
+    if (Options.mIndex < 0)
+        throw UsageError("testing remove requires --index");
+    return Options;
+}
+
+FTestingListOptions
+ParseTestingListOptions(const std::vector<std::string> &InTokens)
+{
+    FTestingListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for testing list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("testing list requires --topic");
+    return Options;
+}
+
+FTopicNormalizeOptions
+ParseTopicNormalizeOptions(const std::vector<std::string> &InTokens)
+{
+    FTopicNormalizeOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--dry-run")
+        {
+            Options.mbDryRun = true;
+            continue;
+        }
+        throw UsageError("Unknown option for topic normalize: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("topic normalize requires --topic");
     return Options;
 }
 

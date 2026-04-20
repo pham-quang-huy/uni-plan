@@ -1,8 +1,11 @@
+#include "UniPlanCliConstants.h"
 #include "UniPlanCommandHelp.h"
+#include "UniPlanCommandMutationCommon.h"
 #include "UniPlanEnums.h"
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanStringHelpers.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
@@ -541,6 +544,9 @@ int RunTopicCommand(const std::vector<std::string> &InArgs,
         return RunTopicSetCommand(SubArgs, InRepoRoot);
     }
 
+    if (Sub == "normalize")
+        return RunTopicNormalizeCommand(SubArgs, InRepoRoot);
+
     // Semantic topic commands
     if (Sub == "start")
         return RunTopicStartCommand(SubArgs, InRepoRoot);
@@ -552,8 +558,121 @@ int RunTopicCommand(const std::vector<std::string> &InArgs,
         return RunTopicStatusCommand(SubArgs, InRepoRoot);
 
     throw UsageError("Unknown topic subcommand: " + Sub +
-                     ". Expected: list, get, set, start, complete, block, "
-                     "status");
+                     ". Expected: list, get, set, normalize, start, complete, "
+                     "block, status");
+}
+
+// ---------------------------------------------------------------------------
+// topic normalize
+//
+// Parallels `phase normalize`: sweep every topic-level prose field +
+// typed-array entry prose subfield, replacing smart quotes / em+en
+// dashes / NBSP with ASCII equivalents. Fields covered: summary,
+// goals, non_goals, problem_statement, baseline_audit, execution_strategy,
+// locked_decisions, source_references, plus each risks[i] / next_actions[i] /
+// acceptance_criteria[i] prose subfield. Validation_commands'
+// `command` / `description` are intentionally NOT swept — command
+// text contains shell punctuation that may look like smart characters
+// but is load-bearing; authors can normalize those by reconstruction
+// via `uni-plan phase set --validation-commands-file` if needed.
+//
+// --dry-run reports what would change without writing. Auto-changelog
+// is filed topic-scoped with a "Normalized topic prose (N replacements
+// in N fields)" entry. Added v0.93.0 to close the final CRUD-symmetry
+// gap that forced callers to reach for raw JSON edits when topic-level
+// prose tripped no_smart_quotes.
+// ---------------------------------------------------------------------------
+
+int RunTopicNormalizeCommand(const std::vector<std::string> &InArgs,
+                             const std::string &InRepoRoot)
+{
+    const FTopicNormalizeOptions Options = ParseTopicNormalizeOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    size_t TotalReplacements = 0;
+    size_t FieldsChanged = 0;
+    auto Sweep = [&](std::string &InOutField)
+    {
+        if (Options.mbDryRun)
+        {
+            std::string Copy = InOutField;
+            const size_t R = NormalizeSmartChars(Copy);
+            if (R > 0)
+            {
+                ++FieldsChanged;
+                TotalReplacements += R;
+            }
+            return;
+        }
+        const size_t R = NormalizeSmartChars(InOutField);
+        if (R > 0)
+        {
+            ++FieldsChanged;
+            TotalReplacements += R;
+        }
+    };
+
+    Sweep(Bundle.mMetadata.mSummary);
+    Sweep(Bundle.mMetadata.mGoals);
+    Sweep(Bundle.mMetadata.mNonGoals);
+    Sweep(Bundle.mMetadata.mProblemStatement);
+    Sweep(Bundle.mMetadata.mBaselineAudit);
+    Sweep(Bundle.mMetadata.mExecutionStrategy);
+    Sweep(Bundle.mMetadata.mLockedDecisions);
+    Sweep(Bundle.mMetadata.mSourceReferences);
+
+    for (FRiskEntry &R : Bundle.mMetadata.mRisks)
+    {
+        Sweep(R.mStatement);
+        Sweep(R.mMitigation);
+        Sweep(R.mNotes);
+    }
+    for (FNextActionEntry &A : Bundle.mNextActions)
+    {
+        Sweep(A.mStatement);
+        Sweep(A.mRationale);
+    }
+    for (FAcceptanceCriterionEntry &C : Bundle.mMetadata.mAcceptanceCriteria)
+    {
+        Sweep(C.mStatement);
+        Sweep(C.mMeasure);
+        Sweep(C.mEvidence);
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    Changes.push_back({"normalized",
+                       {std::to_string(FieldsChanged) + " fields",
+                        std::to_string(TotalReplacements) + " replacements"}});
+
+    if (Options.mbDryRun || TotalReplacements == 0)
+    {
+        EmitMutationJson(Options.mTopic, kTargetPlan, Changes, true);
+        return 0;
+    }
+
+    const std::string Desc = "Normalized topic prose (" +
+                             std::to_string(TotalReplacements) +
+                             " replacements in " +
+                             std::to_string(FieldsChanged) + " fields)";
+    AppendAutoChangelog(Bundle, kTargetPlan, Desc);
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, kTargetPlan, Changes, true);
+    return 0;
 }
 
 } // namespace UniPlan

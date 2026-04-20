@@ -82,31 +82,46 @@ static int DispatchSubcommand(const char *InGroupName,
 static int DispatchJobCommand(const std::vector<std::string> &InArgs,
                               const std::string &InCwd)
 {
-    static const FCommandEntry kSubs[] = {{"set", &RunJobSetCommand}};
-    return DispatchSubcommand("job", InArgs, InCwd, kSubs, "set");
+    static const FCommandEntry kSubs[] = {{"add", &RunJobAddCommand},
+                                          {"set", &RunJobSetCommand},
+                                          {"remove", &RunJobRemoveCommand},
+                                          {"list", &RunJobListCommand}};
+    return DispatchSubcommand("job", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
 }
 
 static int DispatchTaskCommand(const std::vector<std::string> &InArgs,
                                const std::string &InCwd)
 {
-    static const FCommandEntry kSubs[] = {{"set", &RunTaskSetCommand}};
-    return DispatchSubcommand("task", InArgs, InCwd, kSubs, "set");
+    static const FCommandEntry kSubs[] = {{"add", &RunTaskAddCommand},
+                                          {"set", &RunTaskSetCommand},
+                                          {"remove", &RunTaskRemoveCommand},
+                                          {"list", &RunTaskListCommand}};
+    return DispatchSubcommand("task", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
 }
 
 static int DispatchLaneCommand(const std::vector<std::string> &InArgs,
                                const std::string &InCwd)
 {
-    static const FCommandEntry kSubs[] = {{"set", &RunLaneSetCommand},
-                                          {"add", &RunLaneAddCommand}};
-    return DispatchSubcommand("lane", InArgs, InCwd, kSubs, "set, add");
+    static const FCommandEntry kSubs[] = {{"add", &RunLaneAddCommand},
+                                          {"set", &RunLaneSetCommand},
+                                          {"remove", &RunLaneRemoveCommand},
+                                          {"list", &RunLaneListCommand}};
+    return DispatchSubcommand("lane", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
 }
 
 static int DispatchTestingCommand(const std::vector<std::string> &InArgs,
                                   const std::string &InCwd)
 {
-    static const FCommandEntry kSubs[] = {{"add", &RunTestingAddCommand},
-                                          {"set", &RunTestingSetCommand}};
-    return DispatchSubcommand("testing", InArgs, InCwd, kSubs, "add, set");
+    static const FCommandEntry kSubs[] = {
+        {"add", &RunTestingAddCommand},
+        {"set", &RunTestingSetCommand},
+        {"remove", &RunTestingRemoveCommand},
+        {"list", &RunTestingListCommand}};
+    return DispatchSubcommand("testing", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
 }
 
 static int DispatchManifestCommand(const std::vector<std::string> &InArgs,
@@ -235,12 +250,11 @@ void PrintUsage(std::ostream &Out)
     Out << "  uni-plan phase remove --topic <T> --phase <N>\n";
     Out << "  uni-plan phase normalize --topic <T> "
            "--phase <N> [--dry-run]\n";
-    Out << "  uni-plan job set --topic <T> "
-           "--phase <N> --job <N> [--status <s>] "
-           "[--scope <t>] ...\n";
-    Out << "  uni-plan task set --topic <T> "
-           "--phase <N> --job <N> --task <N> "
-           "[--status <s>]\n";
+    Out << "  uni-plan topic normalize --topic <T> [--dry-run]\n";
+    Out << "  uni-plan job add|set|remove|list --topic <T> "
+           "--phase <N> [--job <N>] ...\n";
+    Out << "  uni-plan task add|set|remove|list --topic <T> "
+           "--phase <N> --job <N> [--task <N>] ...\n";
     Out << "  uni-plan changelog add --topic <T> "
            "--change <text> [--phase <N>] "
            "[--type <type>]\n";
@@ -254,18 +268,10 @@ void PrintUsage(std::ostream &Out)
     Out << "  uni-plan verification set --topic <T> "
            "--index <N> [--check <t>] [--result <t>] "
            "[--detail <t>]\n";
-    Out << "  uni-plan lane set --topic <T> "
-           "--phase <N> --lane <N> [--status <s>] "
-           "[--scope <t>] ...\n";
-    Out << "  uni-plan lane add --topic <T> "
-           "--phase <N> [--status <s>] "
-           "[--scope <t>] [--exit-criteria <t>]\n";
-    Out << "  uni-plan testing add --topic <T> "
-           "--phase <N> --step <text> "
-           "--action <text> --expected <text>\n";
-    Out << "  uni-plan testing set --topic <T> "
-           "--phase <N> --index <N> [--session <t>] "
-           "[--actor <t>] [--step <t>] ...\n";
+    Out << "  uni-plan lane add|set|remove|list --topic <T> "
+           "--phase <N> [--lane <N>] ...\n";
+    Out << "  uni-plan testing add|set|remove|list --topic <T> "
+           "--phase <N> [--index <N>] ...\n";
     Out << "  uni-plan manifest add --topic <T> "
            "--phase <N> --file <path> "
            "--action <a> --description <text>\n";
@@ -373,6 +379,7 @@ int RunMain(const int InArgc, char *InArgv[])
             {"next-action", &DispatchNextActionCommand},
             {"acceptance-criterion", &DispatchAcceptanceCriterionCommand},
             {"migrate", &RunMigrateCommand},
+            {"_catalog", &RunCatalogCommand},
         };
 
         for (const FCommandEntry &Entry : kCommands)

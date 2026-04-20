@@ -5,6 +5,8 @@
 #include "UniPlanRuntime.h"
 #include "UniPlanTypes.h"
 
+#include <fstream>
+
 #include <gtest/gtest.h>
 
 // ===================================================================
@@ -972,4 +974,354 @@ TEST_F(FBundleTestFixture, JobSetLaneOutOfRangeFails)
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 1);
+}
+
+// ===================================================================
+// v0.93.0 CRUD symmetry — job/task/lane/testing add/remove/list +
+// topic normalize + --validation-commands-file
+// ===================================================================
+
+TEST_F(FBundleTestFixture, JobAddAppendsJob)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t CountBefore = Before.mPhases[1].mJobs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunJobAddCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--scope", "New job",
+         "--lane", "0", "--wave", "0", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["ok"].get<bool>());
+    EXPECT_EQ(Json["job_index"], CountBefore);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mJobs.size(), CountBefore + 1);
+    EXPECT_EQ(After.mPhases[1].mJobs.back().mScope, "New job");
+    EXPECT_EQ(After.mPhases[1].mJobs.back().mLane, 0);
+    EXPECT_EQ(After.mPhases[1].mJobs.back().mWave, 0);
+}
+
+TEST_F(FBundleTestFixture, JobAddRejectsOutOfRangeLane)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunJobAddCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--scope", "X", "--lane",
+         "99", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, JobRemoveErasesJob)
+{
+    CopyFixture("SampleTopic");
+    // First add one, then remove it so we don't tamper with fixture baseline.
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunJobAddCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--scope",
+                   "Ephemeral", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t CountBefore = Before.mPhases[1].mJobs.size();
+    const int EphemeralIndex = static_cast<int>(CountBefore) - 1;
+
+    StartCapture();
+    const int Code = UniPlan::RunJobRemoveCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job",
+         std::to_string(EphemeralIndex), "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mJobs.size(), CountBefore - 1);
+}
+
+TEST_F(FBundleTestFixture, JobListEmitsCountedEntries)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunJobListCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-list-v1");
+    EXPECT_TRUE(Json["entries"].is_array());
+    EXPECT_EQ(Json["entry_count"].get<size_t>(), Json["entries"].size());
+    EXPECT_GE(Json["entries"].size(), 1u);
+}
+
+TEST_F(FBundleTestFixture, TaskAddRemoveRoundtrip)
+{
+    CopyFixture("SampleTopic");
+
+    // Pick an existing job that already has tasks (phase 1 jobs[2]).
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t CountBefore = Before.mPhases[1].mJobs[2].mTasks.size();
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTaskAddCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--job", "2",
+                   "--description", "Ephemeral task", "--repo-root",
+                   mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    UniPlan::FTopicBundle Mid;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Mid));
+    ASSERT_EQ(Mid.mPhases[1].mJobs[2].mTasks.size(), CountBefore + 1);
+
+    const int NewIndex = static_cast<int>(CountBefore);
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTaskRemoveCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--job", "2",
+                   "--task", std::to_string(NewIndex), "--repo-root",
+                   mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mJobs[2].mTasks.size(), CountBefore);
+}
+
+TEST_F(FBundleTestFixture, TaskListFiltersByJob)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTaskListCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "2", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["entries"].is_array());
+    for (const auto &E : Json["entries"])
+    {
+        EXPECT_EQ(E["phase_index"].get<int>(), 1);
+        EXPECT_EQ(E["job_index"].get<int>(), 2);
+    }
+}
+
+TEST_F(FBundleTestFixture, LaneRemoveRefusesWhenJobsReferenceIt)
+{
+    CopyFixture("SampleTopic");
+    // phase 1 lane 0 is referenced by job[0] and job[1]; remove must refuse.
+    StartCapture();
+    const int Code = UniPlan::RunLaneRemoveCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--lane", "0", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, LaneRemoveSucceedsAfterJobsReassigned)
+{
+    CopyFixture("SampleTopic");
+
+    // Add an orphan lane (index N) with no jobs, then remove it — must pass.
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunLaneAddCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--scope",
+                   "Orphan lane", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    UniPlan::FTopicBundle Mid;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Mid));
+    const int OrphanIndex = static_cast<int>(Mid.mPhases[1].mLanes.size()) - 1;
+    const size_t LanesBefore = Mid.mPhases[1].mLanes.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunLaneRemoveCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--lane",
+         std::to_string(OrphanIndex), "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mLanes.size(), LanesBefore - 1);
+}
+
+TEST_F(FBundleTestFixture, LaneListEmitsCountedEntries)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunLaneListCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-list-v1");
+    EXPECT_GE(Json["entries"].size(), 1u);
+}
+
+TEST_F(FBundleTestFixture, TestingRemoveErasesEntry)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTestingAddCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--session", "s",
+                   "--step", "stp", "--action", "ac", "--expected", "ex",
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    UniPlan::FTopicBundle Mid;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Mid));
+    const int EphemeralIndex =
+        static_cast<int>(Mid.mPhases[1].mTesting.size()) - 1;
+    const size_t CountBefore = Mid.mPhases[1].mTesting.size();
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTestingRemoveCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--index",
+                   std::to_string(EphemeralIndex), "--repo-root",
+                   mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[1].mTesting.size(), CountBefore - 1);
+}
+
+TEST_F(FBundleTestFixture, TestingListEmitsEntries)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTestingListCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-list-v1");
+    EXPECT_TRUE(Json["entries"].is_array());
+}
+
+TEST_F(FBundleTestFixture, TopicNormalizeDryRunReportsOnly)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+    const std::string SummaryBefore = Before.mMetadata.mSummary;
+
+    StartCapture();
+    const int Code = UniPlan::RunTopicNormalizeCommand(
+        {"--topic", "SampleTopic", "--dry-run", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mMetadata.mSummary, SummaryBefore);
+    EXPECT_EQ(After.mChangeLogs.size(), ChangelogsBefore);
+}
+
+TEST_F(FBundleTestFixture, PhaseSetValidationCommandsFileReplacesArray)
+{
+    CopyFixture("SampleTopic");
+
+    const fs::path VcPath = mRepoRoot / "vc.txt";
+    {
+        std::ofstream Out(VcPath);
+        Out << "macos|bash build.sh|macOS build check\n";
+        Out << "windows|build.bat|Windows build check\n";
+    }
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--validation-commands-file",
+         VcPath.string(), "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mPhases[1].mDesign.mValidationCommands.size(), 2u);
+    EXPECT_EQ(After.mPhases[1].mDesign.mValidationCommands[0].mCommand,
+              "bash build.sh");
+    EXPECT_EQ(After.mPhases[1].mDesign.mValidationCommands[1].mCommand,
+              "build.bat");
+}
+
+TEST_F(FBundleTestFixture, PhaseSetValidationCommandsInlineReplacesArray)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--validation-commands",
+         "macos|bash build.sh|macOS", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mPhases[1].mDesign.mValidationCommands.size(), 1u);
+    EXPECT_EQ(After.mPhases[1].mDesign.mValidationCommands[0].mCommand,
+              "bash build.sh");
+}
+
+TEST(OptionParsing, JobAddRequiresPhase)
+{
+    EXPECT_THROW(UniPlan::ParseJobAddOptions({"--topic", "T"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, JobRemoveRequiresJobIndex)
+{
+    EXPECT_THROW(
+        UniPlan::ParseJobRemoveOptions({"--topic", "T", "--phase", "0"}),
+        UniPlan::UsageError);
+}
+
+TEST(OptionParsing, TaskAddRequiresDescription)
+{
+    EXPECT_THROW(UniPlan::ParseTaskAddOptions(
+                     {"--topic", "T", "--phase", "0", "--job", "0"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, TaskListJobRequiresPhase)
+{
+    EXPECT_THROW(UniPlan::ParseTaskListOptions({"--topic", "T", "--job", "0"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, TopicNormalizeRequiresTopic)
+{
+    EXPECT_THROW(UniPlan::ParseTopicNormalizeOptions({"--dry-run"}),
+                 UniPlan::UsageError);
 }
