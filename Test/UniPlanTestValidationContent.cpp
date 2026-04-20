@@ -681,6 +681,150 @@ TEST_F(FBundleTestFixture, NoDuplicateLaneScopePassesOnDistinctLanes)
 }
 
 // -------------------------------------------------------------------
+// file_manifest_required_for_code_phases — authoring-discipline gap
+// (v0.86.0). Fires Warning when a phase has populated
+// code_entity_contract or code_snippets (the "code-bearing" predicate)
+// but empty file_manifest, unless the explicit opt-out
+// (no_file_manifest=true + reason) is set.
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, FileManifestRequiredFiresOnCodeBearingEmpty)
+{
+    // Minimal fixture with InPopulateDesign=true sets
+    // code_entity_contract — code-bearing predicate true; manifest empty.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(
+        Json, "file_manifest_required_for_code_phases");
+    ASSERT_FALSE(Issue.empty());
+    // v0.87.0: severity promoted from Warning → ErrorMinor now that
+    // `manifest suggest` (v0.86.0) provides the migration path.
+    EXPECT_EQ(Issue["severity"], "error_minor");
+    EXPECT_EQ(Issue["path"].get<std::string>(),
+              "phases[0].file_manifest");
+}
+
+TEST_F(FBundleTestFixture, FileManifestRequiredSkippedOnNonCodeBearing)
+{
+    // No design fields populated → not code-bearing → no fire.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(
+                  Json, "file_manifest_required_for_code_phases"),
+              0);
+}
+
+TEST_F(FBundleTestFixture, FileManifestRequiredSkippedWhenManifestPresent)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FFileManifestItem Item;
+    Item.mFilePath = "Engine/Foo.cpp";
+    Item.mAction = UniPlan::EFileAction::Modify;
+    Item.mDescription = "covered";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(
+                  Json, "file_manifest_required_for_code_phases"),
+              0);
+}
+
+TEST_F(FBundleTestFixture, FileManifestRequiredSkippedByExplicitOptOut)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason =
+        "Doc-only phase, no code touched";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(
+                  Json, "file_manifest_required_for_code_phases"),
+              0);
+}
+
+// v0.87.0: stale_mislabeled_modify smoke tests.
+// The evaluator spawns `git log` against the repo root; the test
+// fixture's mRepoRoot is a fresh tmpdir without git, so the evaluator
+// silently no-ops. These tests cover the no-op contract; a real-corpus
+// integration test against ~/code/fie validates the positive path.
+TEST_F(FBundleTestFixture, StaleMislabeledModifySilentInNonGitRepo)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FFileManifestItem Item;
+    Item.mFilePath = "Engine/Foo.cpp";
+    Item.mAction = UniPlan::EFileAction::Modify;
+    Item.mDescription = "covered";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "stale_mislabeled_modify"), 0)
+        << "non-git repo must produce zero stale_mislabeled_modify issues";
+}
+
+TEST_F(FBundleTestFixture, StaleMislabeledModifySkippedWhenNoModifyEntries)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FFileManifestItem Item;
+    Item.mFilePath = "Engine/Foo.cpp";
+    Item.mAction = UniPlan::EFileAction::Create; // not modify, not in scope
+    Item.mDescription = "covered";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "stale_mislabeled_modify"), 0);
+}
+
+// -------------------------------------------------------------------
 // phase_status_lane_alignment — drift evaluator (v0.84.0)
 // Mirrors the phase drift command but via validate --strict, so CI can
 // gate on phase status vs lane-evidence disagreement.

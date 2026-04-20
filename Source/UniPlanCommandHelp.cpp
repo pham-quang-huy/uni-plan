@@ -297,7 +297,27 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  --dependency-clear      Empty dependencies array before\n"
         "                          --dependency-add\n"
         "  --dependency-add <spec> Add typed dependency; spec =\n"
-        "                          '<kind>|<topic>|<phase>|<path>|<note>'\n",
+        "                          '<kind>|<topic>|<phase>|<path>|<note>'\n"
+        "  --no-file-manifest <true|false>\n"
+        "                          v0.86.0+: explicit-no-manifest opt-out.\n"
+        "                          When true, the\n"
+        "                          file_manifest_required_for_code_phases\n"
+        "                          evaluator (and v0.88.0+ phase-complete\n"
+        "                          gate) skip this phase. REQUIRES\n"
+        "                          --no-file-manifest-reason in the same\n"
+        "                          call when flipping to true.\n"
+        "  --no-file-manifest-reason <text>\n"
+        "                          Justification (e.g., 'taxonomy rollout,\n"
+        "                          no code touched'). Stored on the phase;\n"
+        "                          enforced as non-empty whenever\n"
+        "                          no_file_manifest=true.\n"
+        "  --no-file-manifest-reason-file <path>\n"
+        "                          Read the justification from a file\n"
+        "                          (avoids shell-quoting hazards).\n"
+        "  --no-file-manifest-reason-clear\n"
+        "                          Clear the justification (only valid when\n"
+        "                          flipping no_file_manifest back to false\n"
+        "                          in the same call).\n",
         nullptr,
         "uni-plan-mutation-v1",
         "Examples:\n"
@@ -305,7 +325,9 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  uni-plan phase set --topic X --phase 6 \\\n"
         "                     --investigation-file inv.txt\n"
         "  uni-plan phase set --topic X --phase 0 --status completed \\\n"
-        "                     --started-at 2026-03-01T00:00:00Z\n",
+        "                     --started-at 2026-03-01T00:00:00Z\n"
+        "  uni-plan phase set --topic X --phase 0 --no-file-manifest true \\\n"
+        "                     --no-file-manifest-reason \"Doc-only plan\"\n",
         true,
         false,
     },
@@ -1012,6 +1034,35 @@ static const FSubcommandHelpEntry kManifestSubs[] = {
         "  uni-plan manifest set --topic X --phase 2 --index 0 \\\n"
         "                        --action modify\n",
         true,
+        false,
+    },
+    {
+        "suggest",
+        "Usage: uni-plan manifest suggest --topic <T> --phase <N>\n"
+        "                                 [--apply]\n\n",
+        "Backfill helper (v0.86.0+). Scans `git log --name-status` over\n"
+        "the phase's [started_at..completed_at] window and proposes\n"
+        "file_manifest entries for files touched but not already\n"
+        "recorded. Defaults to dry-run (read-only); pass --apply to\n"
+        "actually invoke `manifest add` for each suggestion (reuses the\n"
+        "auto-changelog + validation pipeline).\n\n"
+        "Files already in the manifest are filtered out, so re-running\n"
+        "after partial backfills is idempotent.\n\n"
+        "Refuses with exit 1 when the phase has no started_at — backfill\n"
+        "the lifecycle stamp first via `phase set --started-at <iso>` or\n"
+        "run the phase through `phase start` / `phase complete`.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n\n",
+        "  --apply                 Mutate the bundle: invoke `manifest add`\n"
+        "                          for each suggestion. Default is dry-run\n"
+        "                          (JSON output only, no bundle changes).\n",
+        nullptr,
+        "uni-plan-manifest-suggest-v1",
+        "Examples:\n"
+        "  uni-plan manifest suggest --topic X --phase 3            # dry-run\n"
+        "  uni-plan manifest suggest --topic X --phase 3 --apply    # backfill\n",
+        false,
         false,
     },
 };

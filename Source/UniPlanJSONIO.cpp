@@ -297,6 +297,15 @@ static JSONValue SerializePhaseRecord(const FPhaseRecord &InPhase)
         Manifest.push_back(SerializeFileManifestItem(Item));
     Phase["file_manifest"] = std::move(Manifest);
 
+    // Explicit-no-manifest opt-out (v0.86.0). Emit only when set, so
+    // pre-v0.86.0 bundles round-trip without picking up the field. The
+    // skip reason is required when the bool is true (parse-time gate).
+    if (InPhase.mbNoFileManifest)
+    {
+        Phase["no_file_manifest"] = true;
+        Phase["file_manifest_skip_reason"] = InPhase.mFileManifestSkipReason;
+    }
+
     // Semantic provenance stamp. Omitted only when NativeV4 AND caller
     // wants backward-compatible bundle output; current policy is to
     // always emit so downstream tools see a single canonical shape.
@@ -658,6 +667,48 @@ static bool DeserializePhaseRecordStrict(const JSONValue &InJson,
                 return false;
             OutPhase.mFileManifest.push_back(std::move(Item));
         }
+    }
+
+    // Explicit-no-manifest opt-out (v0.86.0). Optional fields; absence
+    // means the phase participates in the manifest-required evaluator
+    // and (v0.88.0+) the phase-complete lifecycle gate. When the bool
+    // is true, the reason field is required (parse-time gate).
+    if (InJson.contains("no_file_manifest"))
+    {
+        const JSONValue &NFM = InJson["no_file_manifest"];
+        if (!NFM.is_boolean())
+        {
+            OutError = InContext +
+                       ".no_file_manifest must be a boolean (v0.86.0+)";
+            return false;
+        }
+        OutPhase.mbNoFileManifest = NFM.get<bool>();
+    }
+    if (InJson.contains("file_manifest_skip_reason"))
+    {
+        const JSONValue &Reason = InJson["file_manifest_skip_reason"];
+        if (!Reason.is_string())
+        {
+            OutError = InContext +
+                       ".file_manifest_skip_reason must be a string "
+                       "(v0.86.0+)";
+            return false;
+        }
+        OutPhase.mFileManifestSkipReason = Reason.get<std::string>();
+    }
+    if (OutPhase.mbNoFileManifest && OutPhase.mFileManifestSkipReason.empty())
+    {
+        OutError = InContext +
+                   ".no_file_manifest=true requires non-empty "
+                   "file_manifest_skip_reason (v0.86.0+)";
+        return false;
+    }
+    if (!OutPhase.mbNoFileManifest && !OutPhase.mFileManifestSkipReason.empty())
+    {
+        OutError = InContext +
+                   ".file_manifest_skip_reason set but "
+                   "no_file_manifest=false (v0.86.0+)";
+        return false;
     }
 
     // Optional — introduced in 0.75.0; backward-compat: absence = NativeV4.

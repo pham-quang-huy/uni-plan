@@ -1024,6 +1024,14 @@ TEST_F(FBundleTestFixture, ValidateIgnoresCompletedPhaseActorCoverage)
     Record.mAction = "Run smoke";
     Record.mExpected = "Pass";
     Bundle.mPhases[0].mTesting.push_back(std::move(Record));
+    // v0.86.0: opt out of file_manifest_required_for_code_phases — the
+    // minimal fixture's populated code_entity_contract makes the phase
+    // code-bearing in that evaluator's eyes, but this test is scoped to
+    // actor-coverage behavior, not manifest authoring discipline.
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason =
+        "Test fixture: no manifest authoring required for actor-coverage "
+        "regression test";
 
     const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
     std::string Error;

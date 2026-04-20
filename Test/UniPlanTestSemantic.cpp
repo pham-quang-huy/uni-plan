@@ -1,6 +1,7 @@
 #include "UniPlanTestFixture.h"
 
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJSONIO.h"
 #include "UniPlanTypes.h"
 
 #include <gtest/gtest.h>
@@ -115,6 +116,85 @@ TEST_F(FBundleTestFixture, PhaseCompleteHappyPath)
         }
     }
     EXPECT_TRUE(bFoundPhaseClosure);
+}
+
+// v0.88.0 lifecycle gate: code-bearing phase cannot complete with
+// empty file_manifest unless explicit opt-out is set.
+TEST_F(FBundleTestFixture, PhaseCompleteRejectsCodeBearingWithEmptyManifest)
+{
+    // InPopulateDesign=true sets code_entity_contract → code-bearing.
+    // No manifest entries → gate fires → exit 1, phase remains
+    // in_progress.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--done", "All done", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("file_manifest"), std::string::npos)
+        << "must explain why the close was refused";
+    EXPECT_NE(mCapturedStderr.find("manifest suggest"), std::string::npos)
+        << "must point at the backfill remediation";
+
+    // Phase still in_progress on disk — the refusal is atomic.
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::InProgress);
+}
+
+TEST_F(FBundleTestFixture, PhaseCompleteAllowsCodeBearingWithOptOut)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason =
+        "Doc-only phase: no code touched";
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--done", "All done", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases[0].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::Completed);
+}
+
+TEST_F(FBundleTestFixture, PhaseCompleteAllowsCodeBearingWithManifestEntries)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FFileManifestItem Item;
+    Item.mFilePath = "Engine/Foo.cpp";
+    Item.mAction = UniPlan::EFileAction::Modify;
+    Item.mDescription = "Edited the foo path";
+    Bundle.mPhases[0].mFileManifest.push_back(std::move(Item));
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--done", "All done", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
 }
 
 TEST_F(FBundleTestFixture, PhaseCompleteRejectsNotInProgress)

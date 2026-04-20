@@ -902,7 +902,8 @@ EvalValidationCommandFields(const std::vector<FTopicBundle> &InBundles,
 // ---------------------------------------------------------------------------
 
 std::vector<ValidateCheck>
-ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
+ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
+                   const fs::path &InRepoRoot)
 {
     std::vector<ValidateCheck> Checks;
 
@@ -952,6 +953,14 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles)
     EvalNoDuplicatePhaseField(InBundles, Checks);
     EvalNoHollowCompletedPhase(InBundles, Checks);
     EvalNoDuplicateLaneScope(InBundles, Checks);
+    EvalFileManifestRequiredForCodePhases(InBundles, Checks);
+    // v0.87.0: stale_mislabeled_modify needs git history (file birth
+    // dates), so it's gated on a non-empty repo root. Validate
+    // invocations that don't pass repo root (e.g., the watch TUI
+    // pre-render snapshot) silently skip it. Validate command path
+    // always passes RepoRoot, so `--strict` users always see the check.
+    if (!InRepoRoot.empty())
+        EvalStaleMislabeledModify(InBundles, Checks, InRepoRoot);
     EvalPathResolves(InBundles, Checks);
 
     return Checks;

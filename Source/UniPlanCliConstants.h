@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.85.0";
+static constexpr const char *kCliVersion = "0.88.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -126,6 +126,15 @@ static constexpr const char *kLegacyGapSchema = "uni-plan-legacy-gap-v1";
 // timestamps). Consumed by agents to find status-lag drift without
 // reading each phase manually.
 static constexpr const char *kPhaseDriftSchema = "uni-plan-phase-drift-v1";
+
+// Manifest-suggest command schema (v0.86.0). Reports git-history-derived
+// suggestions for file_manifest entries on a single phase, scanning the
+// phase's started_at..completed_at window. Backfill tool that closes the
+// retrofit gap created by file_manifest_required_for_code_phases — authors
+// review the suggestions and call `manifest add` (or use --apply for
+// auto-add).
+static constexpr const char *kManifestSuggestSchema =
+    "uni-plan-manifest-suggest-v1";
 
 // ---------------------------------------------------------------------------
 // ANSI color codes for --human mode

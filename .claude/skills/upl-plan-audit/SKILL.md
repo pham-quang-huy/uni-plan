@@ -110,6 +110,27 @@ uni-plan phase drift | jq '.drift_entries[] | {topic, phase_index, kind, detail}
 
 # v0.84.1+: human-readable manifest audit (ANSI table, was silently JSON-only pre-0.84.1)
 uni-plan manifest list --stale-plan --human
+
+# v0.86.0+: backfill missing file_manifest entries from git history.
+# Defaults to dry-run; --apply invokes `manifest add` for each suggestion.
+uni-plan manifest suggest --topic A --phase 3            # dry-run
+uni-plan manifest suggest --topic A --phase 3 --apply    # backfill
+
+# v0.86.0+: explicit opt-out for non-code phases (taxonomy/doc rollouts).
+# Required when no code_manifest entries are warranted; the reason is audited.
+uni-plan phase set --topic A --phase 3 \
+  --no-file-manifest=true \
+  --no-file-manifest-reason "Taxonomy rollout, no code touched"
+
+# v0.87.0+: validate --strict surfaces both:
+#   * file_manifest_required_for_code_phases (ErrorMinor) — manifest empty
+#   * stale_mislabeled_modify (Warning) — `modify` entry whose file was
+#     first committed AFTER the phase started (should have been `create`)
+uni-plan validate --strict | jq '.issues[] | select(.id == "file_manifest_required_for_code_phases" or .id == "stale_mislabeled_modify")'
+
+# v0.88.0+ lifecycle gate: `phase complete` refuses to close a code-bearing
+# phase with empty file_manifest. Backfill or set the opt-out before
+# attempting closure.
 ```
 
 ### Corpus-wide depth overview (v0.82.0+)

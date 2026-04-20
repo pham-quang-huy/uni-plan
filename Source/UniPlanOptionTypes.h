@@ -220,6 +220,16 @@ struct FPhaseSetOptions : BaseOptions
     // value must round-trip through PhaseOriginFromString; parser
     // enforces the allowed set at parse time (exit 2 on invalid).
     std::optional<EPhaseOrigin> opOrigin;
+    // Explicit-no-manifest opt-out (v0.86.0). opNoFileManifest carries
+    // the requested boolean state when --no-file-manifest <true|false>
+    // is passed; absence means "leave unchanged." The reason flag is
+    // applied independently, but the post-mutation invariant
+    // (no_file_manifest=true ⇒ non-empty reason) is enforced by the
+    // schema serializer + parser, so callers must set the reason in the
+    // same `phase set` invocation as flipping the bool to true.
+    std::optional<bool> opNoFileManifest;
+    std::string mFileManifestSkipReason;
+    bool mbFileManifestSkipReasonClear = false;
 };
 
 struct FJobSetOptions : BaseOptions
@@ -414,6 +424,19 @@ struct FManifestListOptions : BaseOptions
                                 // dangling_modify). Orthogonal to
                                 // --missing-only; when both are set the
                                 // predicates intersect (AND).
+};
+
+// manifest suggest command options (v0.86.0). Backfill tool: scans the
+// phase's git-history window (started_at..completed_at) and proposes
+// file_manifest entries for files touched but not yet recorded.
+// Defaults to dry-run (read-only) — pass --apply to actually call
+// manifest add for each suggestion.
+struct FManifestSuggestOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    bool mbApply = false; // --apply: actually invoke manifest add for
+                          // each suggested row; default is dry-run
 };
 
 // phase drift command options (v0.84.0). Reports phases where declared

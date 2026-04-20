@@ -391,6 +391,141 @@ TEST(OptionParsing, ManifestListAcceptsEmptyArgs)
     EXPECT_NO_THROW(UniPlan::ParseManifestListOptions({}));
 }
 
+// v0.86.0: opt-out invariants. The schema requires
+// no_file_manifest=true ⇒ non-empty reason. Both serializer write and
+// the phase set mutation handler enforce this — a malformed bundle can
+// never round-trip cleanly and a malformed mutation cannot land.
+TEST_F(FBundleTestFixture, NoFileManifestRoundTripsWithReason)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason =
+        "Doc-only phase: no code touched";
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    UniPlan::FTopicBundle Roundtrip;
+    ASSERT_TRUE(ReloadBundle("T", Roundtrip));
+    EXPECT_TRUE(Roundtrip.mPhases[0].mbNoFileManifest);
+    EXPECT_EQ(Roundtrip.mPhases[0].mFileManifestSkipReason,
+              "Doc-only phase: no code touched");
+}
+
+TEST_F(FBundleTestFixture, NoFileManifestRequiresReasonOnWrite)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    // Reason intentionally left empty to assert the write/parse rejection.
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    // The write itself succeeds (no schema gate at write time), but the
+    // round-trip parse must reject it because the deserializer enforces
+    // the invariant. This is a defense-in-depth test: even if a future
+    // mutation handler regression let an empty reason through, the next
+    // load would surface the invariant violation immediately.
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+    UniPlan::FTopicBundle Roundtrip;
+    EXPECT_FALSE(ReloadBundle("T", Roundtrip));
+}
+
+TEST_F(FBundleTestFixture, PhaseSetNoFileManifestMutates)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "T", "--phase", "0", "--no-file-manifest", "true",
+         "--no-file-manifest-reason", "Doc plan", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_TRUE(Bundle.mPhases[0].mbNoFileManifest);
+    EXPECT_EQ(Bundle.mPhases[0].mFileManifestSkipReason, "Doc plan");
+}
+
+TEST_F(FBundleTestFixture, PhaseSetNoFileManifestRejectsWithoutReason)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    StartCapture();
+    // No --no-file-manifest-reason provided alongside =true → handler
+    // refuses with exit 1, leaves bundle untouched.
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "T", "--phase", "0", "--no-file-manifest", "true",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    EXPECT_FALSE(Bundle.mPhases[0].mbNoFileManifest);
+    EXPECT_TRUE(Bundle.mPhases[0].mFileManifestSkipReason.empty());
+}
+
+TEST(OptionParsing, PhaseSetNoFileManifestEnforcesBoolValue)
+{
+    EXPECT_THROW(UniPlan::ParsePhaseSetOptions(
+                     {"--topic", "T", "--phase", "0", "--no-file-manifest",
+                      "yes"}),
+                 UniPlan::UsageError);
+}
+
+// v0.86.0: manifest suggest. Smoke test the dry-run JSON shape; full
+// git-history flow is exercised by the live FIE corpus during release
+// smoke. These tests assert the contract (schema, fields, exit codes,
+// missing-started-at gate) without depending on real git history.
+TEST_F(FBundleTestFixture, ManifestSuggestRequiresStartedAt)
+{
+    // not_started phase has no started_at → command refuses with
+    // exit 1 and a clear remediation message on stderr.
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    StartCapture();
+    const int Code = UniPlan::RunManifestSuggestCommand(
+        {"--topic", "T", "--phase", "0", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("started_at"), std::string::npos)
+        << "must explain why the command refused";
+}
+
+TEST_F(FBundleTestFixture, ManifestSuggestRejectsOutOfRangePhase)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, true);
+    StartCapture();
+    const int Code = UniPlan::RunManifestSuggestCommand(
+        {"--topic", "T", "--phase", "99", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST(OptionParsing, ManifestSuggestRequiresTopicAndPhase)
+{
+    EXPECT_THROW(UniPlan::ParseManifestSuggestOptions({}),
+                 UniPlan::UsageError);
+    EXPECT_THROW(
+        UniPlan::ParseManifestSuggestOptions({"--topic", "T"}),
+        UniPlan::UsageError);
+    EXPECT_THROW(
+        UniPlan::ParseManifestSuggestOptions({"--phase", "0"}),
+        UniPlan::UsageError);
+}
+
 // v0.84.0: --stale-plan classifies plan↔disk drift in 3 subcategories.
 // stale_create   — action=create, file already exists
 // stale_delete   — action=delete, file still exists

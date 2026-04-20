@@ -385,6 +385,57 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
             Desc = Target + " stamped origin=" + New;
     }
 
+    // v0.86.0: explicit-no-manifest opt-out. Three pieces of state can
+    // change (the bool, the reason via -file/inline, the reason via
+    // -clear). Apply in order, then enforce the schema invariant
+    // (no_file_manifest=true ⇒ non-empty reason) before writing the
+    // bundle so a malformed mutation never reaches disk.
+    if (Options.opNoFileManifest.has_value() &&
+        Phase.mbNoFileManifest != *Options.opNoFileManifest)
+    {
+        const std::string Old = Phase.mbNoFileManifest ? "true" : "false";
+        const std::string New = *Options.opNoFileManifest ? "true" : "false";
+        Changes.push_back({"no_file_manifest", {Old, New}});
+        Phase.mbNoFileManifest = *Options.opNoFileManifest;
+        if (Desc.empty())
+            Desc = Target + " set no_file_manifest=" + New;
+    }
+    if (Options.mbFileManifestSkipReasonClear &&
+        !Phase.mFileManifestSkipReason.empty())
+    {
+        Changes.push_back({"file_manifest_skip_reason",
+                           {Phase.mFileManifestSkipReason, ""}});
+        Phase.mFileManifestSkipReason.clear();
+        if (Desc.empty())
+            Desc = Target + " cleared file_manifest_skip_reason";
+    }
+    else if (!Options.mFileManifestSkipReason.empty() &&
+             Phase.mFileManifestSkipReason !=
+                 Options.mFileManifestSkipReason)
+    {
+        Changes.push_back({"file_manifest_skip_reason",
+                           {Phase.mFileManifestSkipReason,
+                            Options.mFileManifestSkipReason}});
+        Phase.mFileManifestSkipReason = Options.mFileManifestSkipReason;
+        if (Desc.empty())
+            Desc = Target + " set file_manifest_skip_reason";
+    }
+    if (Phase.mbNoFileManifest && Phase.mFileManifestSkipReason.empty())
+    {
+        std::cerr
+            << "phase set: --no-file-manifest=true requires a non-empty "
+               "--no-file-manifest-reason (set both in the same call)\n";
+        return 1;
+    }
+    if (!Phase.mbNoFileManifest && !Phase.mFileManifestSkipReason.empty())
+    {
+        std::cerr << "phase set: file_manifest_skip_reason cannot be set "
+                     "while no_file_manifest=false; pass "
+                     "--no-file-manifest=true together, or use "
+                     "--no-file-manifest-reason-clear\n";
+        return 1;
+    }
+
     if (Changes.empty())
     {
         std::cerr << "No fields to update\n";

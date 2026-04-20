@@ -907,6 +907,37 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             }
             continue;
         }
+        // v0.86.0: explicit-no-manifest opt-out. The two flags are
+        // independent at parse time but the schema invariant
+        // (no_file_manifest=true ⇒ non-empty reason) is enforced both
+        // by the JSON deserializer and by the mutation handler before
+        // the bundle is written, so a malformed combination always
+        // produces a parse-time / write-time error rather than a
+        // silently-corrupt bundle.
+        if (Token == "--no-file-manifest")
+        {
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--no-file-manifest");
+            if (Raw == "true")
+                Options.opNoFileManifest = true;
+            else if (Raw == "false")
+                Options.opNoFileManifest = false;
+            else
+                throw UsageError(
+                    "Invalid --no-file-manifest value: '" + Raw +
+                    "', expected 'true' or 'false'");
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(
+                Remaining, Index, "--no-file-manifest-reason",
+                "--no-file-manifest-reason-file",
+                Options.mFileManifestSkipReason))
+            continue;
+        if (Token == "--no-file-manifest-reason-clear")
+        {
+            Options.mbFileManifestSkipReasonClear = true;
+            continue;
+        }
         if (TryConsumeStringOrFileOption(Remaining, Index, "--remaining",
                                          "--remaining-file",
                                          Options.mRemaining))
@@ -1975,6 +2006,42 @@ ParseManifestListOptions(const std::vector<std::string> &InTokens)
         throw UsageError("Unknown option for manifest list: " + Token);
     }
     // All arguments optional — no post-validation.
+    return Options;
+}
+
+// manifest suggest — backfill helper that scans git history for the
+// phase's started_at..completed_at window and proposes file_manifest
+// entries. Defaults to dry-run; --apply actually invokes manifest add
+// for each suggestion. Added v0.86.0.
+FManifestSuggestOptions
+ParseManifestSuggestOptions(const std::vector<std::string> &InTokens)
+{
+    FManifestSuggestOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--apply")
+        {
+            Options.mbApply = true;
+            continue;
+        }
+        throw UsageError("Unknown option for manifest suggest: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("manifest suggest requires --topic <topic>");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("manifest suggest requires --phase <index>");
     return Options;
 }
 

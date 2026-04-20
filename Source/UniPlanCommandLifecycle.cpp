@@ -147,6 +147,34 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
+    // v0.88.0 lifecycle gate: code-bearing phase cannot complete with
+    // an empty file_manifest unless the explicit opt-out is set. Closes
+    // the authorship-discipline gap at the mutation surface, so drift
+    // can't accumulate going forward — every new completed phase has
+    // either real manifest evidence or a documented exemption.
+    //
+    // Predicate matches `EvalFileManifestRequiredForCodePhases`: a phase
+    // is "code-bearing" when it declared itself so via populated
+    // code_entity_contract OR code_snippets design fields. The gate
+    // honors `mbNoFileManifest=true` (with required reason) as the
+    // sanctioned escape hatch for taxonomy/doc/governance phases.
+    const bool bCodeBearing = !Phase.mDesign.mCodeEntityContract.empty() ||
+                              !Phase.mDesign.mCodeSnippets.empty();
+    if (bCodeBearing && Phase.mFileManifest.empty() &&
+        !Phase.mbNoFileManifest)
+    {
+        std::cerr
+            << "Cannot complete phase " << Options.mPhaseIndex
+            << ": code-bearing phase (code_entity_contract or "
+               "code_snippets populated) has empty file_manifest. "
+               "Backfill via `uni-plan manifest suggest --topic "
+            << Options.mTopic << " --phase " << Options.mPhaseIndex
+            << " --apply`, or set the explicit opt-out via `phase set "
+               "--no-file-manifest=true --no-file-manifest-reason "
+               "\"<justification>\"` before re-running phase complete.\n";
+        return 1;
+    }
+
     using Change = std::pair<std::string, std::pair<std::string, std::string>>;
     std::vector<Change> Changes;
 

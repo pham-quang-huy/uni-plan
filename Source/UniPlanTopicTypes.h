@@ -104,6 +104,15 @@ struct FPhaseRecord
     std::vector<FJobRecord> mJobs;
     std::vector<FTestingRecord> mTesting;
     std::vector<FFileManifestItem> mFileManifest;
+    // Explicit opt-out for phases that legitimately touch no files
+    // (taxonomy rollouts, doc-only plans, governance coordination).
+    // When true, the file_manifest_required_for_code_phases evaluator
+    // and the phase-complete lifecycle gate (v0.88.0+) are skipped for
+    // this phase. mFileManifestSkipReason is REQUIRED when
+    // mbNoFileManifest is set — it documents why the exemption applies.
+    // Added v0.86.0.
+    bool mbNoFileManifest = false;
+    std::string mFileManifestSkipReason;
     // Semantic provenance stamp — durable, filesystem-independent.
     // `NativeV4` for phases authored directly against the V4 schema;
     // `V3Migration` for phases produced from the V3 markdown corpus.

@@ -6,8 +6,12 @@
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
+#include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <map>
+#include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1038,6 +1042,306 @@ int RunLaneAddCommand(const std::vector<std::string> &InArgs,
     EmitJsonFieldSizeT("lane_index", Phase.mLanes.size() - 1, false);
     std::cout << "}\n";
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// manifest suggest (v0.86.0) — backfill helper that scans git history
+// for the phase's started_at..completed_at window and proposes
+// file_manifest entries.
+//
+// Defaults to dry-run JSON output. With --apply, calls
+// RunManifestAddCommand for each suggestion (full mutation path: writes
+// the bundle, auto-changelog, validation). Files already in the
+// manifest are filtered out — repeat invocations are idempotent.
+//
+// Why this lives in uni-plan (not a shell script):
+//   * The phase window (started_at, completed_at) only exists inside
+//     the bundle — only the CLI can read it under the CLI-only rule.
+//   * The dedupe predicate ("file already in manifest") needs the
+//     typed FFileManifestItem array.
+//   * --apply needs the same auto-changelog + validation gates that
+//     manifest add already runs.
+// ---------------------------------------------------------------------------
+
+// Map a single git --name-status status letter to EFileAction. R/C
+// (rename/copy) are treated as `modify` of the destination — close
+// enough for backfill; authors can edit the action later via
+// `manifest set`. Unknown letters skip the row.
+static bool TryGitStatusToFileAction(char InStatus, EFileAction &OutAction)
+{
+    switch (InStatus)
+    {
+    case 'A':
+        OutAction = EFileAction::Create;
+        return true;
+    case 'M':
+    case 'R': // rename — destination side, treat as modify of new path
+    case 'C': // copy — destination side, treat as modify
+    case 'T': // type change (file → symlink etc.)
+        OutAction = EFileAction::Modify;
+        return true;
+    case 'D':
+        OutAction = EFileAction::Delete;
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Spawn `git -C <repo_root> log --name-status --no-renames` over the
+// phase's [started_at..completed_at] window. Returns the raw stdout for
+// the caller to parse line by line. ISO timestamps are validated by the
+// caller before reaching this function (defense-in-depth: the parser
+// gate already rejects malformed inputs at parse time).
+static bool RunGitLogNameStatusInWindow(const fs::path &InRepoRoot,
+                                        const std::string &InSinceISO,
+                                        const std::string &InUntilISO,
+                                        std::string &OutStdout,
+                                        std::string &OutError)
+{
+    // Build the command. Quote the timestamps to pass through the shell
+    // unchanged. ISO timestamps contain only [0-9TZ:-], which are shell-
+    // safe — but the quoting also future-proofs against unforeseen
+    // characters and matches the existing CLI convention of always
+    // quoting bundle paths.
+    std::ostringstream Command;
+    Command << "git -C \"" << InRepoRoot.string() << "\" log "
+            << "--name-status --no-renames "
+            << "--since=\"" << InSinceISO << "\" "
+            << "--until=\"" << InUntilISO << "\" "
+            << "--pretty=format:";
+    FILE *rpPipe = popen(Command.str().c_str(), "r");
+    if (rpPipe == nullptr)
+    {
+        OutError = "manifest suggest: failed to spawn `git log` (popen)";
+        return false;
+    }
+    char Buffer[4096];
+    while (std::fgets(Buffer, sizeof(Buffer), rpPipe) != nullptr)
+    {
+        OutStdout.append(Buffer);
+    }
+    const int ExitCode = pclose(rpPipe);
+    if (ExitCode != 0)
+    {
+        OutError = "manifest suggest: `git log` exited non-zero (status=" +
+                   std::to_string(ExitCode) +
+                   "); is the repo a git checkout?";
+        return false;
+    }
+    return true;
+}
+
+// Collapse multiple history rows for the same path into a single
+// suggestion. Rules:
+//   * If a file appears as both A and D in the window → cancel (file
+//     was created and deleted within the window; don't suggest).
+//   * Otherwise the LAST status wins (e.g., A then M → keep A; M then D
+//     → keep D). This matches the "what happened by end of window"
+//     intent of the suggestion.
+struct FManifestSuggestion
+{
+    std::string mFilePath;
+    EFileAction mAction = EFileAction::Modify;
+};
+
+static std::vector<FManifestSuggestion>
+CollapseGitLogToSuggestions(const std::string &InGitLog)
+{
+    // Two passes: first collect per-path action history, then collapse.
+    std::map<std::string, std::vector<char>> PerPath;
+    std::vector<std::string> InsertOrder; // preserve first-seen order
+    std::istringstream Stream(InGitLog);
+    std::string Line;
+    while (std::getline(Stream, Line))
+    {
+        if (Line.empty())
+            continue;
+        // Format: "<STATUS>\t<PATH>" (single-letter status; tab-separated).
+        if (Line.size() < 3 || Line[1] != '\t')
+            continue;
+        const char Status = Line[0];
+        const std::string Path = Line.substr(2);
+        if (Path.empty())
+            continue;
+        if (PerPath.find(Path) == PerPath.end())
+            InsertOrder.push_back(Path);
+        PerPath[Path].push_back(Status);
+    }
+    std::vector<FManifestSuggestion> Out;
+    for (const std::string &Path : InsertOrder)
+    {
+        const auto &History = PerPath[Path];
+        if (History.empty())
+            continue;
+        // Cancel A-then-D within window.
+        bool bSawAdd = false;
+        bool bSawDelete = false;
+        for (const char S : History)
+        {
+            if (S == 'A')
+                bSawAdd = true;
+            if (S == 'D')
+                bSawDelete = true;
+        }
+        if (bSawAdd && bSawDelete)
+            continue; // ephemeral file, don't suggest
+        // Use the last actionable status.
+        EFileAction Action = EFileAction::Modify;
+        bool bResolved = false;
+        for (auto It = History.rbegin(); It != History.rend(); ++It)
+        {
+            if (TryGitStatusToFileAction(*It, Action))
+            {
+                bResolved = true;
+                break;
+            }
+        }
+        if (!bResolved)
+            continue;
+        FManifestSuggestion S;
+        S.mFilePath = Path;
+        S.mAction = Action;
+        Out.push_back(std::move(S));
+    }
+    return Out;
+}
+
+int RunManifestSuggestCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot)
+{
+    const FManifestSuggestOptions Options =
+        ParseManifestSuggestOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    if (Options.mPhaseIndex < 0 ||
+        static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index " << Options.mPhaseIndex
+                  << " out of range (0.." << Bundle.mPhases.size() - 1
+                  << ")\n";
+        return 1;
+    }
+    const FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    const std::string &Started = Phase.mLifecycle.mStartedAt;
+    const std::string &Completed = Phase.mLifecycle.mCompletedAt;
+    if (Started.empty())
+    {
+        std::cerr
+            << "manifest suggest: phase has no started_at; backfill the "
+               "lifecycle stamp first via `phase set --started-at <iso>` "
+               "or run the phase through `phase start` / `phase complete`\n";
+        return 1;
+    }
+    // For completed phases, use completed_at as the upper bound; for
+    // in_progress phases, use the current time so authors can suggest
+    // mid-phase. "now" is git's understood synonym.
+    const std::string Until = Completed.empty() ? "now" : Completed;
+
+    std::string GitOut;
+    if (!RunGitLogNameStatusInWindow(RepoRoot, Started, Until, GitOut, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    std::vector<FManifestSuggestion> Raw = CollapseGitLogToSuggestions(GitOut);
+
+    // Filter out files already in the manifest. Repeat invocations are
+    // idempotent: once an author has run --apply, re-running the
+    // command surfaces only newly-touched files.
+    std::set<std::string> AlreadyInManifest;
+    for (const FFileManifestItem &Item : Phase.mFileManifest)
+        AlreadyInManifest.insert(Item.mFilePath);
+
+    std::vector<FManifestSuggestion> Suggestions;
+    for (FManifestSuggestion &S : Raw)
+    {
+        if (AlreadyInManifest.find(S.mFilePath) != AlreadyInManifest.end())
+            continue;
+        Suggestions.push_back(std::move(S));
+    }
+
+    // --apply: mutate the bundle by invoking RunManifestAddCommand for
+    // each suggestion. Reuses the existing auto-changelog + validation
+    // pipeline, so the side effects are identical to a manual sequence
+    // of `manifest add` calls. Failures are reported with the index of
+    // the failing suggestion so callers can re-run from a known point.
+    int AppliedCount = 0;
+    int ApplyExitCode = 0;
+    if (Options.mbApply)
+    {
+        for (size_t I = 0; I < Suggestions.size(); ++I)
+        {
+            const FManifestSuggestion &S = Suggestions[I];
+            const std::vector<std::string> AddArgs = {
+                "--topic",
+                Options.mTopic,
+                "--phase",
+                std::to_string(Options.mPhaseIndex),
+                "--file",
+                S.mFilePath,
+                "--action",
+                ToString(S.mAction),
+                "--description",
+                "Backfilled by `manifest suggest --apply` from git history "
+                "in phase window [" +
+                    Started + ", " + Until + "]",
+                "--repo-root",
+                RepoRoot.string(),
+            };
+            // Discard the per-add JSON output — the suggest command
+            // emits its own summary at the end.
+            std::ostringstream NullSink;
+            std::streambuf *rpOldStream = std::cout.rdbuf(NullSink.rdbuf());
+            const int Code = RunManifestAddCommand(AddArgs, RepoRoot.string());
+            std::cout.rdbuf(rpOldStream);
+            if (Code != 0)
+            {
+                ApplyExitCode = Code;
+                std::cerr << "manifest suggest --apply: row " << I
+                          << " (file=" << S.mFilePath << ") failed; "
+                          << "remaining " << (Suggestions.size() - I - 1)
+                          << " row(s) not applied\n";
+                break;
+            }
+            ++AppliedCount;
+        }
+    }
+
+    // Emit summary JSON. Fields: schema, phase window, suggestion count,
+    // applied count (0 in dry-run), per-row file_path/action.
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kManifestSuggestSchema, UTC, RepoRoot.string());
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldInt("phase_index", Options.mPhaseIndex);
+    EmitJsonField("started_at", Started);
+    EmitJsonField("until", Until);
+    EmitJsonFieldBool("applied", Options.mbApply);
+    EmitJsonFieldSizeT("suggestion_count", Suggestions.size());
+    EmitJsonFieldInt("applied_count", AppliedCount);
+    std::cout << "\"suggestions\":[";
+    for (size_t I = 0; I < Suggestions.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        std::cout << "{";
+        EmitJsonField("file_path", Suggestions[I].mFilePath);
+        EmitJsonField("action", ToString(Suggestions[I].mAction), false);
+        std::cout << "}";
+    }
+    std::cout << "],";
+    std::vector<std::string> Warnings;
+    PrintJsonClose(Warnings);
+    return ApplyExitCode;
 }
 
 } // namespace UniPlan

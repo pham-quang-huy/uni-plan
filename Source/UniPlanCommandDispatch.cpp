@@ -112,12 +112,14 @@ static int DispatchTestingCommand(const std::vector<std::string> &InArgs,
 static int DispatchManifestCommand(const std::vector<std::string> &InArgs,
                                    const std::string &InCwd)
 {
-    static const FCommandEntry kSubs[] = {{"add", &RunManifestAddCommand},
-                                          {"set", &RunManifestSetCommand},
-                                          {"remove", &RunManifestRemoveCommand},
-                                          {"list", &RunManifestListCommand}};
+    static const FCommandEntry kSubs[] = {
+        {"add", &RunManifestAddCommand},
+        {"set", &RunManifestSetCommand},
+        {"remove", &RunManifestRemoveCommand},
+        {"list", &RunManifestListCommand},
+        {"suggest", &RunManifestSuggestCommand}};
     return DispatchSubcommand("manifest", InArgs, InCwd, kSubs,
-                              "add, set, remove, list");
+                              "add, set, remove, list, suggest");
 }
 
 // ---------------------------------------------------------------------------

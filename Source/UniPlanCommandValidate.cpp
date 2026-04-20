@@ -110,7 +110,8 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
         }
     }
 
-    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    std::vector<ValidateCheck> Checks =
+        ValidateAllBundles(Bundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // When --topic scopes the output, drop checks for other topics so
@@ -312,7 +313,8 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
         }
     }
 
-    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    std::vector<ValidateCheck> Checks =
+        ValidateAllBundles(Bundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // Filter checks to target topic when --topic scopes the output.

@@ -5,8 +5,12 @@
 #include "UniPlanTypes.h"
 
 #include <cctype>
+#include <cstdio>
+#include <filesystem>
+#include <map>
 #include <regex>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -1099,6 +1103,199 @@ void EvalNoDuplicateLaneScope(const std::vector<FTopicBundle> &InBundles,
                              std::to_string(I) + "]");
                     break;
                 }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// file_manifest_required_for_code_phases — close the authoring gap that
+// leaves ~36% of plans without manifest evidence. Predicate: a phase is
+// "code-bearing" when it declared itself so via populated design fields
+// (mCodeEntityContract OR mCodeSnippets non-empty). For each such phase
+// with an empty file_manifest AND no explicit opt-out (mbNoFileManifest),
+// emit a Warning. v0.86.0 ships at Warning severity to surface ~9
+// retrofit candidates without breaking CI; v0.87.0 promotes to
+// ErrorMinor once `manifest suggest` has bought the migration window.
+// ---------------------------------------------------------------------------
+
+static bool IsCodeBearingPhase(const FPhaseRecord &InPhase)
+{
+    // Same signal authors already use to declare "code-bearing" via
+    // existing design material. Avoids a new bool flag and avoids
+    // false-firing on doc/governance/coordination phases.
+    return !InPhase.mDesign.mCodeEntityContract.empty() ||
+           !InPhase.mDesign.mCodeSnippets.empty();
+}
+
+void EvalFileManifestRequiredForCodePhases(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            if (!IsCodeBearingPhase(Phase))
+                continue;
+            if (!Phase.mFileManifest.empty())
+                continue;
+            if (Phase.mbNoFileManifest)
+                continue; // explicit opt-out; reason is enforced by parser
+            // Severity v0.86.0: Warning (advisory). v0.87.0: promoted
+            // to ErrorMinor — `manifest suggest` (v0.86.0) gives authors
+            // the migration path; the 30-day advisory window is over.
+            // Now gates --strict so CI can refuse drift PRs.
+            Fail(OutChecks, "file_manifest_required_for_code_phases",
+                 EValidationSeverity::ErrorMinor, B.mTopicKey,
+                 "phases[" + std::to_string(PI) + "].file_manifest",
+                 "code-bearing phase (code_entity_contract or code_snippets "
+                 "populated) has empty file_manifest; either run `uni-plan "
+                 "manifest suggest --topic " +
+                     B.mTopicKey + " --phase " + std::to_string(PI) +
+                     " --apply` to backfill from git history, or set "
+                     "no_file_manifest=true with a documented reason via "
+                     "`phase set --no-file-manifest=true "
+                     "--no-file-manifest-reason \"...\"`");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// stale_mislabeled_modify (v0.87.0) — close the PerformanceCulling-class
+// blind spot. For each manifest entry with action=modify, look up the
+// file's first-commit timestamp via git history; if it post-dates the
+// phase's started_at, the action should have been `create` instead.
+//
+// One git invocation per validate call (cached in a per-call map),
+// scanning the entire repo history. Skipped silently when:
+//   * Repo root is empty (caller didn't pass it — e.g. watch TUI).
+//   * Git is unavailable (popen returns non-zero).
+//   * Phase has no started_at (no comparison possible).
+//   * Manifest entry's file is missing from history (probably outside
+//     the repo or removed before any commit recorded it).
+// Severity: Warning — fuzzy signal that can false-fire on history
+// rewrites, cherry-picks, or files that were renamed across phases.
+// ---------------------------------------------------------------------------
+
+// Build map: file_path -> ISO 8601 timestamp of the FIRST commit that
+// added the file. Walks `git log --reverse --name-only --pretty=format:%aI`
+// once and records the earliest seen timestamp per path. Excluded paths:
+// the bundle files themselves (they record manifest changes, not the
+// underlying code creation).
+static bool BuildFirstCommitMap(const fs::path &InRepoRoot,
+                                std::map<std::string, std::string> &OutMap)
+{
+    std::ostringstream Cmd;
+    Cmd << "git -C \"" << InRepoRoot.string() << "\" log --reverse "
+        << "--name-only --pretty=format:%aI 2>/dev/null";
+    FILE *rpPipe = popen(Cmd.str().c_str(), "r");
+    if (rpPipe == nullptr)
+        return false;
+    char Buffer[8192];
+    std::string CurrentTimestamp;
+    static const std::regex IsoLine(
+        R"(^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*$)");
+    while (std::fgets(Buffer, sizeof(Buffer), rpPipe) != nullptr)
+    {
+        std::string Line(Buffer);
+        while (!Line.empty() &&
+               (Line.back() == '\n' || Line.back() == '\r'))
+            Line.pop_back();
+        if (Line.empty())
+            continue;
+        if (std::regex_match(Line, IsoLine))
+        {
+            CurrentTimestamp = Line;
+            continue;
+        }
+        // First-seen timestamp wins because --reverse processes oldest
+        // first. Skip bundle files: their git history reflects manifest
+        // mutations, not the underlying code creation we're auditing.
+        if (Line.find(".Plan.json") != std::string::npos)
+            continue;
+        if (OutMap.find(Line) == OutMap.end())
+            OutMap[Line] = CurrentTimestamp;
+    }
+    const int ExitCode = pclose(rpPipe);
+    return ExitCode == 0;
+}
+
+// Cheap ISO 8601 lexicographic comparison. Both sides MUST be valid
+// ISO 8601 (YYYY-MM-DDTHH:MM:SS...) — same charset and order, so string
+// compare matches chronological order. Caller validates inputs (the
+// phase fixture round-trip enforces ISO format on started_at; git emits
+// canonical ISO for %aI).
+static bool IsTimestampStrictlyAfter(const std::string &InCandidate,
+                                     const std::string &InReference)
+{
+    return InCandidate > InReference;
+}
+
+void EvalStaleMislabeledModify(const std::vector<FTopicBundle> &InBundles,
+                               std::vector<ValidateCheck> &OutChecks,
+                               const fs::path &InRepoRoot)
+{
+    // Quick exit if no bundle has any modify entries — avoids the git
+    // call entirely on corpora without manifest discipline yet.
+    bool bAnyModify = false;
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (const FPhaseRecord &P : B.mPhases)
+        {
+            if (P.mLifecycle.mStartedAt.empty())
+                continue;
+            for (const FFileManifestItem &FM : P.mFileManifest)
+            {
+                if (FM.mAction == EFileAction::Modify)
+                {
+                    bAnyModify = true;
+                    break;
+                }
+            }
+            if (bAnyModify)
+                break;
+        }
+        if (bAnyModify)
+            break;
+    }
+    if (!bAnyModify)
+        return;
+
+    std::map<std::string, std::string> FirstCommit;
+    if (!BuildFirstCommitMap(InRepoRoot, FirstCommit))
+        return; // git unavailable; silently skip
+
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            const std::string &Started = Phase.mLifecycle.mStartedAt;
+            if (Started.empty())
+                continue;
+            for (size_t MI = 0; MI < Phase.mFileManifest.size(); ++MI)
+            {
+                const FFileManifestItem &FM = Phase.mFileManifest[MI];
+                if (FM.mAction != EFileAction::Modify)
+                    continue;
+                const auto It = FirstCommit.find(FM.mFilePath);
+                if (It == FirstCommit.end())
+                    continue; // file has no recorded git history
+                const std::string &Born = It->second;
+                if (!IsTimestampStrictlyAfter(Born, Started))
+                    continue; // file pre-existed the phase — modify is OK
+                Fail(OutChecks, "stale_mislabeled_modify",
+                     EValidationSeverity::Warning, B.mTopicKey,
+                     "phases[" + std::to_string(PI) + "].file_manifest[" +
+                         std::to_string(MI) + "]",
+                     "action=modify but file was first committed at " +
+                         Born + " (after phase started_at=" + Started +
+                         "); the action should have been `create`. Update "
+                         "via `manifest set --topic <T> --phase " +
+                         std::to_string(PI) + " --index " +
+                         std::to_string(MI) + " --action create`.");
             }
         }
     }

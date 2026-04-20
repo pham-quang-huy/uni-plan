@@ -28,7 +28,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.84.1`) |
+| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.88.0`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |

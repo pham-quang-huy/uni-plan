@@ -143,6 +143,8 @@ FManifestRemoveOptions
 ParseManifestRemoveOptions(const std::vector<std::string> &InTokens);
 FManifestListOptions
 ParseManifestListOptions(const std::vector<std::string> &InTokens);
+FManifestSuggestOptions
+ParseManifestSuggestOptions(const std::vector<std::string> &InTokens);
 FPhaseDriftOptions
 ParsePhaseDriftOptions(const std::vector<std::string> &InTokens);
 FLaneAddOptions ParseLaneAddOptions(const std::vector<std::string> &InTokens);
@@ -207,7 +209,8 @@ std::string NormalizeHeaderKey(const std::string &InValue);
 LintResult BuildLintResult(const std::string &InRepoRoot,
                            const bool InQuiet = false);
 std::vector<ValidateCheck>
-ValidateAllBundles(const std::vector<FTopicBundle> &InBundles);
+ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
+                   const fs::path &InRepoRoot = fs::path());
 
 // Shared validation helper — emits a failure entry with the given id,
 // severity, topic, path, and detail. Defined in UniPlanValidation.cpp;
@@ -249,6 +252,21 @@ void EvalNoHollowCompletedPhase(const std::vector<FTopicBundle> &InBundles,
                                 std::vector<ValidateCheck> &OutChecks);
 void EvalNoDuplicateLaneScope(const std::vector<FTopicBundle> &InBundles,
                               std::vector<ValidateCheck> &OutChecks);
+void EvalFileManifestRequiredForCodePhases(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
+// v0.87.0: detect mislabeled `modify` manifest entries by comparing the
+// file's first-commit timestamp against the phase's started_at. If the
+// file was born AFTER the phase started, the action should have been
+// `create`, not `modify`. Spawns one `git log --reverse --name-only
+// --pretty=format:%aI` invocation per validate run; silently no-ops
+// when git is unavailable or repo root is empty so validate remains
+// usable in non-git checkouts and in the watch TUI snapshot path.
+// Severity: Warning (permanent — fuzzy signal that can false-fire on
+// history rewrites / cherry-picks).
+void EvalStaleMislabeledModify(const std::vector<FTopicBundle> &InBundles,
+                               std::vector<ValidateCheck> &OutChecks,
+                               const fs::path &InRepoRoot);
 
 // From UniPlanParsing.cpp
 void AppendSidecarIntegrityWarnings(
@@ -367,6 +385,8 @@ int RunManifestRemoveCommand(const std::vector<std::string> &InArgs,
                              const std::string &InRepoRoot);
 int RunManifestListCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot);
+int RunManifestSuggestCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot);
 int RunManifestSetCommand(const std::vector<std::string> &InArgs,
                           const std::string &InRepoRoot);
 int RunLaneAddCommand(const std::vector<std::string> &InArgs,
