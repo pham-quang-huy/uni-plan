@@ -173,6 +173,77 @@ TEST_F(FBundleTestFixture, GuardConcurrentThreadsOneWinsOneLoses)
 }
 
 // ---------------------------------------------------------------------------
+// 3b. ConcurrentThreadsStressLoop — 20 iterations of the thread race
+//
+// The single-shot ConcurrentThreadsOneWinsOneLoses above would pass even
+// with unlock-before-rename because the race window (Unlock → fs::rename)
+// is sub-microsecond and the loser's retry poll is 20ms. Looping the race
+// gives the scheduler many more chances to interleave through the danger
+// window, so if rename ever lands AFTER a peer's unlock+verify+rename
+// path completes, the final file would be corrupted or the invariant
+// (exactly-one-winner) would break on at least one iteration.
+// ---------------------------------------------------------------------------
+TEST_F(FBundleTestFixture, GuardConcurrentThreadsStressLoop)
+{
+    const int kIterations = 20;
+    for (int Iter = 0; Iter < kIterations; ++Iter)
+    {
+        const std::string Key = "GuardStress" + std::to_string(Iter);
+        CreateMinimalFixture(Key, UniPlan::ETopicStatus::NotStarted, 1,
+                             UniPlan::EExecutionStatus::NotStarted, true);
+
+        std::mutex BarrierMutex;
+        std::condition_variable BarrierCV;
+        int BarrierCount = 0;
+
+        auto RunWriter = [&](const std::string &InSummary,
+                             std::atomic<int> &OutCode, std::string &OutError)
+        {
+            UniPlan::FTopicBundle Bundle;
+            std::string LoadErr;
+            if (!UniPlan::TryLoadBundleByTopic(mRepoRoot, Key, Bundle, LoadErr))
+            {
+                OutError = "load failed: " + LoadErr;
+                OutCode.store(-1);
+                return;
+            }
+            Bundle.mMetadata.mSummary = InSummary;
+            {
+                std::unique_lock<std::mutex> Lock(BarrierMutex);
+                ++BarrierCount;
+                BarrierCV.notify_all();
+                BarrierCV.wait(Lock, [&] { return BarrierCount >= 2; });
+            }
+            OutCode.store(UniPlan::GuardedWriteBundle(Bundle, OutError));
+        };
+
+        std::atomic<int> CodeA{-99};
+        std::atomic<int> CodeB{-99};
+        std::string ErrorA;
+        std::string ErrorB;
+        std::thread A(RunWriter, std::string("A"), std::ref(CodeA),
+                      std::ref(ErrorA));
+        std::thread B(RunWriter, std::string("B"), std::ref(CodeB),
+                      std::ref(ErrorB));
+        A.join();
+        B.join();
+
+        ASSERT_EQ(CodeA.load() + CodeB.load(), 1)
+            << "Iteration " << Iter
+            << " violated exactly-one-winner: CodeA=" << CodeA.load() << " ("
+            << ErrorA << ") CodeB=" << CodeB.load() << " (" << ErrorB << ")";
+
+        UniPlan::FTopicBundle Final;
+        ASSERT_TRUE(ReloadBundle(Key, Final))
+            << "Iteration " << Iter << ": cannot reload final bundle";
+        const std::string Expected = (CodeA.load() == 0) ? "A" : "B";
+        ASSERT_EQ(Final.mMetadata.mSummary, Expected)
+            << "Iteration " << Iter
+            << ": on-disk does not match declared winner";
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 4. ConcurrentProcessesOneWinsOneLoses — cross-process, true flock path
 // ---------------------------------------------------------------------------
 #ifndef _WIN32

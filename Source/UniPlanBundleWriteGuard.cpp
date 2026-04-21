@@ -390,8 +390,19 @@ int GuardedWriteBundle(const FTopicBundle &InBundle, std::string &OutError)
             return 1;
         }
 
-        Lock.Unlock();
-
+        // Rename BEFORE releasing the lock. Releasing first opens a race
+        // window where a peer can acquire the lock, observe the still-
+        // original on-disk content (our rename hasn't landed), pass the
+        // stale-check, write their own tmp, rename it in, and release —
+        // after which our rename clobbers their write. POSIX flock is
+        // per-OFD so holding the lock across the rename is safe: after
+        // rename the directory entry points to a new inode, our handle
+        // still references the old (unreferenced) inode, and a peer
+        // opening the new entry gets a fresh OFD with no conflict.
+        // Windows: the lock handle was opened with FILE_SHARE_DELETE so
+        // MoveFileEx(REPLACE_EXISTING) — which is what fs::rename calls
+        // through — can replace the target even while the handle is held.
+        // The RAII destructor releases the lock when the function returns.
         std::error_code RenErr;
         fs::rename(TmpPath, FinalPath, RenErr);
         if (RenErr)
