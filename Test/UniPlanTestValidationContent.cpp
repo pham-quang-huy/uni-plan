@@ -1628,3 +1628,212 @@ TEST_F(FBundleTestFixture,
     ASSERT_FALSE(Issue.empty());
     EXPECT_EQ(Issue["severity"], "warning");
 }
+
+// -------------------------------------------------------------------
+// v0.98.0 typed-array evaluators: priority_groupings / runbooks /
+// residual_risks. 7 validators — 6 ErrorMinor + 1 Warning.
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, PriorityGroupingWellformedFlagsEmptyRule)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FPriorityGrouping G;
+    G.mID = "O1";
+    G.mPhaseIndices = {0};
+    G.mRule = ""; // violation
+    Bundle.mMetadata.mPriorityGroupings.push_back(std::move(G));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "priority_grouping_wellformed");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture, PriorityGroupingPhaseIndexValidFlagsOutOfRange)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FPriorityGrouping G;
+    G.mID = "O1";
+    G.mPhaseIndices = {5}; // topic has 2 phases, so 5 is out of range
+    G.mRule = "rule";
+    Bundle.mMetadata.mPriorityGroupings.push_back(std::move(G));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue =
+        FirstIssueWithId(Json, "priority_grouping_phase_index_valid");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture, PriorityGroupingIdUniqueFlagsDuplicate)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FPriorityGrouping G1;
+    G1.mID = "O1";
+    G1.mPhaseIndices = {0};
+    G1.mRule = "r1";
+    UniPlan::FPriorityGrouping G2;
+    G2.mID = "O1"; // duplicate
+    G2.mPhaseIndices = {1};
+    G2.mRule = "r2";
+    Bundle.mMetadata.mPriorityGroupings.push_back(std::move(G1));
+    Bundle.mMetadata.mPriorityGroupings.push_back(std::move(G2));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "priority_grouping_id_unique");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture, RunbookWellformedFlagsEmptyCommands)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FRunbookProcedure R;
+    R.mName = "n";
+    R.mTrigger = "t";
+    // R.mCommands left empty — violation
+    Bundle.mMetadata.mRunbooks.push_back(std::move(R));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "runbook_wellformed");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture, RunbookNameUniqueFlagsDuplicate)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FRunbookProcedure R1;
+    R1.mName = "Baseline";
+    R1.mTrigger = "t";
+    R1.mCommands = {"c"};
+    UniPlan::FRunbookProcedure R2;
+    R2.mName = "Baseline"; // duplicate
+    R2.mTrigger = "t";
+    R2.mCommands = {"c"};
+    Bundle.mMetadata.mRunbooks.push_back(std::move(R1));
+    Bundle.mMetadata.mRunbooks.push_back(std::move(R2));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "runbook_name_unique");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture, ResidualRiskWellformedFlagsEmptyWhyDeferred)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FResidualRiskEntry R;
+    R.mArea = "A";
+    R.mObservation = "O";
+    R.mWhyDeferred = ""; // violation
+    Bundle.mMetadata.mResidualRisks.push_back(std::move(R));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "residual_risk_wellformed");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
+TEST_F(FBundleTestFixture, ResidualRiskClosureShaFormatFlagsNonHex)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FResidualRiskEntry R;
+    R.mArea = "A";
+    R.mObservation = "O";
+    R.mWhyDeferred = "W";
+    R.mClosureSha = "NOT-A-SHA"; // violation — not hex + has uppercase
+    Bundle.mMetadata.mResidualRisks.push_back(std::move(R));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue =
+        FirstIssueWithId(Json, "residual_risk_closure_sha_format");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+}
+
+TEST_F(FBundleTestFixture, ResidualRiskClosureShaFormatAcceptsValidHex)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FResidualRiskEntry R;
+    R.mArea = "A";
+    R.mObservation = "O";
+    R.mWhyDeferred = "W";
+    R.mClosureSha = "deadbeef";
+    Bundle.mMetadata.mResidualRisks.push_back(std::move(R));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "residual_risk_closure_sha_format"), 0);
+}

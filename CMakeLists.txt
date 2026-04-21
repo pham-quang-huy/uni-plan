@@ -49,6 +49,7 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanCommandEntityCrud.cpp
     Source/UniPlanCommandCatalog.cpp
     Source/UniPlanCommandPlanEntries.cpp
+    Source/UniPlanCommandGraph.cpp
     Source/UniPlanCommandMigrate.cpp
     Source/UniPlanCommandSemanticQuery.cpp
     Source/UniPlanCommandTopic.cpp
@@ -120,6 +121,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestValidationContent.cpp
         Test/UniPlanTestHelp.cpp
         Test/UniPlanTestPhaseKind.cpp
+        Test/UniPlanTestGraph.cpp
     )
 
     target_link_libraries(uni-plan-tests PRIVATE

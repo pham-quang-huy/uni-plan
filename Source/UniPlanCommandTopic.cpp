@@ -190,6 +190,106 @@ void EmitAcceptanceCriteriaJson(
     if (InTrailingComma)
         std::cout << ",";
 }
+
+// ---------------------------------------------------------------------------
+// v0.98.0 typed-array emitters: priority_groupings / runbooks /
+// residual_risks. Stable `index` semantics match the v0.89.0 precedent —
+// when InOriginalIndices is nullptr the emitted index equals the loop
+// counter (which equals storage position). Filtered callers pass the
+// pre-filter index vector so `<group> set --index <N>` remains correct.
+// ---------------------------------------------------------------------------
+
+void EmitPriorityGroupingsJson(
+    const char *InName, const std::vector<FPriorityGrouping> &InGroupings,
+    bool InTrailingComma, const std::vector<size_t> *InOriginalIndices)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InGroupings.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FPriorityGrouping &G = InGroupings[I];
+        const size_t EmittedIndex =
+            InOriginalIndices ? (*InOriginalIndices)[I] : I;
+        std::cout << "{";
+        EmitJsonFieldSizeT("index", EmittedIndex);
+        EmitJsonField("id", G.mID);
+        std::cout << "\"phase_indices\":[";
+        for (size_t J = 0; J < G.mPhaseIndices.size(); ++J)
+        {
+            if (J > 0)
+                std::cout << ",";
+            std::cout << G.mPhaseIndices[J];
+        }
+        std::cout << "],";
+        EmitJsonField("rule", G.mRule, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
+
+void EmitRunbooksJson(const char *InName,
+                      const std::vector<FRunbookProcedure> &InRunbooks,
+                      bool InTrailingComma,
+                      const std::vector<size_t> *InOriginalIndices)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InRunbooks.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FRunbookProcedure &R = InRunbooks[I];
+        const size_t EmittedIndex =
+            InOriginalIndices ? (*InOriginalIndices)[I] : I;
+        std::cout << "{";
+        EmitJsonFieldSizeT("index", EmittedIndex);
+        EmitJsonField("name", R.mName);
+        EmitJsonField("trigger", R.mTrigger);
+        std::cout << "\"commands\":[";
+        for (size_t J = 0; J < R.mCommands.size(); ++J)
+        {
+            if (J > 0)
+                std::cout << ",";
+            std::cout << JSONQuote(R.mCommands[J]);
+        }
+        std::cout << "],";
+        EmitJsonField("description", R.mDescription, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
+
+void EmitResidualRisksJson(const char *InName,
+                           const std::vector<FResidualRiskEntry> &InRisks,
+                           bool InTrailingComma,
+                           const std::vector<size_t> *InOriginalIndices)
+{
+    std::cout << "\"" << InName << "\":[";
+    for (size_t I = 0; I < InRisks.size(); ++I)
+    {
+        if (I > 0)
+            std::cout << ",";
+        const FResidualRiskEntry &R = InRisks[I];
+        const size_t EmittedIndex =
+            InOriginalIndices ? (*InOriginalIndices)[I] : I;
+        std::cout << "{";
+        EmitJsonFieldSizeT("index", EmittedIndex);
+        EmitJsonField("area", R.mArea);
+        EmitJsonField("observation", R.mObservation);
+        EmitJsonField("why_deferred", R.mWhyDeferred);
+        EmitJsonField("target_phase", R.mTargetPhase);
+        EmitJsonField("recorded_date", R.mRecordedDate);
+        EmitJsonField("closure_sha", R.mClosureSha, false);
+        std::cout << "}";
+    }
+    std::cout << "]";
+    if (InTrailingComma)
+        std::cout << ",";
+}
 // ---------------------------------------------------------------------------
 // Topic List — JSON output
 // ---------------------------------------------------------------------------
@@ -329,6 +429,13 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
         EmitDependenciesJson("dependencies", Meta.mDependencies);
     if (Wants("next_actions"))
         EmitNextActionsJson("next_actions", Bundle.mNextActions);
+    if (Wants("priority_groupings"))
+        EmitPriorityGroupingsJson("priority_groupings",
+                                  Meta.mPriorityGroupings);
+    if (Wants("runbooks"))
+        EmitRunbooksJson("runbooks", Meta.mRunbooks);
+    if (Wants("residual_risks"))
+        EmitResidualRisksJson("residual_risks", Meta.mResidualRisks);
     EmitJsonFieldSizeT("phase_count", Bundle.mPhases.size());
 
     if (Wants("phases"))
@@ -454,6 +561,61 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
                             ToString(A.mStatus), A.mRationale, A.mOwner});
         }
         NATable.Print();
+        std::cout << "\n";
+    }
+
+    // v0.98.0 typed-array tables: priority_groupings / runbooks /
+    // residual_risks. Only render when populated so empty plans don't
+    // print header-only blocks.
+    if (Wants("priority_groupings") &&
+        !Bundle.mMetadata.mPriorityGroupings.empty())
+    {
+        std::cout << kColorBold << "Priority Groupings" << kColorReset << "\n";
+        HumanTable PGTable;
+        PGTable.mHeaders = {"ID", "Phases", "Rule"};
+        for (const FPriorityGrouping &G : Bundle.mMetadata.mPriorityGroupings)
+        {
+            std::string PhaseList;
+            for (size_t J = 0; J < G.mPhaseIndices.size(); ++J)
+            {
+                if (J > 0)
+                    PhaseList += ",";
+                PhaseList += std::to_string(G.mPhaseIndices[J]);
+            }
+            PGTable.AddRow({G.mID, PhaseList, G.mRule});
+        }
+        PGTable.Print();
+        std::cout << "\n";
+    }
+    if (Wants("runbooks") && !Bundle.mMetadata.mRunbooks.empty())
+    {
+        std::cout << kColorBold << "Runbooks" << kColorReset << "\n";
+        HumanTable RBTable;
+        RBTable.mHeaders = {"Name", "Trigger", "Commands", "Description"};
+        for (const FRunbookProcedure &R : Bundle.mMetadata.mRunbooks)
+        {
+            std::string CmdSummary =
+                std::to_string(R.mCommands.size()) + " cmd" +
+                (R.mCommands.size() == 1 ? "" : "s");
+            RBTable.AddRow(
+                {R.mName, R.mTrigger, CmdSummary, R.mDescription});
+        }
+        RBTable.Print();
+        std::cout << "\n";
+    }
+    if (Wants("residual_risks") && !Bundle.mMetadata.mResidualRisks.empty())
+    {
+        std::cout << kColorBold << "Residual Risks" << kColorReset << "\n";
+        HumanTable RRTable;
+        RRTable.mHeaders = {"Area", "Observation", "Why Deferred",
+                            "Target Phase", "Recorded", "Closure"};
+        for (const FResidualRiskEntry &R : Bundle.mMetadata.mResidualRisks)
+        {
+            RRTable.AddRow({R.mArea, R.mObservation, R.mWhyDeferred,
+                            R.mTargetPhase, R.mRecordedDate,
+                            R.mClosureSha});
+        }
+        RRTable.Print();
         std::cout << "\n";
     }
 

@@ -735,6 +735,133 @@ struct FAcceptanceCriterionListOptions : BaseOptions
 };
 
 // ---------------------------------------------------------------------------
+// Tier 6b — Priority-grouping / runbook / residual-risk CLI groups (v0.98.0+)
+//
+// Typed homes for what previously lived in sidecar `.md` files. Each group
+// exposes add/set/remove/list leaves with the same shape as the v0.89.0
+// risk/next-action/acceptance-criterion groups. All prose flags have
+// `-file` siblings parsed via TryConsumeStringOrFileOption.
+// ---------------------------------------------------------------------------
+
+struct FPriorityGroupingAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mID;
+    // --phase-index can be passed multiple times to build the list, or as a
+    // comma-separated CSV via --phase-indices. The parser accepts both shapes
+    // and merges them.
+    std::vector<int> mPhaseIndices;
+    std::string mRule;
+};
+
+struct FPriorityGroupingSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    std::string mID;
+    // Present-vs-absent distinction: mbPhaseIndicesSet = true means "replace
+    // the list with what was passed" (may be empty to clear via --phase-
+    // indices-clear). false means "leave the list unchanged."
+    bool mbPhaseIndicesSet = false;
+    std::vector<int> mPhaseIndices;
+    std::string mRule;
+};
+
+struct FPriorityGroupingRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+};
+
+struct FPriorityGroupingListOptions : BaseOptions
+{
+    std::string mTopic;
+};
+
+struct FRunbookAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mName;
+    std::string mTrigger;
+    // Commands are ordered and typically supplied by repeated --command flags
+    // or comma-free --commands-file; parser supports both and appends in
+    // invocation order.
+    std::vector<std::string> mCommands;
+    std::string mDescription;
+};
+
+struct FRunbookSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    std::string mName;
+    std::string mTrigger;
+    bool mbCommandsSet = false;
+    std::vector<std::string> mCommands;
+    std::string mDescription;
+};
+
+struct FRunbookRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+};
+
+struct FRunbookListOptions : BaseOptions
+{
+    std::string mTopic;
+};
+
+struct FResidualRiskAddOptions : BaseOptions
+{
+    std::string mTopic;
+    std::string mArea;
+    std::string mObservation;
+    std::string mWhyDeferred;
+    std::string mTargetPhase;
+    std::string mRecordedDate;
+    std::string mClosureSha;
+};
+
+struct FResidualRiskSetOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+    std::string mArea;
+    std::string mObservation;
+    std::string mWhyDeferred;
+    std::string mTargetPhase;
+    std::string mRecordedDate;
+    std::string mClosureSha;
+};
+
+struct FResidualRiskRemoveOptions : BaseOptions
+{
+    std::string mTopic;
+    int mIndex = -1;
+};
+
+struct FResidualRiskListOptions : BaseOptions
+{
+    std::string mTopic;
+};
+
+// ---------------------------------------------------------------------------
+// Graph command options (v0.98.0+). Walks typed topic + phase dependency
+// graph across all bundles and emits uni-plan-graph-v1 JSON.
+//
+// --topic focuses on one topic's reachable neighborhood. When empty, the
+// full corpus graph is emitted. --depth bounds the walk depth when --topic
+// is set (-1 = unlimited, the default).
+// ---------------------------------------------------------------------------
+
+struct FGraphOptions : BaseOptions
+{
+    std::string mTopic; // empty = all topics
+    int mDepth = -1;    // -1 = unlimited; >=0 limits walk depth from --topic
+};
+
+// ---------------------------------------------------------------------------
 // Legacy-gap audit option struct (stateless V3 <-> V4 parity, 0.75.0+)
 // ---------------------------------------------------------------------------
 

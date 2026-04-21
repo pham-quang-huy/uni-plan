@@ -698,6 +698,169 @@ static void DeserializeAcceptanceCriterionEntries(
     }
 }
 
+// ---------------------------------------------------------------------------
+// FPriorityGrouping serialization + deserializer (v0.98.0). No legacy string
+// form; reader accepts missing key as empty vector.
+// ---------------------------------------------------------------------------
+
+static JSONValue SerializePriorityGrouping(const FPriorityGrouping &InEntry)
+{
+    JSONValue Entry = JSONValue::object();
+    Entry["id"] = InEntry.mID;
+    JSONValue Indices = JSONValue::array();
+    for (int PhaseIndex : InEntry.mPhaseIndices)
+        Indices.push_back(PhaseIndex);
+    Entry["phase_indices"] = std::move(Indices);
+    Entry["rule"] = InEntry.mRule;
+    return Entry;
+}
+
+static JSONValue SerializePriorityGroupingArray(
+    const std::vector<FPriorityGrouping> &InArray)
+{
+    JSONValue Arr = JSONValue::array();
+    for (const FPriorityGrouping &G : InArray)
+        Arr.push_back(SerializePriorityGrouping(G));
+    return Arr;
+}
+
+static void DeserializePriorityGroupings(
+    const JSONValue &InParent, const std::string &InKey,
+    std::vector<FPriorityGrouping> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JSONValue &V = InParent[InKey];
+    if (!V.is_array())
+        return;
+    for (const JSONValue &E : V)
+    {
+        if (!E.is_object())
+            continue;
+        FPriorityGrouping G;
+        G.mID = GetString(E, "id");
+        if (E.contains("phase_indices") && E["phase_indices"].is_array())
+        {
+            for (const JSONValue &PI : E["phase_indices"])
+            {
+                if (PI.is_number_integer())
+                    G.mPhaseIndices.push_back(PI.get<int>());
+            }
+        }
+        G.mRule = GetString(E, "rule");
+        OutArray.push_back(std::move(G));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FRunbookProcedure serialization + deserializer (v0.98.0). Commands are a
+// JSON array of strings; order is significant.
+// ---------------------------------------------------------------------------
+
+static JSONValue SerializeRunbookProcedure(const FRunbookProcedure &InEntry)
+{
+    JSONValue Entry = JSONValue::object();
+    Entry["name"] = InEntry.mName;
+    Entry["trigger"] = InEntry.mTrigger;
+    JSONValue Commands = JSONValue::array();
+    for (const std::string &Cmd : InEntry.mCommands)
+        Commands.push_back(Cmd);
+    Entry["commands"] = std::move(Commands);
+    Entry["description"] = InEntry.mDescription;
+    return Entry;
+}
+
+static JSONValue
+SerializeRunbookProcedureArray(const std::vector<FRunbookProcedure> &InArray)
+{
+    JSONValue Arr = JSONValue::array();
+    for (const FRunbookProcedure &R : InArray)
+        Arr.push_back(SerializeRunbookProcedure(R));
+    return Arr;
+}
+
+static void DeserializeRunbookProcedures(
+    const JSONValue &InParent, const std::string &InKey,
+    std::vector<FRunbookProcedure> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JSONValue &V = InParent[InKey];
+    if (!V.is_array())
+        return;
+    for (const JSONValue &E : V)
+    {
+        if (!E.is_object())
+            continue;
+        FRunbookProcedure R;
+        R.mName = GetString(E, "name");
+        R.mTrigger = GetString(E, "trigger");
+        if (E.contains("commands") && E["commands"].is_array())
+        {
+            for (const JSONValue &Cmd : E["commands"])
+            {
+                if (Cmd.is_string())
+                    R.mCommands.push_back(Cmd.get<std::string>());
+            }
+        }
+        R.mDescription = GetString(E, "description");
+        OutArray.push_back(std::move(R));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FResidualRiskEntry serialization + deserializer (v0.98.0). All fields are
+// strings; reader accepts missing key as empty vector.
+// ---------------------------------------------------------------------------
+
+static JSONValue SerializeResidualRiskEntry(const FResidualRiskEntry &InEntry)
+{
+    JSONValue Entry = JSONValue::object();
+    Entry["area"] = InEntry.mArea;
+    Entry["observation"] = InEntry.mObservation;
+    Entry["why_deferred"] = InEntry.mWhyDeferred;
+    Entry["target_phase"] = InEntry.mTargetPhase;
+    Entry["recorded_date"] = InEntry.mRecordedDate;
+    Entry["closure_sha"] = InEntry.mClosureSha;
+    return Entry;
+}
+
+static JSONValue SerializeResidualRiskArray(
+    const std::vector<FResidualRiskEntry> &InArray)
+{
+    JSONValue Arr = JSONValue::array();
+    for (const FResidualRiskEntry &R : InArray)
+        Arr.push_back(SerializeResidualRiskEntry(R));
+    return Arr;
+}
+
+static void DeserializeResidualRisks(
+    const JSONValue &InParent, const std::string &InKey,
+    std::vector<FResidualRiskEntry> &OutArray)
+{
+    OutArray.clear();
+    if (!InParent.contains(InKey))
+        return;
+    const JSONValue &V = InParent[InKey];
+    if (!V.is_array())
+        return;
+    for (const JSONValue &E : V)
+    {
+        if (!E.is_object())
+            continue;
+        FResidualRiskEntry R;
+        R.mArea = GetString(E, "area");
+        R.mObservation = GetString(E, "observation");
+        R.mWhyDeferred = GetString(E, "why_deferred");
+        R.mTargetPhase = GetString(E, "target_phase");
+        R.mRecordedDate = GetString(E, "recorded_date");
+        R.mClosureSha = GetString(E, "closure_sha");
+        OutArray.push_back(std::move(R));
+    }
+}
+
 static JSONValue SerializeLaneRecord(const FLaneRecord &InLane)
 {
     JSONValue Lane = JSONValue::object();
@@ -849,6 +1012,14 @@ static JSONValue SerializeTopicBundleV4(const FTopicBundle &InBundle)
     Root["locked_decisions"] = Meta.mLockedDecisions;
     Root["source_references"] = Meta.mSourceReferences;
     Root["dependencies"] = SerializeBundleReferenceArray(Meta.mDependencies);
+    // v0.98.0 typed arrays — sidecar-elimination homes. Writer always emits
+    // the arrays (empty if unset) so downstream consumers see a canonical
+    // shape; reader accepts missing keys as empty vectors for backward
+    // compatibility with pre-0.98.0 bundles.
+    Root["priority_groupings"] =
+        SerializePriorityGroupingArray(Meta.mPriorityGroupings);
+    Root["runbooks"] = SerializeRunbookProcedureArray(Meta.mRunbooks);
+    Root["residual_risks"] = SerializeResidualRiskArray(Meta.mResidualRisks);
 
     // Phases (with inline tracking, index-based)
     JSONValue Phases = JSONValue::array();
@@ -1276,6 +1447,11 @@ static bool DeserializeTopicBundleV4(const JSONValue &InRoot,
     OptionalString(InRoot, "source_references", Meta.mSourceReferences);
     DeserializeBundleReferences(InRoot, "dependencies", Meta.mDependencies);
     DeserializeNextActionEntries(InRoot, "next_actions", OutBundle.mNextActions);
+    // v0.98.0 typed arrays — additive, missing key = empty vector.
+    DeserializePriorityGroupings(InRoot, "priority_groupings",
+                                 Meta.mPriorityGroupings);
+    DeserializeRunbookProcedures(InRoot, "runbooks", Meta.mRunbooks);
+    DeserializeResidualRisks(InRoot, "residual_risks", Meta.mResidualRisks);
 
     // Phases — strict validation per record
     for (size_t I = 0; I < InRoot["phases"].size(); ++I)

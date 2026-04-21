@@ -141,6 +141,15 @@ struct FPlanMetadata
     std::string mLockedDecisions;
     std::string mSourceReferences;
     std::vector<FBundleReference> mDependencies;
+    // v0.98.0 — typed homes for what used to live in sidecar `.md` files.
+    // priority_groupings carries priority/ordering taxonomy rows (O1..O8
+    // etc.); runbooks carries named procedural command sequences; residual
+    // risks carries observations deliberately deferred to a later phase.
+    // All three are opt-in — empty vectors are the valid default and do
+    // not trigger any warnings.
+    std::vector<FPriorityGrouping> mPriorityGroupings;
+    std::vector<FRunbookProcedure> mRunbooks;
+    std::vector<FResidualRiskEntry> mResidualRisks;
 };
 
 // ---------------------------------------------------------------------------

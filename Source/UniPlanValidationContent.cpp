@@ -1616,4 +1616,195 @@ void EvalCompletedTopicCriteriaAllMet(
     }
 }
 
+// ---------------------------------------------------------------------------
+// v0.98.0 typed-array evaluators — priority_groupings / runbooks /
+// residual_risks. Well-formedness, uniqueness, phase-index-in-range, and
+// closure-sha format checks. These fire only when the arrays contain
+// entries; empty arrays are the valid default (authors opt in).
+// ---------------------------------------------------------------------------
+
+void EvalPriorityGroupingWellformed(const std::vector<FTopicBundle> &InBundles,
+                                    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mMetadata.mPriorityGroupings.size(); ++I)
+        {
+            const FPriorityGrouping &G = B.mMetadata.mPriorityGroupings[I];
+            const std::string Base =
+                "priority_groupings[" + std::to_string(I) + "]";
+            if (G.mID.empty())
+                Fail(OutChecks, "priority_grouping_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".id", "id is empty");
+            if (G.mPhaseIndices.empty())
+                Fail(OutChecks, "priority_grouping_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".phase_indices",
+                     "phase_indices is empty (at least one phase required)");
+            if (G.mRule.empty())
+                Fail(OutChecks, "priority_grouping_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".rule", "rule is empty");
+        }
+    }
+}
+
+void EvalPriorityGroupingPhaseIndexValid(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        const int PhaseCount = static_cast<int>(B.mPhases.size());
+        for (size_t I = 0; I < B.mMetadata.mPriorityGroupings.size(); ++I)
+        {
+            const FPriorityGrouping &G = B.mMetadata.mPriorityGroupings[I];
+            for (size_t J = 0; J < G.mPhaseIndices.size(); ++J)
+            {
+                const int PI = G.mPhaseIndices[J];
+                if (PI < 0 || PI >= PhaseCount)
+                {
+                    Fail(OutChecks, "priority_grouping_phase_index_valid",
+                         EValidationSeverity::ErrorMinor, B.mTopicKey,
+                         "priority_groupings[" + std::to_string(I) +
+                             "].phase_indices[" + std::to_string(J) + "]",
+                         "phase index " + std::to_string(PI) +
+                             " out of range (topic has " +
+                             std::to_string(PhaseCount) + " phases)");
+                }
+            }
+        }
+    }
+}
+
+void EvalPriorityGroupingIdUnique(const std::vector<FTopicBundle> &InBundles,
+                                  std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        std::map<std::string, size_t> Seen;
+        for (size_t I = 0; I < B.mMetadata.mPriorityGroupings.size(); ++I)
+        {
+            const FPriorityGrouping &G = B.mMetadata.mPriorityGroupings[I];
+            if (G.mID.empty())
+                continue; // caught by priority_grouping_wellformed
+            const auto It = Seen.find(G.mID);
+            if (It != Seen.end())
+            {
+                Fail(OutChecks, "priority_grouping_id_unique",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "priority_groupings[" + std::to_string(I) + "].id",
+                     "id '" + G.mID + "' duplicates priority_groupings[" +
+                         std::to_string(It->second) + "].id");
+                continue;
+            }
+            Seen[G.mID] = I;
+        }
+    }
+}
+
+void EvalRunbookWellformed(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mMetadata.mRunbooks.size(); ++I)
+        {
+            const FRunbookProcedure &R = B.mMetadata.mRunbooks[I];
+            const std::string Base = "runbooks[" + std::to_string(I) + "]";
+            if (R.mName.empty())
+                Fail(OutChecks, "runbook_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".name", "name is empty");
+            if (R.mTrigger.empty())
+                Fail(OutChecks, "runbook_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".trigger", "trigger is empty");
+            if (R.mCommands.empty())
+                Fail(OutChecks, "runbook_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".commands",
+                     "commands is empty (at least one command required)");
+        }
+    }
+}
+
+void EvalRunbookNameUnique(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        std::map<std::string, size_t> Seen;
+        for (size_t I = 0; I < B.mMetadata.mRunbooks.size(); ++I)
+        {
+            const FRunbookProcedure &R = B.mMetadata.mRunbooks[I];
+            if (R.mName.empty())
+                continue; // caught by runbook_wellformed
+            const auto It = Seen.find(R.mName);
+            if (It != Seen.end())
+            {
+                Fail(OutChecks, "runbook_name_unique",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "runbooks[" + std::to_string(I) + "].name",
+                     "name '" + R.mName + "' duplicates runbooks[" +
+                         std::to_string(It->second) + "].name");
+                continue;
+            }
+            Seen[R.mName] = I;
+        }
+    }
+}
+
+void EvalResidualRiskWellformed(const std::vector<FTopicBundle> &InBundles,
+                                std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mMetadata.mResidualRisks.size(); ++I)
+        {
+            const FResidualRiskEntry &R = B.mMetadata.mResidualRisks[I];
+            const std::string Base = "residual_risks[" + std::to_string(I) + "]";
+            if (R.mArea.empty())
+                Fail(OutChecks, "residual_risk_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".area", "area is empty");
+            if (R.mObservation.empty())
+                Fail(OutChecks, "residual_risk_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".observation", "observation is empty");
+            if (R.mWhyDeferred.empty())
+                Fail(OutChecks, "residual_risk_wellformed",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     Base + ".why_deferred", "why_deferred is empty");
+        }
+    }
+}
+
+void EvalResidualRiskClosureShaFormat(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks)
+{
+    // Git SHA: 7-40 hex chars (short or full). Enforced only when the
+    // field is non-empty — empty means "not yet closed" and is normal.
+    const std::regex kShaRegex("^[0-9a-f]{7,40}$");
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t I = 0; I < B.mMetadata.mResidualRisks.size(); ++I)
+        {
+            const FResidualRiskEntry &R = B.mMetadata.mResidualRisks[I];
+            if (R.mClosureSha.empty())
+                continue;
+            if (!std::regex_match(R.mClosureSha, kShaRegex))
+            {
+                Fail(OutChecks, "residual_risk_closure_sha_format",
+                     EValidationSeverity::Warning, B.mTopicKey,
+                     "residual_risks[" + std::to_string(I) + "].closure_sha",
+                     "closure_sha '" + R.mClosureSha +
+                         "' is not a 7-40 char lowercase hex git SHA");
+            }
+        }
+    }
+}
+
 } // namespace UniPlan

@@ -169,6 +169,76 @@ struct FAcceptanceCriterionEntry
 };
 
 // ---------------------------------------------------------------------------
+// FPriorityGrouping — one row in a bundle's priority_groupings array (v0.98.0+).
+// Replaces the former hand-authored sidecar `.md` taxonomy references (e.g.,
+// "O1..O8" priority buckets) by giving each group a typed home inside the
+// bundle: a stable id, the list of phase indices it applies to, and the
+// rule/rationale prose explaining what the group means.
+//
+// mID is required (non-empty, unique across the topic's groupings). It is
+// typically "O1", "P0", "W2", etc. — a stable token consumers can reference
+// from changelog/verification prose. mPhaseIndices must be non-empty and
+// each index must be in range for the owning topic's phase count. mRule is
+// required free-form prose describing why these phases group together.
+// ---------------------------------------------------------------------------
+
+struct FPriorityGrouping
+{
+    std::string mID;
+    std::vector<int> mPhaseIndices;
+    std::string mRule;
+};
+
+// ---------------------------------------------------------------------------
+// FRunbookProcedure — one row in a bundle's runbooks array (v0.98.0+).
+// Replaces the former hand-authored sidecar `.md` procedural runbooks (e.g.,
+// "Baseline-Alignment Sweep") by giving each procedure a typed home: a stable
+// name, the triggering event/condition, the ordered command sequence, and a
+// description paragraph. Runbooks are read-only execution recipes; the CLI
+// surface is authoring only (add/set/remove/list), not invocation.
+//
+// mName is required (non-empty, unique across the topic's runbooks). It is
+// the stable token consumers reference from changelog/verification/agent
+// prose. mTrigger is required — describes the event or condition that
+// invites running this procedure. mCommands is required non-empty; order is
+// significant (execute top-to-bottom). mDescription is free-form context.
+// ---------------------------------------------------------------------------
+
+struct FRunbookProcedure
+{
+    std::string mName;
+    std::string mTrigger;
+    std::vector<std::string> mCommands;
+    std::string mDescription;
+};
+
+// ---------------------------------------------------------------------------
+// FResidualRiskEntry — one row in a bundle's residual_risks array (v0.98.0+).
+// Replaces the former hand-authored sidecar `.md` residual-risk logs by
+// giving each residual risk a typed home: the affected area, the observation,
+// why closure was deferred, the target phase that will close it, the date
+// the residual was recorded, and (optionally) the SHA that later closed it.
+//
+// Distinct from FRiskEntry: FRiskEntry captures active plan risks that need
+// mitigation/tracking; FResidualRiskEntry captures issues observed during
+// phase execution that were deliberately deferred to a named later phase.
+// The target_phase field is a bundle-internal phase ref ("phases[N]") or a
+// cross-topic ref ("topics/<Topic>/phases[N]"). mClosureSha is empty until
+// the deferring phase actually lands a commit that closes the residual;
+// `residual_risk_closure_sha_format` validates the hex format when set.
+// ---------------------------------------------------------------------------
+
+struct FResidualRiskEntry
+{
+    std::string mArea;
+    std::string mObservation;
+    std::string mWhyDeferred;
+    std::string mTargetPhase;
+    std::string mRecordedDate;
+    std::string mClosureSha;
+};
+
+// ---------------------------------------------------------------------------
 // FPhaseTaxonomy — display-oriented taxonomy for watch mode panels.
 // Tasks are flat here for display convenience (flattened from
 // nested FJobRecord.mTasks).

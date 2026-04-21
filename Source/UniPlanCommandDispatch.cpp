@@ -175,6 +175,43 @@ DispatchAcceptanceCriterionCommand(const std::vector<std::string> &InArgs,
                               "add, set, remove, list");
 }
 
+// v0.98.0 typed-array CLI groups. Sidecar-replacement homes for priority
+// groupings, runbooks, and residual risks.
+static int DispatchPriorityGroupingCommand(
+    const std::vector<std::string> &InArgs, const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {
+        {"add", &RunPriorityGroupingAddCommand},
+        {"set", &RunPriorityGroupingSetCommand},
+        {"remove", &RunPriorityGroupingRemoveCommand},
+        {"list", &RunPriorityGroupingListCommand}};
+    return DispatchSubcommand("priority-grouping", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
+}
+
+static int DispatchRunbookCommand(const std::vector<std::string> &InArgs,
+                                  const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {{"add", &RunRunbookAddCommand},
+                                          {"set", &RunRunbookSetCommand},
+                                          {"remove", &RunRunbookRemoveCommand},
+                                          {"list", &RunRunbookListCommand}};
+    return DispatchSubcommand("runbook", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
+}
+
+static int DispatchResidualRiskCommand(const std::vector<std::string> &InArgs,
+                                       const std::string &InCwd)
+{
+    static const FCommandEntry kSubs[] = {
+        {"add", &RunResidualRiskAddCommand},
+        {"set", &RunResidualRiskSetCommand},
+        {"remove", &RunResidualRiskRemoveCommand},
+        {"list", &RunResidualRiskListCommand}};
+    return DispatchSubcommand("residual-risk", InArgs, InCwd, kSubs,
+                              "add, set, remove, list");
+}
+
 // ---------------------------------------------------------------------------
 // Phase list all — collects phases from every plan in the inventory
 // ---------------------------------------------------------------------------
@@ -292,6 +329,18 @@ void PrintUsage(std::ostream &Out)
     Out << "  uni-plan acceptance-criterion "
            "add|set|remove|list --topic <T> "
            "[--statement <t>] [--status <s>] [--index <N>]\n";
+    Out << "  uni-plan priority-grouping "
+           "add|set|remove|list --topic <T> "
+           "[--id <t>] [--phase-indices <csv>] [--rule <t>] [--index <N>]\n";
+    Out << "  uni-plan runbook "
+           "add|set|remove|list --topic <T> "
+           "[--name <t>] [--trigger <t>] [--command <t> ...] "
+           "[--description <t>] [--index <N>]\n";
+    Out << "  uni-plan residual-risk "
+           "add|set|remove|list --topic <T> "
+           "[--area <t>] [--observation <t>] [--why-deferred <t>] "
+           "[--target-phase <t>] [--index <N>]\n";
+    Out << "  uni-plan graph [--topic <T>] [--depth <N>]\n";
     Out << "\n";
     Out << "Utility:\n";
     Out << "  uni-plan cache [info|clear|config]\n";
@@ -379,6 +428,11 @@ int RunMain(const int InArgc, char *InArgv[])
             {"risk", &DispatchRiskCommand},
             {"next-action", &DispatchNextActionCommand},
             {"acceptance-criterion", &DispatchAcceptanceCriterionCommand},
+            // v0.98.0 typed-array CLI groups + graph read command.
+            {"priority-grouping", &DispatchPriorityGroupingCommand},
+            {"runbook", &DispatchRunbookCommand},
+            {"residual-risk", &DispatchResidualRiskCommand},
+            {"graph", &RunGraphCommand},
             {"migrate", &RunMigrateCommand},
             {"_catalog", &RunCatalogCommand},
         };

@@ -1021,6 +1021,18 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
     EvalAcceptanceCriteriaHasEntries(InBundles, Checks);
     EvalCompletedTopicCriteriaAllMet(InBundles, Checks);
 
+    // v0.98.0 sidecar-replacement typed-array evaluators. 6 ErrorMinor
+    // checks on priority_groupings / runbooks / residual_risks
+    // well-formedness + uniqueness, plus 1 Warning check on residual-
+    // risk closure SHA format.
+    EvalPriorityGroupingWellformed(InBundles, Checks);
+    EvalPriorityGroupingPhaseIndexValid(InBundles, Checks);
+    EvalPriorityGroupingIdUnique(InBundles, Checks);
+    EvalRunbookWellformed(InBundles, Checks);
+    EvalRunbookNameUnique(InBundles, Checks);
+    EvalResidualRiskWellformed(InBundles, Checks);
+    EvalResidualRiskClosureShaFormat(InBundles, Checks);
+
     return Checks;
 }
 

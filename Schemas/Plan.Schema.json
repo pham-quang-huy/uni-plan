@@ -86,6 +86,21 @@
         { "type": "string", "description": "Legacy pipe-delimited rows; auto-promoted on load." }
       ]
     },
+    "priority_groupings": {
+      "type": "array",
+      "description": "Typed array of priority-grouping entries (v0.98.0+). Sidecar-replacement home for priority/ordering taxonomy rows that previously lived in hand-authored .md files.",
+      "items": { "$ref": "#/$defs/priority_grouping" }
+    },
+    "runbooks": {
+      "type": "array",
+      "description": "Typed array of runbook procedure entries (v0.98.0+). Sidecar-replacement home for named procedural command sequences.",
+      "items": { "$ref": "#/$defs/runbook_procedure" }
+    },
+    "residual_risks": {
+      "type": "array",
+      "description": "Typed array of residual-risk entries (v0.98.0+). Distinct from risks: residual risks are observations deliberately deferred to a later phase.",
+      "items": { "$ref": "#/$defs/residual_risk_entry" }
+    },
     "phases": {
       "type": "array",
       "description": "Ordered array of phases. Index IS identity (phase 0 = first element).",
@@ -407,6 +422,48 @@
         "status": { "type": "string", "enum": ["not_met", "met", "partial", "not_applicable"], "default": "not_met" },
         "measure": { "type": "string", "description": "How to verify the criterion" },
         "evidence": { "type": "string", "description": "Reference to verification entry, commit SHA, or PR when status=met" }
+      }
+    },
+    "priority_grouping": {
+      "type": "object",
+      "description": "One typed priority-grouping entry (FPriorityGrouping). v0.98.0+",
+      "required": ["id", "phase_indices", "rule"],
+      "properties": {
+        "id": { "type": "string", "description": "Stable token (e.g. 'O1'); unique within the array" },
+        "phase_indices": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "List of phase indices this grouping applies to"
+        },
+        "rule": { "type": "string", "description": "Rule/rationale prose" }
+      }
+    },
+    "runbook_procedure": {
+      "type": "object",
+      "description": "One typed runbook procedure entry (FRunbookProcedure). v0.98.0+",
+      "required": ["name", "trigger", "commands"],
+      "properties": {
+        "name": { "type": "string", "description": "Stable runbook name (unique within topic)" },
+        "trigger": { "type": "string", "description": "Event/condition that invites running the procedure" },
+        "commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered command sequence (execute top-to-bottom)"
+        },
+        "description": { "type": "string", "description": "Free-form context paragraph" }
+      }
+    },
+    "residual_risk_entry": {
+      "type": "object",
+      "description": "One typed residual-risk entry (FResidualRiskEntry). v0.98.0+ Distinct from risk_entry: these are observations deliberately deferred to a later phase.",
+      "required": ["area", "observation", "why_deferred"],
+      "properties": {
+        "area": { "type": "string", "description": "Affected subsystem/area" },
+        "observation": { "type": "string", "description": "The residual observation" },
+        "why_deferred": { "type": "string", "description": "Why closure was deferred instead of closed immediately" },
+        "target_phase": { "type": "string", "description": "Phase ref that will close the residual (phases[N] or topics/T/phases[N])" },
+        "recorded_date": { "type": "string", "description": "ISO 8601 date when the residual was recorded" },
+        "closure_sha": { "type": "string", "description": "Lowercase hex git SHA (7-40 chars) that closed the residual; empty until closed", "pattern": "^(|[0-9a-f]{7,40})$" }
       }
     }
   }

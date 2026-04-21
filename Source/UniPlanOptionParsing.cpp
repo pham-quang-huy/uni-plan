@@ -399,7 +399,12 @@ static bool IsValidTopicSection(const std::string &InName)
                                          "source_references",
                                          "dependencies",
                                          "next_actions",
-                                         "phases"};
+                                         "phases",
+                                         // v0.98.0 typed sidecar-replacement
+                                         // arrays.
+                                         "priority_groupings",
+                                         "runbooks",
+                                         "residual_risks"};
     for (const char *V : kValid)
     {
         if (InName == V)
@@ -3575,6 +3580,521 @@ ParseAcceptanceCriterionListOptions(const std::vector<std::string> &InTokens)
     }
     if (Options.mTopic.empty())
         throw UsageError("acceptance-criterion list requires --topic");
+    return Options;
+}
+
+// ===================================================================
+// v0.98.0 typed-array CLI groups — priority-grouping / runbook /
+// residual-risk. Parsers follow the v0.89.0 pattern exactly: string
+// flags via TryConsumeStringOrFileOption, index flags via
+// ParseRequiredIntIndex.
+// ===================================================================
+
+// Helper: parse --phase-index <N> or --phase-indices <csv>. Appends to
+// the caller's vector (supports mixed repeated-flag + CSV invocations).
+static void ParsePhaseIndexOrCsv(const std::vector<std::string> &InRemaining,
+                                 size_t &InOutIndex,
+                                 const std::string &InFlag,
+                                 std::vector<int> &OutPhaseIndices)
+{
+    if (InFlag == "--phase-index")
+    {
+        const std::string Val =
+            ConsumeValuedOption(InRemaining, InOutIndex, "--phase-index");
+        try
+        {
+            const int Parsed = std::stoi(Val);
+            if (Parsed < 0)
+                throw UsageError(
+                    "--phase-index must be a non-negative integer");
+            OutPhaseIndices.push_back(Parsed);
+        }
+        catch (const std::invalid_argument &)
+        {
+            throw UsageError("--phase-index must be an integer");
+        }
+        return;
+    }
+    // --phase-indices CSV form
+    const std::string Val =
+        ConsumeValuedOption(InRemaining, InOutIndex, "--phase-indices");
+    try
+    {
+        const std::vector<int> Parsed = SplitCsvInts(Val);
+        for (int P : Parsed)
+        {
+            if (P < 0)
+                throw UsageError("--phase-indices values must be "
+                                 "non-negative integers");
+            OutPhaseIndices.push_back(P);
+        }
+    }
+    catch (const std::invalid_argument &InError)
+    {
+        throw UsageError(std::string("--phase-indices requires comma-"
+                                     "separated non-negative integers: ") +
+                         InError.what());
+    }
+}
+
+FPriorityGroupingAddOptions
+ParsePriorityGroupingAddOptions(const std::vector<std::string> &InTokens)
+{
+    FPriorityGroupingAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--id", "--id-file",
+                                         Options.mID))
+            continue;
+        if (Token == "--phase-index" || Token == "--phase-indices")
+        {
+            ParsePhaseIndexOrCsv(Remaining, Index, Token, Options.mPhaseIndices);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--rule",
+                                         "--rule-file", Options.mRule))
+            continue;
+        throw UsageError("Unknown option for priority-grouping add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("priority-grouping add requires --topic");
+    if (Options.mID.empty())
+        throw UsageError("priority-grouping add requires --id");
+    if (Options.mPhaseIndices.empty())
+        throw UsageError("priority-grouping add requires at least one "
+                         "--phase-index or --phase-indices <csv>");
+    if (Options.mRule.empty())
+        throw UsageError("priority-grouping add requires --rule");
+    return Options;
+}
+
+FPriorityGroupingSetOptions
+ParsePriorityGroupingSetOptions(const std::vector<std::string> &InTokens)
+{
+    FPriorityGroupingSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--id", "--id-file",
+                                         Options.mID))
+            continue;
+        if (Token == "--phase-index" || Token == "--phase-indices")
+        {
+            Options.mbPhaseIndicesSet = true;
+            ParsePhaseIndexOrCsv(Remaining, Index, Token, Options.mPhaseIndices);
+            continue;
+        }
+        if (Token == "--phase-indices-clear")
+        {
+            Options.mbPhaseIndicesSet = true;
+            Options.mPhaseIndices.clear();
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--rule",
+                                         "--rule-file", Options.mRule))
+            continue;
+        throw UsageError("Unknown option for priority-grouping set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("priority-grouping set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("priority-grouping set requires --index");
+    return Options;
+}
+
+FPriorityGroupingRemoveOptions
+ParsePriorityGroupingRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FPriorityGroupingRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for priority-grouping remove: " +
+                         Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("priority-grouping remove requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("priority-grouping remove requires --index");
+    return Options;
+}
+
+FPriorityGroupingListOptions
+ParsePriorityGroupingListOptions(const std::vector<std::string> &InTokens)
+{
+    FPriorityGroupingListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        throw UsageError("Unknown option for priority-grouping list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("priority-grouping list requires --topic");
+    return Options;
+}
+
+FRunbookAddOptions
+ParseRunbookAddOptions(const std::vector<std::string> &InTokens)
+{
+    FRunbookAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--name",
+                                         "--name-file", Options.mName))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--trigger",
+                                         "--trigger-file", Options.mTrigger))
+            continue;
+        if (Token == "--command")
+        {
+            const std::string V =
+                ConsumeValuedOption(Remaining, Index, "--command");
+            Options.mCommands.push_back(V);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--description",
+                                         "--description-file",
+                                         Options.mDescription))
+            continue;
+        throw UsageError("Unknown option for runbook add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("runbook add requires --topic");
+    if (Options.mName.empty())
+        throw UsageError("runbook add requires --name");
+    if (Options.mTrigger.empty())
+        throw UsageError("runbook add requires --trigger");
+    if (Options.mCommands.empty())
+        throw UsageError("runbook add requires at least one --command");
+    return Options;
+}
+
+FRunbookSetOptions
+ParseRunbookSetOptions(const std::vector<std::string> &InTokens)
+{
+    FRunbookSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--name",
+                                         "--name-file", Options.mName))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--trigger",
+                                         "--trigger-file", Options.mTrigger))
+            continue;
+        if (Token == "--command")
+        {
+            Options.mbCommandsSet = true;
+            const std::string V =
+                ConsumeValuedOption(Remaining, Index, "--command");
+            Options.mCommands.push_back(V);
+            continue;
+        }
+        if (Token == "--commands-clear")
+        {
+            Options.mbCommandsSet = true;
+            Options.mCommands.clear();
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--description",
+                                         "--description-file",
+                                         Options.mDescription))
+            continue;
+        throw UsageError("Unknown option for runbook set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("runbook set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("runbook set requires --index");
+    return Options;
+}
+
+FRunbookRemoveOptions
+ParseRunbookRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FRunbookRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for runbook remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("runbook remove requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("runbook remove requires --index");
+    return Options;
+}
+
+FRunbookListOptions
+ParseRunbookListOptions(const std::vector<std::string> &InTokens)
+{
+    FRunbookListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        throw UsageError("Unknown option for runbook list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("runbook list requires --topic");
+    return Options;
+}
+
+FResidualRiskAddOptions
+ParseResidualRiskAddOptions(const std::vector<std::string> &InTokens)
+{
+    FResidualRiskAddOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--area",
+                                         "--area-file", Options.mArea))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--observation",
+                                         "--observation-file",
+                                         Options.mObservation))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--why-deferred",
+                                         "--why-deferred-file",
+                                         Options.mWhyDeferred))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--target-phase",
+                                         "--target-phase-file",
+                                         Options.mTargetPhase))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--recorded-date",
+                                         "--recorded-date-file",
+                                         Options.mRecordedDate))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--closure-sha",
+                                         "--closure-sha-file",
+                                         Options.mClosureSha))
+            continue;
+        throw UsageError("Unknown option for residual-risk add: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("residual-risk add requires --topic");
+    if (Options.mArea.empty())
+        throw UsageError("residual-risk add requires --area");
+    if (Options.mObservation.empty())
+        throw UsageError("residual-risk add requires --observation");
+    if (Options.mWhyDeferred.empty())
+        throw UsageError("residual-risk add requires --why-deferred");
+    return Options;
+}
+
+FResidualRiskSetOptions
+ParseResidualRiskSetOptions(const std::vector<std::string> &InTokens)
+{
+    FResidualRiskSetOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--area",
+                                         "--area-file", Options.mArea))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--observation",
+                                         "--observation-file",
+                                         Options.mObservation))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--why-deferred",
+                                         "--why-deferred-file",
+                                         Options.mWhyDeferred))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--target-phase",
+                                         "--target-phase-file",
+                                         Options.mTargetPhase))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--recorded-date",
+                                         "--recorded-date-file",
+                                         Options.mRecordedDate))
+            continue;
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--closure-sha",
+                                         "--closure-sha-file",
+                                         Options.mClosureSha))
+            continue;
+        throw UsageError("Unknown option for residual-risk set: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("residual-risk set requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("residual-risk set requires --index");
+    return Options;
+}
+
+FResidualRiskRemoveOptions
+ParseResidualRiskRemoveOptions(const std::vector<std::string> &InTokens)
+{
+    FResidualRiskRemoveOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--index")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--index", Options.mIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for residual-risk remove: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("residual-risk remove requires --topic");
+    if (Options.mIndex < 0)
+        throw UsageError("residual-risk remove requires --index");
+    return Options;
+}
+
+FResidualRiskListOptions
+ParseResidualRiskListOptions(const std::vector<std::string> &InTokens)
+{
+    FResidualRiskListOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        throw UsageError("Unknown option for residual-risk list: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("residual-risk list requires --topic");
+    return Options;
+}
+
+// ===================================================================
+// graph command (v0.98.0+) — read-only walk of typed topic + phase
+// dependencies across all bundles. Emits uni-plan-graph-v1 JSON.
+// ===================================================================
+
+FGraphOptions ParseGraphOptions(const std::vector<std::string> &InTokens)
+{
+    FGraphOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--depth")
+        {
+            const std::string V =
+                ConsumeValuedOption(Remaining, Index, "--depth");
+            try
+            {
+                size_t Pos = 0;
+                const int Parsed = std::stoi(V, &Pos);
+                if (Pos != V.size())
+                    throw UsageError("--depth must be an integer");
+                if (Parsed < -1)
+                    throw UsageError("--depth must be >= -1 "
+                                     "(-1 = unlimited)");
+                Options.mDepth = Parsed;
+            }
+            catch (const std::invalid_argument &)
+            {
+                throw UsageError("--depth must be an integer");
+            }
+            continue;
+        }
+        throw UsageError("Unknown option for graph: " + Token);
+    }
     return Options;
 }
 

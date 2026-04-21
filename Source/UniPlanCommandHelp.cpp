@@ -1635,6 +1635,257 @@ static const FSubcommandHelpEntry kAcceptanceCriterionSubs[] = {
 };
 
 // ---------------------------------------------------------------------------
+// v0.98.0 typed-array CLI group help entries: `priority-grouping`,
+// `runbook`, `residual-risk`. Sidecar-replacement homes for taxonomy
+// rows, procedural runbooks, and residual-risk logs that previously
+// lived in hand-authored `.md` files.
+// ---------------------------------------------------------------------------
+
+static const FSubcommandHelpEntry kPriorityGroupingSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan priority-grouping add --topic <T> --id <t>\n"
+        "                                      --phase-index <N> "
+        "[--phase-index <N>...]\n"
+        "                                      --rule <t>\n\n",
+        "Append a typed priority-grouping entry. Each grouping maps a set\n"
+        "of phase indices to a stable id (e.g. 'O1') plus a rule/rationale\n"
+        "string. Use --phase-index repeatedly OR --phase-indices <csv>.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --id <t>                Stable token (e.g. 'O1')\n"
+        "  --phase-index <N>       One phase index; repeat for multiple\n"
+        "  --phase-indices <csv>   OR a comma-separated list\n"
+        "  --rule <t>              Rule/rationale prose\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan priority-grouping add --topic X --id O1 \\\n"
+        "      --phase-indices 0,1,2 --rule 'Foundation phases — must "
+        "land first'\n",
+        true,
+        false,
+    },
+    {
+        "set",
+        "Usage: uni-plan priority-grouping set --topic <T> --index <N>\n"
+        "                                      [--id <t>] "
+        "[--phase-index <N>...]\n"
+        "                                      [--phase-indices-clear] "
+        "[--rule <t>]\n\n",
+        "Update one priority-grouping entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into "
+        "priority_groupings[]\n\n",
+        "  --id / --rule           Field updates\n"
+        "  --phase-index <N>       Replace phase-indices list (repeat to "
+        "append)\n"
+        "  --phase-indices <csv>   CSV form of the same\n"
+        "  --phase-indices-clear   Clear the list explicitly\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan priority-grouping set --topic X --index 0 --rule "
+        "'New rule'\n",
+        true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan priority-grouping remove --topic <T> --index <N>\n\n",
+        "Erase a priority-grouping entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into "
+        "priority_groupings[]\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan priority-grouping remove --topic X --index 2\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan priority-grouping list --topic <T>\n\n",
+        "Enumerate typed priority-grouping entries.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n",
+        nullptr,
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan priority-grouping list --topic X\n",
+        false,
+        false,
+    },
+};
+
+static const FSubcommandHelpEntry kRunbookSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan runbook add --topic <T> --name <t> --trigger <t>\n"
+        "                             --command <t> [--command <t>...]\n"
+        "                             [--description <t>]\n\n",
+        "Append a typed runbook procedure. Each runbook has a stable\n"
+        "name, a trigger condition, an ordered command sequence (use\n"
+        "--command repeatedly — ordering is preserved), and an optional\n"
+        "description paragraph.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --name <t>              Stable name (unique within topic)\n"
+        "  --trigger <t>           Event/condition that invites running\n"
+        "  --command <t>           One shell command; repeat for each "
+        "step\n",
+        "  --description <t>       Free context\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan runbook add --topic X --name 'Baseline-Alignment' \\\n"
+        "      --trigger 'On validator drift' \\\n"
+        "      --command 'uni-plan validate --strict' \\\n"
+        "      --command 'uni-plan manifest list --missing-only'\n",
+        true,
+        false,
+    },
+    {
+        "set",
+        "Usage: uni-plan runbook set --topic <T> --index <N>\n"
+        "                             [--name <t>] [--trigger <t>]\n"
+        "                             [--command <t>...] [--commands-clear]\n"
+        "                             [--description <t>]\n\n",
+        "Update one runbook entry by array index. --command repeatedly\n"
+        "replaces the commands list; --commands-clear empties it.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into runbooks[]\n\n",
+        "  --name / --trigger / --description   Field updates\n"
+        "  --command <t>           Replace commands list (repeat to append)\n"
+        "  --commands-clear        Clear the commands list\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan runbook set --topic X --index 0 --trigger 'new trig'\n",
+        true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan runbook remove --topic <T> --index <N>\n\n",
+        "Erase a runbook entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into runbooks[]\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan runbook remove --topic X --index 1\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan runbook list --topic <T>\n\n",
+        "Enumerate typed runbook entries.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n",
+        nullptr,
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan runbook list --topic X\n",
+        false,
+        false,
+    },
+};
+
+static const FSubcommandHelpEntry kResidualRiskSubs[] = {
+    {
+        "add",
+        "Usage: uni-plan residual-risk add --topic <T>\n"
+        "                                  --area <t> --observation <t>\n"
+        "                                  --why-deferred <t>\n"
+        "                                  [--target-phase <t>]\n"
+        "                                  [--recorded-date <t>]\n"
+        "                                  [--closure-sha <t>]\n\n",
+        "Append a typed residual-risk entry. Distinct from the `risk`\n"
+        "group (active plan risks) — residual risks are observations\n"
+        "deliberately deferred to a later phase. `target_phase` is a\n"
+        "bundle-internal or cross-topic phase ref.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --area <t>              Area/subsystem affected\n"
+        "  --observation <t>       The observation\n"
+        "  --why-deferred <t>      Why closure was deferred\n",
+        "  --target-phase <t>      Phase ref that will close it\n"
+        "                          (phases[N] or topics/T/phases[N])\n"
+        "  --recorded-date <t>     ISO 8601 date\n"
+        "  --closure-sha <t>       Commit SHA that closed it (optional)\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan residual-risk add --topic X --area Rendering \\\n"
+        "      --observation 'Screenshot parity not verified' \\\n"
+        "      --why-deferred 'Requires Windows host rebuild' \\\n"
+        "      --target-phase 'phases[9]' --recorded-date 2026-04-21\n",
+        true,
+        false,
+    },
+    {
+        "set",
+        "Usage: uni-plan residual-risk set --topic <T> --index <N>\n"
+        "                                  [same field flags as add]\n\n",
+        "Update one residual-risk entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into residual_risks[]\n\n",
+        "  --area / --observation / --why-deferred / --target-phase /\n"
+        "  --recorded-date / --closure-sha   Field updates\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan residual-risk set --topic X --index 0 \\\n"
+        "      --closure-sha deadbeef\n",
+        true,
+        false,
+    },
+    {
+        "remove",
+        "Usage: uni-plan residual-risk remove --topic <T> --index <N>\n\n",
+        "Erase a residual-risk entry by array index.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --index <N>             Zero-based index into "
+        "residual_risks[]\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan residual-risk remove --topic X --index 0\n",
+        false,
+        false,
+    },
+    {
+        "list",
+        "Usage: uni-plan residual-risk list --topic <T>\n\n",
+        "Enumerate typed residual-risk entries.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n",
+        nullptr,
+        nullptr,
+        "uni-plan-list-v1",
+        "Examples:\n"
+        "  uni-plan residual-risk list --topic X\n",
+        false,
+        false,
+    },
+};
+
+// ---------------------------------------------------------------------------
 // cache subcommands — migrated from ad-hoc inline help block to the
 // structured FSubcommandHelpEntry registry (v0.85.0 Commit 3).
 // ---------------------------------------------------------------------------
@@ -2136,6 +2387,109 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "--status met\n",
         kAcceptanceCriterionSubs,
         sizeof(kAcceptanceCriterionSubs) / sizeof(kAcceptanceCriterionSubs[0]),
+    },
+    {
+        "priority-grouping",
+        "Usage:\n"
+        "  uni-plan priority-grouping add --topic <T> --id <t>\n"
+        "                                 --phase-indices <csv> --rule <t>\n"
+        "  uni-plan priority-grouping set --topic <T> --index <N>\n"
+        "                                 [field flags]\n"
+        "  uni-plan priority-grouping remove --topic <T> --index <N>\n"
+        "  uni-plan priority-grouping list --topic <T>\n\n",
+        "Manage typed priority_groupings[] entries (v0.98.0+). Each entry\n"
+        "maps a set of phase indices to a stable id plus rule prose. This\n"
+        "replaces hand-authored sidecar `.md` taxonomy references such as\n"
+        "'O1..O8' priority buckets.\n\n",
+        nullptr,
+        "  add              Append a new priority_groupings[] entry\n"
+        "  set              Update an entry by index\n"
+        "  remove           Erase an entry by index (shifts indices down)\n"
+        "  list             Enumerate entries\n\n"
+        "Run `uni-plan priority-grouping <sub> --help` for flag detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan priority-grouping add --topic X --id O1 \\\n"
+        "      --phase-indices 0,1,2 --rule 'Foundation — must land first'\n"
+        "  uni-plan priority-grouping list --topic X\n",
+        kPriorityGroupingSubs,
+        sizeof(kPriorityGroupingSubs) / sizeof(kPriorityGroupingSubs[0]),
+    },
+    {
+        "runbook",
+        "Usage:\n"
+        "  uni-plan runbook add --topic <T> --name <t> --trigger <t>\n"
+        "                        --command <t> [--command <t>...]\n"
+        "                        [--description <t>]\n"
+        "  uni-plan runbook set --topic <T> --index <N> [field flags]\n"
+        "  uni-plan runbook remove --topic <T> --index <N>\n"
+        "  uni-plan runbook list --topic <T>\n\n",
+        "Manage typed runbooks[] entries (v0.98.0+). Each entry has a\n"
+        "stable name, a trigger, an ordered command sequence, and a\n"
+        "description. This replaces hand-authored sidecar `.md` procedural\n"
+        "runbooks (e.g. 'Baseline-Alignment Sweep').\n\n",
+        nullptr,
+        "  add              Append a new runbooks[] entry\n"
+        "  set              Update an entry by index\n"
+        "  remove           Erase an entry by index\n"
+        "  list             Enumerate entries\n\n"
+        "Run `uni-plan runbook <sub> --help` for flag detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan runbook add --topic X --name 'Baseline-Alignment' \\\n"
+        "      --trigger 'On validator drift' \\\n"
+        "      --command 'uni-plan validate --strict'\n",
+        kRunbookSubs,
+        sizeof(kRunbookSubs) / sizeof(kRunbookSubs[0]),
+    },
+    {
+        "residual-risk",
+        "Usage:\n"
+        "  uni-plan residual-risk add --topic <T> --area <t>\n"
+        "                             --observation <t> --why-deferred <t>\n"
+        "                             [--target-phase <t>]\n"
+        "                             [--recorded-date <t>]\n"
+        "                             [--closure-sha <t>]\n"
+        "  uni-plan residual-risk set --topic <T> --index <N>\n"
+        "                             [field flags]\n"
+        "  uni-plan residual-risk remove --topic <T> --index <N>\n"
+        "  uni-plan residual-risk list --topic <T>\n\n",
+        "Manage typed residual_risks[] entries (v0.98.0+). Distinct from\n"
+        "the `risk` group: residual risks are observations deliberately\n"
+        "deferred to a later phase. `target_phase` is a bundle-internal\n"
+        "phase ref. `closure_sha` stays empty until the deferring phase\n"
+        "actually lands a commit that closes the residual.\n\n",
+        nullptr,
+        "  add              Append a new residual_risks[] entry\n"
+        "  set              Update an entry by index\n"
+        "  remove           Erase an entry by index\n"
+        "  list             Enumerate entries\n\n"
+        "Run `uni-plan residual-risk <sub> --help` for flag detail.\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan residual-risk add --topic X --area Rendering \\\n"
+        "      --observation 'Screenshot parity not verified' \\\n"
+        "      --why-deferred 'Windows host rebuild needed' \\\n"
+        "      --target-phase 'phases[9]'\n",
+        kResidualRiskSubs,
+        sizeof(kResidualRiskSubs) / sizeof(kResidualRiskSubs[0]),
+    },
+    {
+        "graph",
+        "Usage: uni-plan graph [--topic <T>] [--depth <N>]\n\n",
+        "Walk typed topic + phase dependencies across all bundles and\n"
+        "emit uni-plan-graph-v1 JSON (nodes + edges). When --topic is\n"
+        "empty, the full corpus graph is emitted. When --topic is set,\n"
+        "the focus topic's reachable neighborhood is returned, bounded\n"
+        "by --depth (default -1 = unlimited).\n\n",
+        nullptr,
+        "  --topic <T>      Focus on this topic's reachable neighborhood\n"
+        "  --depth <N>      Limit walk depth (-1 = unlimited, default)\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan graph\n"
+        "  uni-plan graph --topic ECS\n"
+        "  uni-plan graph --topic ECS --depth 2\n",
     },
     {
         "cache",

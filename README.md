@@ -265,6 +265,37 @@ Validators: `risk_entry_wellformed`, `risk_severity_populated_for_high_impact`, 
 
 **Legacy flags removed in v0.89.0.** `topic set --risks <text>`, `--next-actions <text>`, `--acceptance-criteria <text>` (and their `-file` variants) emit `UsageError` with migration pointers. Existing bundles with string-form values keep loading via dual-read and are normalized to array form on the next CLI mutation that writes the bundle back.
 
+### sidecar_replacement_field_model
+
+> Target: understand the v0.98.0 schema for `priority_groupings`, `runbooks`, and `residual_risks`. These replace the last remaining sidecar `.md` files by giving their content a typed home inside the bundle.
+
+| JSON key | C++ type | Per-entry fields | CLI group |
+| --- | --- | --- | --- |
+| `priority_groupings` | `std::vector<FPriorityGrouping>` on `FPlanMetadata` | `id` (unique), `phase_indices` (non-empty, in-range), `rule` | `uni-plan priority-grouping add/set/remove/list` |
+| `runbooks` | `std::vector<FRunbookProcedure>` on `FPlanMetadata` | `name` (unique), `trigger`, `commands` (non-empty, ordered), `description` | `uni-plan runbook add/set/remove/list` |
+| `residual_risks` | `std::vector<FResidualRiskEntry>` on `FPlanMetadata` | `area`, `observation`, `why_deferred`, `target_phase`, `recorded_date`, `closure_sha` (empty until closed) | `uni-plan residual-risk add/set/remove/list` |
+
+Validators: `priority_grouping_wellformed`, `priority_grouping_phase_index_valid`, `priority_grouping_id_unique`, `runbook_wellformed`, `runbook_name_unique`, `residual_risk_wellformed` (all ErrorMinor); `residual_risk_closure_sha_format` (Warning — validates 7-40 char lowercase hex git SHA when set).
+
+**No legacy string form.** These fields are new in v0.98.0 — the reader accepts missing keys as empty vectors (backward compat with pre-0.98.0 bundles), and the writer always emits the arrays even when empty so downstream consumers see a canonical shape.
+
+### graph_command
+
+> Target: visualize typed dependency relationships across the corpus. Read-only — emits JSON, does not write any files.
+
+```bash
+# Full corpus graph — every topic, every phase, every edge
+uni-plan graph
+
+# Focus on one topic's reachable neighborhood (both directions)
+uni-plan graph --topic ECS
+
+# Bound walk depth (default -1 = unlimited)
+uni-plan graph --topic ECS --depth 2
+```
+
+Output schema: `uni-plan-graph-v1`. Nodes carry `{id, kind, topic, phase_index, label}` where `id` is either `topic:<T>` or `phase:<T>/<N>`. Edges carry `{from, to, kind, path, note}` where `kind` ∈ `bundle|phase|governance|external` and path/note come straight from the matching `FBundleReference`.
+
 ### blockers_field_model
 
 > Target: understand the difference between a *dependency* (structural) and a *blocker* (narrative + status flip).

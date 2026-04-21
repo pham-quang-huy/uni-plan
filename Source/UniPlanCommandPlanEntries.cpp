@@ -708,4 +708,614 @@ int RunAcceptanceCriterionListCommand(const std::vector<std::string> &InArgs,
     return 0;
 }
 
+// ===================================================================
+// v0.98.0 — priority-grouping / runbook / residual-risk mutation
+// runners. Same pattern as the v0.89.0 risk group: load bundle, mutate
+// typed vector, AppendAutoChangelog, WriteBundleBack, emit JSON.
+// ===================================================================
+
+namespace
+{
+
+// Render a phase-indices vector as a "[0,1,2]" string for change logs.
+std::string FormatPhaseIndices(const std::vector<int> &InIndices)
+{
+    std::string Out = "[";
+    for (size_t I = 0; I < InIndices.size(); ++I)
+    {
+        if (I > 0)
+            Out += ",";
+        Out += std::to_string(InIndices[I]);
+    }
+    Out += "]";
+    return Out;
+}
+
+// Render a commands vector as "[N commands]" for change logs. Avoids
+// dumping the full shell text into the changelog line; the runbook
+// entry itself carries the exact commands.
+std::string FormatCommandCount(const std::vector<std::string> &InCommands)
+{
+    return "[" + std::to_string(InCommands.size()) + " cmd" +
+           (InCommands.size() == 1 ? "" : "s") + "]";
+}
+
+} // namespace
+
+// -----------------------------------------------------------------------
+// priority-grouping add
+// -----------------------------------------------------------------------
+
+int RunPriorityGroupingAddCommand(const std::vector<std::string> &InArgs,
+                                  const std::string &InRepoRoot)
+{
+    const FPriorityGroupingAddOptions Options =
+        ParsePriorityGroupingAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    FPriorityGrouping Entry;
+    Entry.mID = Options.mID;
+    Entry.mPhaseIndices = Options.mPhaseIndices;
+    Entry.mRule = Options.mRule;
+
+    Bundle.mMetadata.mPriorityGroupings.push_back(std::move(Entry));
+    const size_t NewIndex = Bundle.mMetadata.mPriorityGroupings.size() - 1;
+    const std::string Target =
+        "priority_groupings[" + std::to_string(NewIndex) + "]";
+
+    AppendAutoChangelog(Bundle, kTargetPlan,
+                        "priority_grouping added: " + Target);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitArrayMutationAdded(Options.mTopic, Target, NewIndex);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// priority-grouping set
+// -----------------------------------------------------------------------
+
+int RunPriorityGroupingSetCommand(const std::vector<std::string> &InArgs,
+                                  const std::string &InRepoRoot)
+{
+    const FPriorityGroupingSetOptions Options =
+        ParsePriorityGroupingSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (!CheckIndexInRange(Options.mIndex,
+                           Bundle.mMetadata.mPriorityGroupings.size(),
+                           "Priority-grouping"))
+        return 1;
+
+    FPriorityGrouping &Entry = Bundle.mMetadata.mPriorityGroupings[static_cast<
+        size_t>(Options.mIndex)];
+    const std::string Target =
+        "priority_groupings[" + std::to_string(Options.mIndex) + "]";
+
+    std::vector<Change> Changes;
+    if (!Options.mID.empty())
+    {
+        Changes.push_back({"id", {Entry.mID, Options.mID}});
+        Entry.mID = Options.mID;
+    }
+    if (Options.mbPhaseIndicesSet)
+    {
+        Changes.push_back({"phase_indices",
+                           {FormatPhaseIndices(Entry.mPhaseIndices),
+                            FormatPhaseIndices(Options.mPhaseIndices)}});
+        Entry.mPhaseIndices = Options.mPhaseIndices;
+    }
+    if (!Options.mRule.empty())
+    {
+        Changes.push_back({"rule", {Entry.mRule, Options.mRule}});
+        Entry.mRule = Options.mRule;
+    }
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, kTargetPlan, Target + " updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// priority-grouping remove
+// -----------------------------------------------------------------------
+
+int RunPriorityGroupingRemoveCommand(const std::vector<std::string> &InArgs,
+                                     const std::string &InRepoRoot)
+{
+    const FPriorityGroupingRemoveOptions Options =
+        ParsePriorityGroupingRemoveOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (!CheckIndexInRange(Options.mIndex,
+                           Bundle.mMetadata.mPriorityGroupings.size(),
+                           "Priority-grouping"))
+        return 1;
+
+    const std::string Target =
+        "priority_groupings[" + std::to_string(Options.mIndex) + "]";
+    const FPriorityGrouping Removed = Bundle.mMetadata.mPriorityGroupings[static_cast<
+        size_t>(Options.mIndex)];
+    Bundle.mMetadata.mPriorityGroupings.erase(
+        Bundle.mMetadata.mPriorityGroupings.begin() + Options.mIndex);
+
+    AppendAutoChangelog(Bundle, kTargetPlan,
+                        "priority_grouping removed: " + Target + " (" +
+                            Removed.mID + ")");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", Target);
+    EmitJsonField("removed_id", Removed.mID, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// priority-grouping list
+// -----------------------------------------------------------------------
+
+int RunPriorityGroupingListCommand(const std::vector<std::string> &InArgs,
+                                   const std::string &InRepoRoot)
+{
+    const FPriorityGroupingListOptions Options =
+        ParsePriorityGroupingListOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldSizeT("count", Bundle.mMetadata.mPriorityGroupings.size());
+    EmitPriorityGroupingsJson("priority_groupings",
+                              Bundle.mMetadata.mPriorityGroupings);
+    std::vector<std::string> Warnings;
+    PrintJsonClose(Warnings);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// runbook add
+// -----------------------------------------------------------------------
+
+int RunRunbookAddCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FRunbookAddOptions Options = ParseRunbookAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    FRunbookProcedure Entry;
+    Entry.mName = Options.mName;
+    Entry.mTrigger = Options.mTrigger;
+    Entry.mCommands = Options.mCommands;
+    Entry.mDescription = Options.mDescription;
+
+    Bundle.mMetadata.mRunbooks.push_back(std::move(Entry));
+    const size_t NewIndex = Bundle.mMetadata.mRunbooks.size() - 1;
+    const std::string Target = "runbooks[" + std::to_string(NewIndex) + "]";
+
+    AppendAutoChangelog(Bundle, kTargetPlan, "runbook added: " + Target);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitArrayMutationAdded(Options.mTopic, Target, NewIndex);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// runbook set
+// -----------------------------------------------------------------------
+
+int RunRunbookSetCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot)
+{
+    const FRunbookSetOptions Options = ParseRunbookSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (!CheckIndexInRange(Options.mIndex, Bundle.mMetadata.mRunbooks.size(),
+                           "Runbook"))
+        return 1;
+
+    FRunbookProcedure &Entry =
+        Bundle.mMetadata.mRunbooks[static_cast<size_t>(Options.mIndex)];
+    const std::string Target =
+        "runbooks[" + std::to_string(Options.mIndex) + "]";
+
+    std::vector<Change> Changes;
+    if (!Options.mName.empty())
+    {
+        Changes.push_back({"name", {Entry.mName, Options.mName}});
+        Entry.mName = Options.mName;
+    }
+    if (!Options.mTrigger.empty())
+    {
+        Changes.push_back({"trigger", {Entry.mTrigger, Options.mTrigger}});
+        Entry.mTrigger = Options.mTrigger;
+    }
+    if (Options.mbCommandsSet)
+    {
+        Changes.push_back({"commands",
+                           {FormatCommandCount(Entry.mCommands),
+                            FormatCommandCount(Options.mCommands)}});
+        Entry.mCommands = Options.mCommands;
+    }
+    if (!Options.mDescription.empty())
+    {
+        Changes.push_back(
+            {"description", {Entry.mDescription, Options.mDescription}});
+        Entry.mDescription = Options.mDescription;
+    }
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, kTargetPlan, Target + " updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// runbook remove
+// -----------------------------------------------------------------------
+
+int RunRunbookRemoveCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot)
+{
+    const FRunbookRemoveOptions Options = ParseRunbookRemoveOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (!CheckIndexInRange(Options.mIndex, Bundle.mMetadata.mRunbooks.size(),
+                           "Runbook"))
+        return 1;
+
+    const std::string Target =
+        "runbooks[" + std::to_string(Options.mIndex) + "]";
+    const FRunbookProcedure Removed =
+        Bundle.mMetadata.mRunbooks[static_cast<size_t>(Options.mIndex)];
+    Bundle.mMetadata.mRunbooks.erase(Bundle.mMetadata.mRunbooks.begin() +
+                                     Options.mIndex);
+
+    AppendAutoChangelog(Bundle, kTargetPlan,
+                        "runbook removed: " + Target + " (" + Removed.mName +
+                            ")");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", Target);
+    EmitJsonField("removed_name", Removed.mName, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// runbook list
+// -----------------------------------------------------------------------
+
+int RunRunbookListCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot)
+{
+    const FRunbookListOptions Options = ParseRunbookListOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldSizeT("count", Bundle.mMetadata.mRunbooks.size());
+    EmitRunbooksJson("runbooks", Bundle.mMetadata.mRunbooks);
+    std::vector<std::string> Warnings;
+    PrintJsonClose(Warnings);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// residual-risk add
+// -----------------------------------------------------------------------
+
+int RunResidualRiskAddCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot)
+{
+    const FResidualRiskAddOptions Options =
+        ParseResidualRiskAddOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    FResidualRiskEntry Entry;
+    Entry.mArea = Options.mArea;
+    Entry.mObservation = Options.mObservation;
+    Entry.mWhyDeferred = Options.mWhyDeferred;
+    Entry.mTargetPhase = Options.mTargetPhase;
+    Entry.mRecordedDate = Options.mRecordedDate;
+    Entry.mClosureSha = Options.mClosureSha;
+
+    Bundle.mMetadata.mResidualRisks.push_back(std::move(Entry));
+    const size_t NewIndex = Bundle.mMetadata.mResidualRisks.size() - 1;
+    const std::string Target =
+        "residual_risks[" + std::to_string(NewIndex) + "]";
+
+    AppendAutoChangelog(Bundle, kTargetPlan,
+                        "residual_risk added: " + Target);
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitArrayMutationAdded(Options.mTopic, Target, NewIndex);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// residual-risk set
+// -----------------------------------------------------------------------
+
+int RunResidualRiskSetCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot)
+{
+    const FResidualRiskSetOptions Options =
+        ParseResidualRiskSetOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (!CheckIndexInRange(Options.mIndex,
+                           Bundle.mMetadata.mResidualRisks.size(),
+                           "Residual-risk"))
+        return 1;
+
+    FResidualRiskEntry &Entry = Bundle.mMetadata.mResidualRisks[static_cast<
+        size_t>(Options.mIndex)];
+    const std::string Target =
+        "residual_risks[" + std::to_string(Options.mIndex) + "]";
+
+    std::vector<Change> Changes;
+    if (!Options.mArea.empty())
+    {
+        Changes.push_back({"area", {Entry.mArea, Options.mArea}});
+        Entry.mArea = Options.mArea;
+    }
+    if (!Options.mObservation.empty())
+    {
+        Changes.push_back(
+            {"observation", {Entry.mObservation, Options.mObservation}});
+        Entry.mObservation = Options.mObservation;
+    }
+    if (!Options.mWhyDeferred.empty())
+    {
+        Changes.push_back(
+            {"why_deferred", {Entry.mWhyDeferred, Options.mWhyDeferred}});
+        Entry.mWhyDeferred = Options.mWhyDeferred;
+    }
+    if (!Options.mTargetPhase.empty())
+    {
+        Changes.push_back(
+            {"target_phase", {Entry.mTargetPhase, Options.mTargetPhase}});
+        Entry.mTargetPhase = Options.mTargetPhase;
+    }
+    if (!Options.mRecordedDate.empty())
+    {
+        Changes.push_back(
+            {"recorded_date", {Entry.mRecordedDate, Options.mRecordedDate}});
+        Entry.mRecordedDate = Options.mRecordedDate;
+    }
+    if (!Options.mClosureSha.empty())
+    {
+        Changes.push_back(
+            {"closure_sha", {Entry.mClosureSha, Options.mClosureSha}});
+        Entry.mClosureSha = Options.mClosureSha;
+    }
+    if (Changes.empty())
+    {
+        std::cerr << "No fields to update\n";
+        return 1;
+    }
+
+    AppendAutoChangelog(Bundle, kTargetPlan, Target + " updated");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// residual-risk remove
+// -----------------------------------------------------------------------
+
+int RunResidualRiskRemoveCommand(const std::vector<std::string> &InArgs,
+                                 const std::string &InRepoRoot)
+{
+    const FResidualRiskRemoveOptions Options =
+        ParseResidualRiskRemoveOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (!CheckIndexInRange(Options.mIndex,
+                           Bundle.mMetadata.mResidualRisks.size(),
+                           "Residual-risk"))
+        return 1;
+
+    const std::string Target =
+        "residual_risks[" + std::to_string(Options.mIndex) + "]";
+    const FResidualRiskEntry Removed = Bundle.mMetadata.mResidualRisks[static_cast<
+        size_t>(Options.mIndex)];
+    Bundle.mMetadata.mResidualRisks.erase(
+        Bundle.mMetadata.mResidualRisks.begin() + Options.mIndex);
+
+    AppendAutoChangelog(Bundle, kTargetPlan,
+                        "residual_risk removed: " + Target + " (" +
+                            Removed.mArea + ")");
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonField("target", Target);
+    EmitJsonField("removed_area", Removed.mArea, false);
+    std::cout << "}\n";
+    return 0;
+}
+
+// -----------------------------------------------------------------------
+// residual-risk list
+// -----------------------------------------------------------------------
+
+int RunResidualRiskListCommand(const std::vector<std::string> &InArgs,
+                               const std::string &InRepoRoot)
+{
+    const FResidualRiskListOptions Options =
+        ParseResidualRiskListOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldSizeT("count", Bundle.mMetadata.mResidualRisks.size());
+    EmitResidualRisksJson("residual_risks", Bundle.mMetadata.mResidualRisks);
+    std::vector<std::string> Warnings;
+    PrintJsonClose(Warnings);
+    return 0;
+}
+
 } // namespace UniPlan

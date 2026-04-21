@@ -1551,3 +1551,294 @@ TEST_F(FBundleTestFixture, TopicAddFreshBundleFailsPhasesPresentValidator)
     ASSERT_TRUE(ReloadBundle("NoPhases", Reloaded));
     EXPECT_TRUE(Reloaded.mPhases.empty());
 }
+
+// ===================================================================
+// v0.98.0 — priority-grouping / runbook / residual-risk CLI groups.
+// 12 round-trip tests: 4 per group × 3 groups. Plus graph command
+// tests live in UniPlanTestGraph.cpp.
+// ===================================================================
+
+// --- priority-grouping group ---------------------------------------
+
+TEST_F(FBundleTestFixture, PriorityGroupingAddAppendsTypedEntry)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunPriorityGroupingAddCommand(
+        {"--topic", "SampleTopic", "--id", "O1", "--phase-indices", "0,1",
+         "--rule", "Foundation phases", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["ok"].get<bool>());
+    EXPECT_EQ(Json["target"].get<std::string>(), "priority_groupings[0]");
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mMetadata.mPriorityGroupings.size(), 1u);
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mID, "O1");
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mPhaseIndices.size(), 2u);
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mPhaseIndices[0], 0);
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mPhaseIndices[1], 1);
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mRule, "Foundation phases");
+}
+
+TEST_F(FBundleTestFixture, PriorityGroupingSetReplacesPhaseIndices)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::RunPriorityGroupingAddCommand(
+        {"--topic", "SampleTopic", "--id", "O1", "--phase-index", "0", "--rule",
+         "Old rule", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+
+    StartCapture();
+    const int Code = UniPlan::RunPriorityGroupingSetCommand(
+        {"--topic", "SampleTopic", "--index", "0", "--phase-indices", "1,2",
+         "--rule", "New rule", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mRule, "New rule");
+    ASSERT_EQ(After.mMetadata.mPriorityGroupings[0].mPhaseIndices.size(), 2u);
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mPhaseIndices[0], 1);
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mPhaseIndices[1], 2);
+}
+
+TEST_F(FBundleTestFixture, PriorityGroupingRemoveShiftsIndices)
+{
+    CopyFixture("SampleTopic");
+    for (const char *Id : {"O1", "O2", "O3"})
+    {
+        UniPlan::RunPriorityGroupingAddCommand(
+            {"--topic", "SampleTopic", "--id", Id, "--phase-index", "0",
+             "--rule", "r", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string());
+    }
+    StartCapture();
+    const int Code = UniPlan::RunPriorityGroupingRemoveCommand(
+        {"--topic", "SampleTopic", "--index", "1", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mMetadata.mPriorityGroupings.size(), 2u);
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[0].mID, "O1");
+    EXPECT_EQ(After.mMetadata.mPriorityGroupings[1].mID, "O3"); // O2 removed
+}
+
+TEST_F(FBundleTestFixture, PriorityGroupingListEmitsEntries)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::RunPriorityGroupingAddCommand(
+        {"--topic", "SampleTopic", "--id", "O1", "--phase-index", "0", "--rule",
+         "r1", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    UniPlan::RunPriorityGroupingAddCommand(
+        {"--topic", "SampleTopic", "--id", "O2", "--phase-indices", "1,2",
+         "--rule", "r2", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+
+    StartCapture();
+    const int Code = UniPlan::RunPriorityGroupingListCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["count"].get<int>(), 2);
+    EXPECT_EQ(Json["priority_groupings"][0]["id"].get<std::string>(), "O1");
+    EXPECT_EQ(Json["priority_groupings"][1]["id"].get<std::string>(), "O2");
+}
+
+// --- runbook group -------------------------------------------------
+
+TEST_F(FBundleTestFixture, RunbookAddWritesOrderedCommands)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunRunbookAddCommand(
+        {"--topic", "SampleTopic", "--name", "Baseline-Alignment", "--trigger",
+         "On validator drift", "--command", "uni-plan validate --strict",
+         "--command", "uni-plan manifest list --missing-only", "--description",
+         "Sweep baseline violations.", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mMetadata.mRunbooks.size(), 1u);
+    EXPECT_EQ(After.mMetadata.mRunbooks[0].mName, "Baseline-Alignment");
+    ASSERT_EQ(After.mMetadata.mRunbooks[0].mCommands.size(), 2u);
+    EXPECT_EQ(After.mMetadata.mRunbooks[0].mCommands[0],
+              "uni-plan validate --strict");
+    EXPECT_EQ(After.mMetadata.mRunbooks[0].mCommands[1],
+              "uni-plan manifest list --missing-only");
+}
+
+TEST_F(FBundleTestFixture, RunbookSetReplacesCommandsList)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::RunRunbookAddCommand({"--topic", "SampleTopic", "--name", "n",
+                                   "--trigger", "t", "--command", "old-cmd",
+                                   "--repo-root", mRepoRoot.string()},
+                                  mRepoRoot.string());
+
+    StartCapture();
+    const int Code = UniPlan::RunRunbookSetCommand(
+        {"--topic", "SampleTopic", "--index", "0", "--command", "new-1",
+         "--command", "new-2", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mMetadata.mRunbooks[0].mCommands.size(), 2u);
+    EXPECT_EQ(After.mMetadata.mRunbooks[0].mCommands[0], "new-1");
+    EXPECT_EQ(After.mMetadata.mRunbooks[0].mCommands[1], "new-2");
+}
+
+TEST_F(FBundleTestFixture, RunbookRemoveDropsEntry)
+{
+    CopyFixture("SampleTopic");
+    for (const char *Name : {"A", "B"})
+    {
+        UniPlan::RunRunbookAddCommand(
+            {"--topic", "SampleTopic", "--name", Name, "--trigger", "t",
+             "--command", "c", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string());
+    }
+
+    StartCapture();
+    const int Code = UniPlan::RunRunbookRemoveCommand(
+        {"--topic", "SampleTopic", "--index", "0", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mMetadata.mRunbooks.size(), 1u);
+    EXPECT_EQ(After.mMetadata.mRunbooks[0].mName, "B");
+}
+
+TEST_F(FBundleTestFixture, RunbookListEmitsEntries)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::RunRunbookAddCommand(
+        {"--topic", "SampleTopic", "--name", "N", "--trigger", "t", "--command",
+         "c", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+
+    StartCapture();
+    const int Code = UniPlan::RunRunbookListCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["count"].get<int>(), 1);
+    EXPECT_EQ(Json["runbooks"][0]["name"].get<std::string>(), "N");
+}
+
+// --- residual-risk group -------------------------------------------
+
+TEST_F(FBundleTestFixture, ResidualRiskAddWritesAllFields)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunResidualRiskAddCommand(
+        {"--topic", "SampleTopic", "--area", "Rendering", "--observation",
+         "Screenshot parity unverified", "--why-deferred",
+         "Windows host rebuild needed", "--target-phase", "phases[9]",
+         "--recorded-date", "2026-04-21", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mMetadata.mResidualRisks.size(), 1u);
+    EXPECT_EQ(After.mMetadata.mResidualRisks[0].mArea, "Rendering");
+    EXPECT_EQ(After.mMetadata.mResidualRisks[0].mObservation,
+              "Screenshot parity unverified");
+    EXPECT_EQ(After.mMetadata.mResidualRisks[0].mTargetPhase, "phases[9]");
+    EXPECT_EQ(After.mMetadata.mResidualRisks[0].mClosureSha, "");
+}
+
+TEST_F(FBundleTestFixture, ResidualRiskSetFillsClosureSha)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::RunResidualRiskAddCommand(
+        {"--topic", "SampleTopic", "--area", "A", "--observation", "O",
+         "--why-deferred", "W", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+
+    StartCapture();
+    const int Code = UniPlan::RunResidualRiskSetCommand(
+        {"--topic", "SampleTopic", "--index", "0", "--closure-sha",
+         "deadbeefcafe1234", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mMetadata.mResidualRisks[0].mClosureSha,
+              "deadbeefcafe1234");
+    EXPECT_EQ(After.mMetadata.mResidualRisks[0].mArea, "A"); // unchanged
+}
+
+TEST_F(FBundleTestFixture, ResidualRiskRemoveShiftsIndices)
+{
+    CopyFixture("SampleTopic");
+    for (const char *Area : {"A", "B", "C"})
+    {
+        UniPlan::RunResidualRiskAddCommand(
+            {"--topic", "SampleTopic", "--area", Area, "--observation", "O",
+             "--why-deferred", "W", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string());
+    }
+
+    StartCapture();
+    const int Code = UniPlan::RunResidualRiskRemoveCommand(
+        {"--topic", "SampleTopic", "--index", "1", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    ASSERT_EQ(After.mMetadata.mResidualRisks.size(), 2u);
+    EXPECT_EQ(After.mMetadata.mResidualRisks[0].mArea, "A");
+    EXPECT_EQ(After.mMetadata.mResidualRisks[1].mArea, "C"); // B removed
+}
+
+TEST_F(FBundleTestFixture, ResidualRiskListEmitsEntries)
+{
+    CopyFixture("SampleTopic");
+    UniPlan::RunResidualRiskAddCommand(
+        {"--topic", "SampleTopic", "--area", "A", "--observation", "O",
+         "--why-deferred", "W", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+
+    StartCapture();
+    const int Code = UniPlan::RunResidualRiskListCommand(
+        {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["count"].get<int>(), 1);
+    EXPECT_EQ(Json["residual_risks"][0]["area"].get<std::string>(), "A");
+}

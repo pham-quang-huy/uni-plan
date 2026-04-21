@@ -36,6 +36,25 @@ void EmitAcceptanceCriteriaJson(
     bool InTrailingComma = true,
     const std::vector<size_t> *InOriginalIndices = nullptr);
 
+// v0.98.0 typed-array emitters: priority_groupings / runbooks /
+// residual_risks. Same shape as EmitRisksJson etc. — each emits an
+// `index` field per entry so `<group> set --index <N>` targets the
+// stable storage position even after filtering.
+void EmitPriorityGroupingsJson(
+    const char *InName,
+    const std::vector<FPriorityGrouping> &InGroupings,
+    bool InTrailingComma = true,
+    const std::vector<size_t> *InOriginalIndices = nullptr);
+void EmitRunbooksJson(const char *InName,
+                      const std::vector<FRunbookProcedure> &InRunbooks,
+                      bool InTrailingComma = true,
+                      const std::vector<size_t> *InOriginalIndices = nullptr);
+void EmitResidualRisksJson(
+    const char *InName,
+    const std::vector<FResidualRiskEntry> &InRisks,
+    bool InTrailingComma = true,
+    const std::vector<size_t> *InOriginalIndices = nullptr);
+
 // From DocCache.cpp
 fs::path ResolveExecutableDirectory();
 std::string ExpandEnvVars(const std::string &InValue);
@@ -561,5 +580,85 @@ int RunChangelogRemoveCommand(const std::vector<std::string> &InArgs,
 // bundle beyond V4 design-material chars. Returns 0 on success.
 int RunLegacyGapCommand(const std::vector<std::string> &InArgs,
                         const std::string &InRepoRoot);
+
+// ---------------------------------------------------------------------------
+// v0.98.0 — priority-grouping / runbook / residual-risk CLI groups.
+// Same four-leaf shape as the v0.89.0 risk group. Mutation runners live in
+// UniPlanCommandPlanEntries.cpp; parsers in UniPlanOptionParsing.cpp.
+// ---------------------------------------------------------------------------
+
+int RunPriorityGroupingAddCommand(const std::vector<std::string> &InArgs,
+                                  const std::string &InRepoRoot);
+int RunPriorityGroupingSetCommand(const std::vector<std::string> &InArgs,
+                                  const std::string &InRepoRoot);
+int RunPriorityGroupingRemoveCommand(const std::vector<std::string> &InArgs,
+                                     const std::string &InRepoRoot);
+int RunPriorityGroupingListCommand(const std::vector<std::string> &InArgs,
+                                   const std::string &InRepoRoot);
+int RunRunbookAddCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunRunbookSetCommand(const std::vector<std::string> &InArgs,
+                         const std::string &InRepoRoot);
+int RunRunbookRemoveCommand(const std::vector<std::string> &InArgs,
+                            const std::string &InRepoRoot);
+int RunRunbookListCommand(const std::vector<std::string> &InArgs,
+                          const std::string &InRepoRoot);
+int RunResidualRiskAddCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot);
+int RunResidualRiskSetCommand(const std::vector<std::string> &InArgs,
+                              const std::string &InRepoRoot);
+int RunResidualRiskRemoveCommand(const std::vector<std::string> &InArgs,
+                                 const std::string &InRepoRoot);
+int RunResidualRiskListCommand(const std::vector<std::string> &InArgs,
+                               const std::string &InRepoRoot);
+
+FPriorityGroupingAddOptions
+ParsePriorityGroupingAddOptions(const std::vector<std::string> &InTokens);
+FPriorityGroupingSetOptions
+ParsePriorityGroupingSetOptions(const std::vector<std::string> &InTokens);
+FPriorityGroupingRemoveOptions
+ParsePriorityGroupingRemoveOptions(const std::vector<std::string> &InTokens);
+FPriorityGroupingListOptions
+ParsePriorityGroupingListOptions(const std::vector<std::string> &InTokens);
+FRunbookAddOptions
+ParseRunbookAddOptions(const std::vector<std::string> &InTokens);
+FRunbookSetOptions
+ParseRunbookSetOptions(const std::vector<std::string> &InTokens);
+FRunbookRemoveOptions
+ParseRunbookRemoveOptions(const std::vector<std::string> &InTokens);
+FRunbookListOptions
+ParseRunbookListOptions(const std::vector<std::string> &InTokens);
+FResidualRiskAddOptions
+ParseResidualRiskAddOptions(const std::vector<std::string> &InTokens);
+FResidualRiskSetOptions
+ParseResidualRiskSetOptions(const std::vector<std::string> &InTokens);
+FResidualRiskRemoveOptions
+ParseResidualRiskRemoveOptions(const std::vector<std::string> &InTokens);
+FResidualRiskListOptions
+ParseResidualRiskListOptions(const std::vector<std::string> &InTokens);
+
+// v0.98.0 — graph read command. Walks typed dependency graph across all
+// bundles; emits uni-plan-graph-v1 JSON. Lives in UniPlanCommandGraph.cpp.
+int RunGraphCommand(const std::vector<std::string> &InArgs,
+                    const std::string &InRepoRoot);
+FGraphOptions ParseGraphOptions(const std::vector<std::string> &InTokens);
+
+// v0.98.0 evaluators — structural checks for the three new typed arrays.
+void EvalPriorityGroupingWellformed(const std::vector<FTopicBundle> &InBundles,
+                                    std::vector<ValidateCheck> &OutChecks);
+void EvalPriorityGroupingPhaseIndexValid(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
+void EvalPriorityGroupingIdUnique(const std::vector<FTopicBundle> &InBundles,
+                                  std::vector<ValidateCheck> &OutChecks);
+void EvalRunbookWellformed(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks);
+void EvalRunbookNameUnique(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks);
+void EvalResidualRiskWellformed(const std::vector<FTopicBundle> &InBundles,
+                                std::vector<ValidateCheck> &OutChecks);
+void EvalResidualRiskClosureShaFormat(
+    const std::vector<FTopicBundle> &InBundles,
+    std::vector<ValidateCheck> &OutChecks);
 
 } // namespace UniPlan
