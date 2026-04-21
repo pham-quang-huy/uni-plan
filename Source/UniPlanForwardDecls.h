@@ -159,6 +159,8 @@ ParsePhaseVerifyOptions(const std::vector<std::string> &InTokens);
 FPhaseQueryOptions
 ParsePhaseQueryOptions(const std::vector<std::string> &InTokens);
 FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens);
+FLaneCompleteOptions
+ParseLaneCompleteOptions(const std::vector<std::string> &InTokens);
 FTestingAddOptions
 ParseTestingAddOptions(const std::vector<std::string> &InTokens);
 FManifestAddOptions
@@ -458,6 +460,8 @@ void EvalPhaseStatusLaneAlignment(const std::vector<FTopicBundle> &InBundles,
 // Semantic commands — Tier 5: Entity coverage
 int RunLaneSetCommand(const std::vector<std::string> &InArgs,
                       const std::string &InRepoRoot);
+int RunLaneCompleteCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot);
 int RunTestingAddCommand(const std::vector<std::string> &InArgs,
                          const std::string &InRepoRoot);
 int RunManifestAddCommand(const std::vector<std::string> &InArgs,

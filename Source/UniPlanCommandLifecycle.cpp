@@ -160,19 +160,79 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
     // sanctioned escape hatch for taxonomy/doc/governance phases.
     const bool bCodeBearing = !Phase.mDesign.mCodeEntityContract.empty() ||
                               !Phase.mDesign.mCodeSnippets.empty();
-    if (bCodeBearing && Phase.mFileManifest.empty() &&
-        !Phase.mbNoFileManifest)
+    if (bCodeBearing && Phase.mFileManifest.empty() && !Phase.mbNoFileManifest)
     {
-        std::cerr
-            << "Cannot complete phase " << Options.mPhaseIndex
-            << ": code-bearing phase (code_entity_contract or "
-               "code_snippets populated) has empty file_manifest. "
-               "Backfill via `uni-plan manifest suggest --topic "
-            << Options.mTopic << " --phase " << Options.mPhaseIndex
-            << " --apply`, or set the explicit opt-out via `phase set "
-               "--no-file-manifest=true --no-file-manifest-reason "
-               "\"<justification>\"` before re-running phase complete.\n";
+        std::cerr << "Cannot complete phase " << Options.mPhaseIndex
+                  << ": code-bearing phase (code_entity_contract or "
+                     "code_snippets populated) has empty file_manifest. "
+                     "Backfill via `uni-plan manifest suggest --topic "
+                  << Options.mTopic << " --phase " << Options.mPhaseIndex
+                  << " --apply`, or set the explicit opt-out via `phase set "
+                     "--no-file-manifest=true --no-file-manifest-reason "
+                     "\"<justification>\"` before re-running phase complete.\n";
         return 1;
+    }
+
+    // v0.101.0 lifecycle gate: execution descendants must all be terminal
+    // before a phase can complete. Promotes the post-hoc
+    // `phase_status_lane_alignment` validator warning to a parse-time
+    // refusal so drift cannot accumulate past `phase complete`. A
+    // "terminal" descendant is Completed or Canceled; NotStarted,
+    // InProgress, or Blocked are not acceptable. Symmetric across lanes,
+    // jobs, and tasks — any incomplete descendant is a hard-stop.
+    {
+        std::vector<std::string> Incomplete;
+        const auto IsTerminal = [](EExecutionStatus S)
+        {
+            return S == EExecutionStatus::Completed ||
+                   S == EExecutionStatus::Canceled;
+        };
+        for (size_t LI = 0; LI < Phase.mLanes.size(); ++LI)
+        {
+            if (!IsTerminal(Phase.mLanes[LI].mStatus))
+            {
+                Incomplete.push_back(
+                    "lanes[" + std::to_string(LI) +
+                    "]=" + std::string(ToString(Phase.mLanes[LI].mStatus)));
+            }
+        }
+        for (size_t JI = 0; JI < Phase.mJobs.size(); ++JI)
+        {
+            const FJobRecord &Job = Phase.mJobs[JI];
+            if (!IsTerminal(Job.mStatus))
+            {
+                Incomplete.push_back("jobs[" + std::to_string(JI) +
+                                     "]=" + std::string(ToString(Job.mStatus)));
+            }
+            for (size_t TI = 0; TI < Job.mTasks.size(); ++TI)
+            {
+                if (!IsTerminal(Job.mTasks[TI].mStatus))
+                {
+                    Incomplete.push_back(
+                        "jobs[" + std::to_string(JI) + "].tasks[" +
+                        std::to_string(TI) +
+                        "]=" + std::string(ToString(Job.mTasks[TI].mStatus)));
+                }
+            }
+        }
+        if (!Incomplete.empty())
+        {
+            std::cerr << "Cannot complete phase " << Options.mPhaseIndex
+                      << ": execution descendants are not all terminal. "
+                         "Each lane, job, and task must be Completed or "
+                         "Canceled. Incomplete: ";
+            for (size_t I = 0; I < Incomplete.size(); ++I)
+            {
+                if (I > 0)
+                    std::cerr << ", ";
+                std::cerr << Incomplete[I];
+            }
+            std::cerr << ". Complete or cancel each descendant via "
+                         "`job set --status`, `task set --status`, or "
+                         "`lane set --status` before re-running phase "
+                         "complete.\n";
+            return 1;
+        }
     }
 
     using Change = std::pair<std::string, std::pair<std::string, std::string>>;
@@ -213,8 +273,7 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
     for (const auto &P : Bundle.mPhases)
     {
         const EExecutionStatus S = P.mLifecycle.mStatus;
-        if (S != EExecutionStatus::Completed &&
-            S != EExecutionStatus::Canceled)
+        if (S != EExecutionStatus::Completed && S != EExecutionStatus::Canceled)
         {
             AllTerminal = false;
             break;
@@ -228,6 +287,107 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
         AppendAutoChangelog(Bundle, kTargetPlan,
                             "Topic auto-completed (all phases terminal)");
     }
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// lane complete — close a lane with execution-descendant gate (v0.101.0)
+//
+// Symmetric with `phase complete`. Refuses completion when any job on the
+// lane is not terminal (Completed or Canceled). Raw `lane set --status
+// completed` remains available for manual repair but skips this gate —
+// the semantic command is the default path.
+// ---------------------------------------------------------------------------
+
+int RunLaneCompleteCommand(const std::vector<std::string> &InArgs,
+                           const std::string &InRepoRoot)
+{
+    const FLaneCompleteOptions Options = ParseLaneCompleteOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    if (static_cast<size_t>(Options.mLaneIndex) >= Phase.mLanes.size())
+    {
+        std::cerr << "Lane index out of range\n";
+        return 1;
+    }
+    FLaneRecord &Lane = Phase.mLanes[static_cast<size_t>(Options.mLaneIndex)];
+    const std::string Target =
+        MakeLaneTarget(Options.mPhaseIndex, Options.mLaneIndex);
+
+    // Idempotency as error.
+    if (Lane.mStatus == EExecutionStatus::Completed)
+    {
+        std::cerr << "Cannot complete " << Target << ": already completed\n";
+        return 1;
+    }
+
+    // Gate: every job on this lane must be terminal (Completed or Canceled).
+    const auto IsTerminal = [](EExecutionStatus S)
+    {
+        return S == EExecutionStatus::Completed ||
+               S == EExecutionStatus::Canceled;
+    };
+    std::vector<std::string> Incomplete;
+    for (size_t JI = 0; JI < Phase.mJobs.size(); ++JI)
+    {
+        const FJobRecord &Job = Phase.mJobs[JI];
+        if (Job.mLane != Options.mLaneIndex)
+            continue;
+        if (!IsTerminal(Job.mStatus))
+        {
+            Incomplete.push_back("jobs[" + std::to_string(JI) +
+                                 "]=" + std::string(ToString(Job.mStatus)));
+        }
+    }
+    if (!Incomplete.empty())
+    {
+        std::cerr << "Cannot complete " << Target
+                  << ": jobs on this lane are not all terminal. "
+                     "Complete or cancel each before lane complete. "
+                     "Incomplete: ";
+        for (size_t I = 0; I < Incomplete.size(); ++I)
+        {
+            if (I > 0)
+                std::cerr << ", ";
+            std::cerr << Incomplete[I];
+        }
+        std::cerr << "\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    std::vector<Change> Changes;
+    const std::string FromStatus = ToString(Lane.mStatus);
+    Changes.push_back({"status", {FromStatus, "completed"}});
+    Lane.mStatus = EExecutionStatus::Completed;
+
+    AppendAutoChangelog(Bundle, Target,
+                        "Lane " + std::to_string(Options.mLaneIndex) +
+                            " completed (phase " +
+                            std::to_string(Options.mPhaseIndex) + ")");
 
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
@@ -433,8 +593,7 @@ int RunPhaseCancelCommand(const std::vector<std::string> &InArgs,
     for (const auto &P : Bundle.mPhases)
     {
         const EExecutionStatus S = P.mLifecycle.mStatus;
-        if (S != EExecutionStatus::Completed &&
-            S != EExecutionStatus::Canceled)
+        if (S != EExecutionStatus::Completed && S != EExecutionStatus::Canceled)
         {
             AllTerminal = false;
             break;
@@ -661,8 +820,7 @@ int RunTopicCompleteCommand(const std::vector<std::string> &InArgs,
     for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
     {
         const EExecutionStatus S = Bundle.mPhases[I].mLifecycle.mStatus;
-        if (S != EExecutionStatus::Completed &&
-            S != EExecutionStatus::Canceled)
+        if (S != EExecutionStatus::Completed && S != EExecutionStatus::Canceled)
             NonTerminal.push_back(static_cast<int>(I));
     }
     if (!NonTerminal.empty())
@@ -753,6 +911,5 @@ int RunTopicBlockCommand(const std::vector<std::string> &InArgs,
     EmitMutationJson(Options.mTopic, "plan", Changes, true);
     return 0;
 }
-
 
 } // namespace UniPlan

@@ -173,6 +173,172 @@ TEST_F(FBundleTestFixture, PhaseCompleteAllowsCodeBearingWithOptOut)
               UniPlan::EExecutionStatus::Completed);
 }
 
+// v0.101.0 lifecycle gate: phase complete refuses when any descendant
+// (lane, job, or task) is not terminal.
+TEST_F(FBundleTestFixture, PhaseCompleteRejectsIncompleteLane)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FLaneRecord Lane;
+    Lane.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Lane.mScope = "Lane 0 scope";
+    Lane.mExitCriteria = "All green";
+    Bundle.mPhases[0].mLanes.push_back(std::move(Lane));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason = "doc-only";
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--done", "All done", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("execution descendants"), std::string::npos);
+    EXPECT_NE(mCapturedStderr.find("lanes[0]"), std::string::npos);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases[0].mLifecycle.mStatus,
+              UniPlan::EExecutionStatus::InProgress);
+}
+
+TEST_F(FBundleTestFixture, PhaseCompleteRejectsIncompleteTask)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FJobRecord Job;
+    Job.mWave = 1;
+    Job.mLane = 0;
+    Job.mStatus = UniPlan::EExecutionStatus::Completed;
+    Job.mScope = "job scope";
+    Job.mExitCriteria = "done";
+    UniPlan::FTaskRecord Task;
+    Task.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Task.mDescription = "unfinished task";
+    Task.mEvidence = "";
+    Job.mTasks.push_back(std::move(Task));
+    Bundle.mPhases[0].mJobs.push_back(std::move(Job));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason = "doc-only";
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--done", "All done", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("tasks[0]"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseCompleteAllowsCanceledDescendants)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FJobRecord Job;
+    Job.mWave = 1;
+    Job.mLane = 0;
+    Job.mStatus = UniPlan::EExecutionStatus::Canceled;
+    Job.mScope = "canceled job";
+    Job.mExitCriteria = "n/a";
+    Bundle.mPhases[0].mJobs.push_back(std::move(Job));
+    Bundle.mPhases[0].mbNoFileManifest = true;
+    Bundle.mPhases[0].mFileManifestSkipReason = "doc-only";
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--done", "All done", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0) << mCapturedStderr;
+}
+
+// v0.101.0 — lane complete semantic command
+TEST_F(FBundleTestFixture, LaneCompleteHappyPath)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FLaneRecord Lane;
+    Lane.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Lane.mScope = "Lane 0";
+    Lane.mExitCriteria = "done";
+    Bundle.mPhases[0].mLanes.push_back(std::move(Lane));
+    // Job on this lane, already complete.
+    UniPlan::FJobRecord Job;
+    Job.mWave = 1;
+    Job.mLane = 0;
+    Job.mStatus = UniPlan::EExecutionStatus::Completed;
+    Job.mScope = "job scope";
+    Job.mExitCriteria = "done";
+    Bundle.mPhases[0].mJobs.push_back(std::move(Job));
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunLaneCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--lane", "0", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0) << mCapturedStderr;
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("T", After));
+    EXPECT_EQ(After.mPhases[0].mLanes[0].mStatus,
+              UniPlan::EExecutionStatus::Completed);
+}
+
+TEST_F(FBundleTestFixture, LaneCompleteRejectsIncompleteJobOnLane)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FLaneRecord Lane;
+    Lane.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Lane.mScope = "Lane 0";
+    Lane.mExitCriteria = "done";
+    Bundle.mPhases[0].mLanes.push_back(std::move(Lane));
+    UniPlan::FJobRecord Job;
+    Job.mWave = 1;
+    Job.mLane = 0;
+    Job.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Job.mScope = "unfinished job";
+    Job.mExitCriteria = "done";
+    Bundle.mPhases[0].mJobs.push_back(std::move(Job));
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "T.Plan.json";
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
+
+    StartCapture();
+    const int Code = UniPlan::RunLaneCompleteCommand(
+        {"--topic", "T", "--phase", "0", "--lane", "0", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("jobs on this lane"), std::string::npos);
+}
+
 TEST_F(FBundleTestFixture, PhaseCompleteAllowsCodeBearingWithManifestEntries)
 {
     CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
@@ -303,8 +469,8 @@ TEST_F(FBundleTestFixture, PhaseCancelHappyPathFromNotStarted)
                          UniPlan::EExecutionStatus::NotStarted, true);
     StartCapture();
     const int Code = UniPlan::RunPhaseCancelCommand(
-        {"--topic", "T", "--phase", "0", "--reason",
-         "Superseded by phases[21]", "--repo-root", mRepoRoot.string()},
+        {"--topic", "T", "--phase", "0", "--reason", "Superseded by phases[21]",
+         "--repo-root", mRepoRoot.string()},
         mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
@@ -328,8 +494,7 @@ TEST_F(FBundleTestFixture, PhaseCancelHappyPathFromNotStarted)
     {
         if (Entry.mAffected == "phases[0]" &&
             Entry.mChange.find("canceled") != std::string::npos &&
-            Entry.mChange.find("Superseded by phases[21]") !=
-                std::string::npos)
+            Entry.mChange.find("Superseded by phases[21]") != std::string::npos)
         {
             bFoundCancelEntry = true;
         }
@@ -374,8 +539,7 @@ TEST_F(FBundleTestFixture, PhaseCancelHappyPathFromBlocked)
     EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mStatus,
               UniPlan::EExecutionStatus::Canceled);
     // Reason replaces prior blocker text.
-    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mBlockers,
-              "Blocker now permanent");
+    EXPECT_EQ(Bundle.mPhases[0].mLifecycle.mBlockers, "Blocker now permanent");
 }
 
 TEST_F(FBundleTestFixture, PhaseCancelRejectsCompleted)

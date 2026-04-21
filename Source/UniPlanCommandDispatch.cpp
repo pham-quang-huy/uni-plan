@@ -106,10 +106,11 @@ static int DispatchLaneCommand(const std::vector<std::string> &InArgs,
 {
     static const FCommandEntry kSubs[] = {{"add", &RunLaneAddCommand},
                                           {"set", &RunLaneSetCommand},
+                                          {"complete", &RunLaneCompleteCommand},
                                           {"remove", &RunLaneRemoveCommand},
                                           {"list", &RunLaneListCommand}};
     return DispatchSubcommand("lane", InArgs, InCwd, kSubs,
-                              "add, set, remove, list");
+                              "add, set, complete, remove, list");
 }
 
 static int DispatchTestingCommand(const std::vector<std::string> &InArgs,
@@ -177,8 +178,9 @@ DispatchAcceptanceCriterionCommand(const std::vector<std::string> &InArgs,
 
 // v0.98.0 typed-array CLI groups. Sidecar-replacement homes for priority
 // groupings, runbooks, and residual risks.
-static int DispatchPriorityGroupingCommand(
-    const std::vector<std::string> &InArgs, const std::string &InCwd)
+static int
+DispatchPriorityGroupingCommand(const std::vector<std::string> &InArgs,
+                                const std::string &InCwd)
 {
     static const FCommandEntry kSubs[] = {
         {"add", &RunPriorityGroupingAddCommand},

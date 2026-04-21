@@ -740,6 +740,53 @@ void EvalPhaseStatusLaneAlignment(const std::vector<FTopicBundle> &InBundles,
     }
 }
 
+// v0.101.0. completed_jobs_have_completed_tasks (ErrorMinor) — a job with
+// status=completed must have every task terminal (Completed or Canceled).
+// Closes the drift gap at job granularity: `phase complete` now refuses
+// incomplete descendants at the mutation surface, but pre-existing bundles
+// or raw `job set --status completed` bypass still produce inconsistencies;
+// this validator catches them. Parallels `phase_status_lane_alignment` for
+// jobs→tasks instead of phases→lanes.
+static void
+EvalCompletedJobsHaveCompletedTasks(const std::vector<FTopicBundle> &InBundles,
+                                    std::vector<ValidateCheck> &OutChecks)
+{
+    for (const FTopicBundle &B : InBundles)
+    {
+        for (size_t PI = 0; PI < B.mPhases.size(); ++PI)
+        {
+            const FPhaseRecord &Phase = B.mPhases[PI];
+            for (size_t JI = 0; JI < Phase.mJobs.size(); ++JI)
+            {
+                const FJobRecord &Job = Phase.mJobs[JI];
+                if (Job.mStatus != EExecutionStatus::Completed)
+                    continue;
+                std::vector<int> IncompleteTasks;
+                for (size_t TI = 0; TI < Job.mTasks.size(); ++TI)
+                {
+                    const EExecutionStatus TS = Job.mTasks[TI].mStatus;
+                    if (TS != EExecutionStatus::Completed &&
+                        TS != EExecutionStatus::Canceled)
+                    {
+                        IncompleteTasks.push_back(static_cast<int>(TI));
+                    }
+                }
+                if (IncompleteTasks.empty())
+                    continue;
+                std::string Detail =
+                    std::to_string(IncompleteTasks.size()) + " of " +
+                    std::to_string(Job.mTasks.size()) +
+                    " task(s) not terminal but job status is completed";
+                Fail(OutChecks, "completed_jobs_have_completed_tasks",
+                     EValidationSeverity::ErrorMinor, B.mTopicKey,
+                     "phases[" + std::to_string(PI) + "].jobs[" +
+                         std::to_string(JI) + "]",
+                     Detail);
+            }
+        }
+    }
+}
+
 // 17b. completed_phase_timestamp_required (Warning) — a phase marked
 // completed must carry both started_at and completed_at, otherwise the
 // evidence trail has a hole. `EvalTimestampFormat` validates format of
@@ -974,6 +1021,7 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
     EvalPhaseTracking(InBundles, Checks);
     EvalTopicPhaseStatusAlignment(InBundles, Checks);
     EvalPhaseStatusLaneAlignment(InBundles, Checks);
+    EvalCompletedJobsHaveCompletedTasks(InBundles, Checks);
     EvalCompletedPhaseTimestampRequired(InBundles, Checks);
     EvalTestingActorCoverage(InBundles, Checks);
     EvalCanonicalEntityRef(InBundles, Checks);

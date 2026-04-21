@@ -701,14 +701,13 @@ TEST_F(FBundleTestFixture, FileManifestRequiredFiresOnCodeBearingEmpty)
         mRepoRoot.string());
     StopCapture();
     const auto Json = ParseCapturedJSON();
-    const auto Issue = FirstIssueWithId(
-        Json, "file_manifest_required_for_code_phases");
+    const auto Issue =
+        FirstIssueWithId(Json, "file_manifest_required_for_code_phases");
     ASSERT_FALSE(Issue.empty());
     // v0.87.0: severity promoted from Warning → ErrorMinor now that
     // `manifest suggest` (v0.86.0) provides the migration path.
     EXPECT_EQ(Issue["severity"], "error_minor");
-    EXPECT_EQ(Issue["path"].get<std::string>(),
-              "phases[0].file_manifest");
+    EXPECT_EQ(Issue["path"].get<std::string>(), "phases[0].file_manifest");
 }
 
 TEST_F(FBundleTestFixture, FileManifestRequiredSkippedOnNonCodeBearing)
@@ -723,8 +722,7 @@ TEST_F(FBundleTestFixture, FileManifestRequiredSkippedOnNonCodeBearing)
         mRepoRoot.string());
     StopCapture();
     const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(CountIssuesWithId(
-                  Json, "file_manifest_required_for_code_phases"),
+    EXPECT_EQ(CountIssuesWithId(Json, "file_manifest_required_for_code_phases"),
               0);
 }
 
@@ -747,8 +745,7 @@ TEST_F(FBundleTestFixture, FileManifestRequiredSkippedWhenManifestPresent)
         mRepoRoot.string());
     StopCapture();
     const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(CountIssuesWithId(
-                  Json, "file_manifest_required_for_code_phases"),
+    EXPECT_EQ(CountIssuesWithId(Json, "file_manifest_required_for_code_phases"),
               0);
 }
 
@@ -769,8 +766,7 @@ TEST_F(FBundleTestFixture, FileManifestRequiredSkippedByExplicitOptOut)
         mRepoRoot.string());
     StopCapture();
     const auto Json = ParseCapturedJSON();
-    EXPECT_EQ(CountIssuesWithId(
-                  Json, "file_manifest_required_for_code_phases"),
+    EXPECT_EQ(CountIssuesWithId(Json, "file_manifest_required_for_code_phases"),
               0);
 }
 
@@ -1474,8 +1470,7 @@ TEST_F(FBundleTestFixture, ScopeAndNonScopePopulatedPassesWhenBothAreSet)
     EXPECT_EQ(CountIssuesWithId(Json, "scope_and_non_scope_populated"), 0);
 }
 
-TEST_F(FBundleTestFixture,
-       ScopeAndNonScopePopulatedSkipsNotStartedTopic)
+TEST_F(FBundleTestFixture, ScopeAndNonScopePopulatedSkipsNotStartedTopic)
 {
     // Not-started topics are still being authored; don't fire on them.
     CreateMinimalFixture("T", UniPlan::ETopicStatus::NotStarted, 1,
@@ -1836,4 +1831,79 @@ TEST_F(FBundleTestFixture, ResidualRiskClosureShaFormatAcceptsValidHex)
     StopCapture();
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(CountIssuesWithId(Json, "residual_risk_closure_sha_format"), 0);
+}
+
+// -------------------------------------------------------------------
+// v0.101.0 — completed_jobs_have_completed_tasks
+// Parallels phase_status_lane_alignment for jobs→tasks. A job with
+// status=completed that carries an in-flight task is a governance
+// inconsistency.
+// -------------------------------------------------------------------
+
+TEST_F(FBundleTestFixture, CompletedJobsHaveCompletedTasksFiresForInProgress)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FJobRecord Job;
+    Job.mWave = 1;
+    Job.mLane = 0;
+    Job.mStatus = UniPlan::EExecutionStatus::Completed;
+    Job.mScope = "job scope";
+    Job.mExitCriteria = "done";
+    UniPlan::FTaskRecord Task;
+    Task.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Task.mDescription = "unfinished";
+    Task.mEvidence = "";
+    Job.mTasks.push_back(std::move(Task));
+    Bundle.mPhases[0].mJobs.push_back(std::move(Job));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue =
+        FirstIssueWithId(Json, "completed_jobs_have_completed_tasks");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+    EXPECT_EQ(Issue["path"], "phases[0].jobs[0]");
+}
+
+TEST_F(FBundleTestFixture, CompletedJobsHaveCompletedTasksCleanWhenAllTerminal)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    UniPlan::FJobRecord Job;
+    Job.mWave = 1;
+    Job.mLane = 0;
+    Job.mStatus = UniPlan::EExecutionStatus::Completed;
+    Job.mScope = "job scope";
+    Job.mExitCriteria = "done";
+    UniPlan::FTaskRecord T1;
+    T1.mStatus = UniPlan::EExecutionStatus::Completed;
+    T1.mDescription = "done task";
+    T1.mEvidence = "ok";
+    Job.mTasks.push_back(std::move(T1));
+    UniPlan::FTaskRecord T2;
+    T2.mStatus = UniPlan::EExecutionStatus::Canceled;
+    T2.mDescription = "dropped task";
+    T2.mEvidence = "";
+    Job.mTasks.push_back(std::move(T2));
+    Bundle.mPhases[0].mJobs.push_back(std::move(Job));
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "completed_jobs_have_completed_tasks"),
+              0);
 }

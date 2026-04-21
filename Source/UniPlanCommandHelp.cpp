@@ -1147,6 +1147,27 @@ static const FSubcommandHelpEntry kLaneSubs[] = {
         false,
     },
     {
+        "complete",
+        "Usage: uni-plan lane complete --topic <T> --phase <N> --lane <L>\n\n",
+        "Close a lane semantically (v0.101.0). Symmetric with "
+        "`phase complete`. Refuses completion when any job on this lane "
+        "is not terminal (Completed or Canceled) — enumerate the "
+        "offenders, complete or cancel each, then retry. Raw `lane set "
+        "--status completed` still works but bypasses this gate; prefer "
+        "the semantic command.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --lane <L>              Lane index to complete\n\n",
+        nullptr,
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan lane complete --topic X --phase 2 --lane 0\n",
+        false,
+        false,
+    },
+    {
         "remove",
         "Usage: uni-plan lane remove --topic <T> --phase <N> --lane <L>\n\n",
         "Remove a lane from a phase by index. Refuses removal when any\n"
@@ -2235,6 +2256,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "Usage:\n"
         "  uni-plan lane add --topic <T> --phase <N> [options]\n"
         "  uni-plan lane set --topic <T> --phase <N> --lane <L> [options]\n"
+        "  uni-plan lane complete --topic <T> --phase <N> --lane <L>\n"
         "  uni-plan lane remove --topic <T> --phase <N> --lane <L>\n"
         "  uni-plan lane list --topic <T> [--phase <N>]\n\n",
         "Manage lanes within a phase. Lanes group jobs that can execute\n"
@@ -2242,6 +2264,8 @@ static const FCommandHelpEntry kCommandHelp[] = {
         nullptr,
         "  add              Append a trailing lane to a phase\n"
         "  set              Update an existing lane's fields\n"
+        "  complete         Close a lane with execution-descendant gate "
+        "(v0.101.0+)\n"
         "  remove           Remove a lane by index — refuses when jobs still\n"
         "                   reference it (v0.93.0+)\n"
         "  list             Enumerate lanes across the topic (v0.93.0+)\n\n"

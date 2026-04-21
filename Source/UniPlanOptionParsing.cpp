@@ -2247,6 +2247,42 @@ FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+// v0.101.0 — lane complete semantic command parser.
+FLaneCompleteOptions
+ParseLaneCompleteOptions(const std::vector<std::string> &InTokens)
+{
+    FLaneCompleteOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--lane")
+        {
+            ParseRequiredIntIndex(Remaining, Index, "--lane",
+                                  Options.mLaneIndex);
+            continue;
+        }
+        throw UsageError("Unknown option for lane complete: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("lane complete requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("lane complete requires --phase");
+    if (Options.mLaneIndex < 0)
+        throw UsageError("lane complete requires --lane");
+    return Options;
+}
+
 FTestingAddOptions
 ParseTestingAddOptions(const std::vector<std::string> &InTokens)
 {

@@ -391,6 +391,17 @@ struct FLaneSetOptions : BaseOptions
     std::string mExitCriteria;
 };
 
+// v0.101.0 — lane complete semantic command. Symmetric with phase complete:
+// refuses completion when any job on the lane is not terminal (Completed or
+// Canceled). Raw `lane set --status completed` remains available for manual
+// repair but bypasses this gate — use the semantic command by default.
+struct FLaneCompleteOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    int mLaneIndex = -1;
+};
+
 struct FTestingAddOptions : BaseOptions
 {
     std::string mTopic;

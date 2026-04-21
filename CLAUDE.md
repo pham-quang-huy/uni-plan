@@ -375,6 +375,33 @@ Semantics are otherwise identical to the pipe counterparts — `mbValidationClea
 
 **Note on version numbering**: uni-plan goes 0.99.x → 0.100.0, NOT 1.0.0. v1.0 is reserved for an explicit surface lock and is not ratified yet.
 
+### v0.101.0 behavior note — Phase-complete execution-descendant gate + `lane complete` semantic command + `completed_jobs_have_completed_tasks` validator
+
+Promotes the post-hoc `phase_status_lane_alignment` Warning to parse-time refusals at the mutation surface, closes the jobs-vs-tasks alignment gap, and adds a matching lane-level semantic command so the authoring flow has a gated path at every level.
+
+**1. Phase-complete descendant gate**:
+- `uni-plan phase complete` now refuses when any lane, job, or task in the target phase is not terminal. Terminal = `Completed` or `Canceled`. NotStarted / InProgress / Blocked all fail.
+- Error message enumerates every incomplete descendant by index with its current status, and points the operator at `job set --status`, `task set --status`, or `lane set --status` for remediation.
+- The gate sits at `Source/UniPlanCommandLifecycle.cpp` inside `RunPhaseCompleteCommand`, after the v0.88.0 file-manifest gate and before any state mutation — so a refusal is atomic (no partial writes, phase stays in_progress).
+
+**2. `uni-plan lane complete` semantic command** (new):
+- Flags: `--topic <T> --phase <N> --lane <L>`. Symmetric with `phase complete / block / unblock / cancel`.
+- Gate: every job on the lane (identified by `job.mLane == InLaneIndex`) must be terminal. Same error taxonomy as the phase-complete gate.
+- Effects: flips lane status to `Completed`, appends an auto-changelog entry, emits standard `uni-plan-mutation-v1` JSON.
+- Raw `lane set --status completed` remains available for manual repair but bypasses this gate — prefer the semantic command for authoring discipline. The skill guidance and docs should recommend `lane complete` as the default path.
+
+**3. `completed_jobs_have_completed_tasks` validator** (new, ErrorMinor):
+- Fires when a job has `status=completed` but carries at least one task that is not terminal (not Completed and not Canceled).
+- Detail message: "N of M task(s) not terminal but job status is completed".
+- Path format: `phases[P].jobs[J]`.
+- Closes the jobs→tasks gap that the v0.84.0 `phase_status_lane_alignment` Warning covers at phases→lanes but never reached into task granularity.
+
+**Exit codes**: phase-complete / lane-complete gate failures → exit 1. `ErrorMinor` from the new validator → `valid=false` under `--strict`; a plain `validate` run still reports the issue but `valid=false` is only driven by ErrorMajor.
+
+**kCliVersion bump**: 0.100.0 → 0.101.0. MINOR per pre-1.0 SemVer — adds a new command (`lane complete`), a new validator ID, and a new refusal path on `phase complete`. Consumers relying on the old "phase complete accepts incomplete descendants" behavior must either complete or cancel those descendants first, or use raw `phase set --status completed` (which skips this gate, carrying the audit trail implied by the raw setter).
+
+**Tests** (`Test/UniPlanTestSemantic.cpp` + `Test/UniPlanTestValidationContent.cpp`): 5 new guards covering phase-complete refusal on incomplete lane, phase-complete refusal on incomplete task, phase-complete allows canceled descendants, lane-complete happy path, lane-complete refuses incomplete job, validator fires for completed job with in-progress task, validator clean when every task is Completed or Canceled.
+
 ## documentation_rules
 
 ### V4 bundle model

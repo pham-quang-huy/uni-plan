@@ -370,6 +370,13 @@ Pipe-delimited grammars (`<platform>|<command>|<description>` etc.) remain suppo
 
 kCliVersion bump: 0.99.1 → 0.100.0. Note: pre-1.0 discipline — we go 0.99.x → 0.100.0, not 1.0.0.
 
+### v0.101.0 behavior note — Phase-complete descendant gate + `lane complete` + `completed_jobs_have_completed_tasks`
+
+- `uni-plan phase complete` refuses when any lane, job, or task in the phase is not terminal (Completed or Canceled). Error lists every incomplete descendant; exit 1, atomic refusal.
+- New semantic command `uni-plan lane complete --topic <T> --phase <N> --lane <L>` — symmetric with `phase complete`. Gate: every job on the lane must be terminal. Raw `lane set --status completed` still bypasses; prefer the semantic command.
+- New validator `completed_jobs_have_completed_tasks` (ErrorMinor) — fires when `job.status=completed` but any task is not terminal. Closes the jobs→tasks gap parallel to the existing phases→lanes `phase_status_lane_alignment`.
+- kCliVersion bump: 0.100.0 → 0.101.0.
+
 ## documentation_rules
 
 ### V4 bundle model
