@@ -402,6 +402,28 @@ Promotes the post-hoc `phase_status_lane_alignment` Warning to parse-time refusa
 
 **Tests** (`Test/UniPlanTestSemantic.cpp` + `Test/UniPlanTestValidationContent.cpp`): 5 new guards covering phase-complete refusal on incomplete lane, phase-complete refusal on incomplete task, phase-complete allows canceled descendants, lane-complete happy path, lane-complete refuses incomplete job, validator fires for completed job with in-progress task, validator clean when every task is Completed or Canceled.
 
+### v0.102.0 behavior note — `phase sync-execution` reconciliation command
+
+Addresses the post-v0.101.0 ergonomic: after a batch of leaf-level `task set --status completed` / `task set --status canceled` updates, an agent used to have to step `job set --status completed` on every job, `lane complete` on every lane, then `phase complete`. `phase sync-execution` propagates terminal status upward in one call — child → parent only, non-destructive, idempotent.
+
+- **New command**: `uni-plan phase sync-execution --topic <T> --phase <N> [--dry-run]`. Output schema `uni-plan-sync-execution-v1`.
+- **Strict child → parent only**. Never flips a child from a parent's status. Never downgrades a parent already in a terminal state (`Completed` or `Canceled`). **Never touches phase status** — that remains `phase complete` / `phase cancel` territory with their own gates.
+- **Rollup rules** (symmetric for jobs ← tasks and lanes ← jobs-on-that-lane):
+  - Zero children → skip (nothing to roll up).
+  - Parent already terminal → skip.
+  - Every child terminal AND ≥1 Completed → parent → `Completed`.
+  - Every child terminal AND every child Canceled → parent → `Canceled`.
+  - Any child not terminal → skip (the parent is genuinely in-flight).
+- **Two-pass order**: jobs first (from tasks), then lanes (from the newly-updated job state). So a phase whose every task is complete propagates all the way up to the lane in one invocation.
+- **`--dry-run`** emits the same JSON envelope with `dry_run: true` and `changes: [...]` populated, but does not touch disk. Useful for previewing before commit.
+- **Idempotent**: re-running after a successful pass emits `jobs_flipped: 0, lanes_flipped: 0, changes: []`. The second invocation sees every parent already terminal and skips cleanly.
+- **Auto-changelog**: one entry per flipped entity (`"lanes[1] synced in_progress → completed (all jobs terminal; ≥1 completed)"`). Routes through `GuardedWriteBundle` so the v0.99.x lock + atomic-rename + stale-check guarantees apply.
+- **Not a data-repair command**: if a parent is `Completed` but a child is `InProgress` (inconsistent state), `sync-execution` leaves the parent alone — the `completed_jobs_have_completed_tasks` validator (v0.101.0) surfaces that inconsistency separately. Downgrading a parent in response to a dirty child is a different decision that belongs to an explicit `job set --status` / `lane set --status` invocation with audit-trail awareness.
+
+**kCliVersion bump**: 0.101.0 → 0.102.0. MINOR per pre-1.0 SemVer — adds a new subcommand and a new output schema. No behavior change for callers not using it.
+
+**Tests** (`Test/UniPlanTestSemantic.cpp`): 7 new guards covering happy path (task → job → lane chain), `--dry-run` leaves on-disk bytes byte-identical, mixed-statuses skip the job, all-canceled tasks roll up as Canceled, mixed Completed + Canceled tasks roll up as Completed (real work happened), already-terminal parent is skipped (non-destructive), idempotency on re-run.
+
 ## documentation_rules
 
 ### V4 bundle model

@@ -912,4 +912,207 @@ int RunTopicBlockCommand(const std::vector<std::string> &InArgs,
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// phase sync-execution — reconcile lane/job status from descendants (v0.102.0)
+//
+// Child → parent only. Never touches phase status. Never downgrades a
+// parent already in a terminal state. After a batch of leaf-level
+// `task set --status completed` / `task set --status canceled` updates,
+// run this to propagate terminal status up to jobs and then lanes,
+// without stepping `job set --status completed` + `lane complete` on
+// every entity manually.
+//
+// Rollup rules:
+//   - Job with zero tasks       → skip (nothing to roll up)
+//   - Job already terminal      → skip (non-destructive, idempotent)
+//   - Every task terminal
+//       AND ≥1 task Completed   → job → Completed
+//       AND every task Canceled → job → Canceled
+//   - Any task non-terminal     → skip (job is genuinely in progress)
+//   Lane rollup follows the same pattern against jobs on this lane
+//   (jobs are rolled up first, so lane verdicts see up-to-date job state).
+//
+// --dry-run: emits the same shape but makes no disk writes. Idempotent on
+// re-run (second run emits `changes: []`).
+// ---------------------------------------------------------------------------
+
+static EExecutionStatus
+RollupFromChildren(const std::vector<EExecutionStatus> &InChildren,
+                   bool &OutbSkip)
+{
+    OutbSkip = false;
+    if (InChildren.empty())
+    {
+        OutbSkip = true;
+        return EExecutionStatus::NotStarted;
+    }
+    int CompletedCount = 0;
+    int CanceledCount = 0;
+    for (EExecutionStatus S : InChildren)
+    {
+        if (S == EExecutionStatus::Completed)
+            ++CompletedCount;
+        else if (S == EExecutionStatus::Canceled)
+            ++CanceledCount;
+        else
+        {
+            OutbSkip = true;
+            return EExecutionStatus::NotStarted;
+        }
+    }
+    if (CompletedCount > 0)
+        return EExecutionStatus::Completed;
+    return EExecutionStatus::Canceled;
+}
+
+int RunPhaseSyncExecutionCommand(const std::vector<std::string> &InArgs,
+                                 const std::string &InRepoRoot)
+{
+    const FPhaseSyncExecutionOptions Options =
+        ParsePhaseSyncExecutionOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+
+    struct FFlip
+    {
+        std::string mTarget;
+        EExecutionStatus mFrom;
+        EExecutionStatus mTo;
+        std::string mReason;
+    };
+    std::vector<FFlip> Flips;
+
+    // Pass 1: jobs ← tasks.
+    for (size_t JI = 0; JI < Phase.mJobs.size(); ++JI)
+    {
+        FJobRecord &Job = Phase.mJobs[JI];
+        if (Job.mStatus == EExecutionStatus::Completed ||
+            Job.mStatus == EExecutionStatus::Canceled)
+            continue;
+        if (Job.mTasks.empty())
+            continue;
+        std::vector<EExecutionStatus> ChildStatuses;
+        ChildStatuses.reserve(Job.mTasks.size());
+        for (const FTaskRecord &T : Job.mTasks)
+            ChildStatuses.push_back(T.mStatus);
+        bool bSkip = false;
+        EExecutionStatus Rolled = RollupFromChildren(ChildStatuses, bSkip);
+        if (bSkip)
+            continue;
+        FFlip F;
+        F.mTarget = MakeJobTarget(Options.mPhaseIndex, static_cast<int>(JI));
+        F.mFrom = Job.mStatus;
+        F.mTo = Rolled;
+        F.mReason = (Rolled == EExecutionStatus::Completed)
+                        ? "all tasks terminal; ≥1 completed"
+                        : "all tasks canceled";
+        Flips.push_back(std::move(F));
+        if (!Options.mbDryRun)
+            Job.mStatus = Rolled;
+    }
+
+    // Pass 2: lanes ← jobs (reads post-pass-1 job state — when --dry-run,
+    // pass 1 didn't mutate, so lanes see the ORIGINAL job state, which
+    // correctly previews only the rollups available without pass 1's
+    // writes; the same dry-run invocation surfaces both-pass flips only
+    // if pass 1 wouldn't have changed anything).
+    for (size_t LI = 0; LI < Phase.mLanes.size(); ++LI)
+    {
+        FLaneRecord &Lane = Phase.mLanes[LI];
+        if (Lane.mStatus == EExecutionStatus::Completed ||
+            Lane.mStatus == EExecutionStatus::Canceled)
+            continue;
+        std::vector<EExecutionStatus> ChildStatuses;
+        for (const FJobRecord &J : Phase.mJobs)
+        {
+            if (J.mLane == static_cast<int>(LI))
+                ChildStatuses.push_back(J.mStatus);
+        }
+        if (ChildStatuses.empty())
+            continue;
+        bool bSkip = false;
+        EExecutionStatus Rolled = RollupFromChildren(ChildStatuses, bSkip);
+        if (bSkip)
+            continue;
+        FFlip F;
+        F.mTarget = MakeLaneTarget(Options.mPhaseIndex, static_cast<int>(LI));
+        F.mFrom = Lane.mStatus;
+        F.mTo = Rolled;
+        F.mReason = (Rolled == EExecutionStatus::Completed)
+                        ? "all jobs terminal; ≥1 completed"
+                        : "all jobs canceled";
+        Flips.push_back(std::move(F));
+        if (!Options.mbDryRun)
+            Lane.mStatus = Rolled;
+    }
+
+    if (!Flips.empty() && !Options.mbDryRun)
+    {
+        for (const FFlip &F : Flips)
+        {
+            AppendAutoChangelog(Bundle, F.mTarget,
+                                F.mTarget + " synced " +
+                                    std::string(ToString(F.mFrom)) + " → " +
+                                    std::string(ToString(F.mTo)) + " (" +
+                                    F.mReason + ")");
+        }
+        if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+        {
+            std::cerr << Error << "\n";
+            return 1;
+        }
+    }
+
+    // Emit envelope.
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kPhaseSyncExecutionSchema, UTC, RepoRoot.string());
+    EmitJsonFieldBool("ok", true);
+    EmitJsonField("topic", Options.mTopic);
+    EmitJsonFieldInt("phase", Options.mPhaseIndex);
+    EmitJsonFieldBool("dry_run", Options.mbDryRun);
+    int JobsFlipped = 0;
+    int LanesFlipped = 0;
+    for (const FFlip &F : Flips)
+    {
+        if (F.mTarget.find(".jobs[") != std::string::npos)
+            ++JobsFlipped;
+        else if (F.mTarget.find(".lanes[") != std::string::npos)
+            ++LanesFlipped;
+    }
+    std::cout << "\"summary\":{";
+    EmitJsonFieldInt("jobs_flipped", JobsFlipped);
+    EmitJsonFieldInt("lanes_flipped", LanesFlipped, false);
+    std::cout << "},";
+    std::cout << "\"changes\":[";
+    for (size_t I = 0; I < Flips.size(); ++I)
+    {
+        PrintJsonSep(I);
+        std::cout << "{";
+        EmitJsonField("target", Flips[I].mTarget);
+        EmitJsonField("from", ToString(Flips[I].mFrom));
+        EmitJsonField("to", ToString(Flips[I].mTo));
+        EmitJsonField("reason", Flips[I].mReason, false);
+        std::cout << "}";
+    }
+    std::cout << "],";
+    std::vector<std::string> NoWarnings;
+    PrintJsonClose(NoWarnings);
+    return 0;
+}
+
 } // namespace UniPlan

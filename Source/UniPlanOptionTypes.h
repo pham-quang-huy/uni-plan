@@ -402,6 +402,19 @@ struct FLaneCompleteOptions : BaseOptions
     int mLaneIndex = -1;
 };
 
+// v0.102.0 — phase sync-execution reconciliation command. Rolls up terminal
+// status from tasks → jobs → lanes (child → parent only; never downgrades,
+// never touches phase status itself). --dry-run reports what would change
+// without writing. Use after bulk leaf-level task/job updates to avoid
+// stepping `job set --status completed` + `lane complete` on every entity
+// manually before `phase complete`.
+struct FPhaseSyncExecutionOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    bool mbDryRun = false;
+};
+
 struct FTestingAddOptions : BaseOptions
 {
     std::string mTopic;

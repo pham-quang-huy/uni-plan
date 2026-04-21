@@ -754,6 +754,38 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         false,
         true,
     },
+    {
+        "sync-execution",
+        "Usage: uni-plan phase sync-execution --topic <T> --phase <N> "
+        "[--dry-run]\n\n",
+        "Reconcile lane / job status from their descendants (v0.102.0).\n"
+        "Strict child → parent rollup: NEVER overrides a child's status,\n"
+        "NEVER downgrades a parent already in a terminal state, NEVER\n"
+        "touches phase status (use `phase complete` / `phase cancel`).\n\n"
+        "Rollup rules (symmetric for job←tasks and lane←jobs):\n"
+        "  • Zero children or parent already terminal → skip\n"
+        "  • All children terminal AND ≥1 Completed → parent → Completed\n"
+        "  • All children terminal AND every child Canceled → parent "
+        "→ Canceled\n"
+        "  • Any child not terminal → skip (genuine in-progress)\n\n"
+        "Idempotent: re-running after a successful pass emits zero\n"
+        "changes. Intended usage: after a batch of `task set "
+        "--status completed` (or canceled), run this to propagate up\n"
+        "without stepping `job set --status` + `lane complete` on\n"
+        "every entity before the final `phase complete`.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index to reconcile\n\n",
+        "  --dry-run               Report what would change, no writes\n",
+        nullptr,
+        "uni-plan-sync-execution-v1",
+        "Examples:\n"
+        "  uni-plan phase sync-execution --topic X --phase 2\n"
+        "  uni-plan phase sync-execution --topic X --phase 2 "
+        "--dry-run\n",
+        false,
+        false,
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -2071,7 +2103,9 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  next             Find the next not_started phase + readiness\n"
         "  readiness        Gate-by-gate readiness report\n"
         "  wave-status      Per-wave job completion rollup\n"
-        "  drift            Report status-vs-evidence drift (v0.84.0+)\n\n"
+        "  drift            Report status-vs-evidence drift (v0.84.0+)\n"
+        "  sync-execution   Roll up task/job terminal status to jobs/lanes "
+        "(v0.102.0+)\n\n"
         "Run `uni-plan phase <sub> --help` for per-subcommand detail.\n",
         kHumanTable,
         "Examples:\n"

@@ -2247,6 +2247,39 @@ FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+// v0.102.0 — phase sync-execution parser.
+FPhaseSyncExecutionOptions
+ParsePhaseSyncExecutionOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseSyncExecutionOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--dry-run")
+        {
+            Options.mbDryRun = true;
+            continue;
+        }
+        throw UsageError("Unknown option for phase sync-execution: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase sync-execution requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("phase sync-execution requires --phase");
+    return Options;
+}
+
 // v0.101.0 — lane complete semantic command parser.
 FLaneCompleteOptions
 ParseLaneCompleteOptions(const std::vector<std::string> &InTokens)

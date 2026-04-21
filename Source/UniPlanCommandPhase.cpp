@@ -807,12 +807,14 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseWaveStatusCommand(SubArgs, InRepoRoot);
     if (Sub == "drift")
         return RunPhaseDriftCommand(SubArgs, InRepoRoot);
+    if (Sub == "sync-execution")
+        return RunPhaseSyncExecutionCommand(SubArgs, InRepoRoot);
 
     throw UsageError("Unknown phase subcommand: " + Sub +
                      ". Expected: list, get, set, add, remove, start, "
                      "complete, block, unblock, cancel, progress, "
                      "complete-jobs, log, verify, next, readiness, "
-                     "wave-status, drift");
+                     "wave-status, drift, sync-execution");
 }
 
 } // namespace UniPlan

@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.101.0";
+static constexpr const char *kCliVersion = "0.102.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -148,6 +148,15 @@ static constexpr const char *kManifestSuggestSchema =
 // documented recipes and the shipping CLI without having to parse
 // `--help` prose.
 static constexpr const char *kCatalogSchema = "uni-plan-catalog-v1";
+
+// Phase sync-execution schema (v0.102.0). Emitted by `uni-plan phase
+// sync-execution` — reports the child→parent rollups applied (or the ones
+// that would be applied under --dry-run) to reconcile lane / job status
+// from their descendants. Strictly non-downgrading, never touches phase
+// status, idempotent on rerun. See FPhaseSyncExecutionOptions and
+// RunPhaseSyncExecutionCommand.
+static constexpr const char *kPhaseSyncExecutionSchema =
+    "uni-plan-sync-execution-v1";
 
 // catalog_schema_version is independent from kCliVersion and from
 // uni-plan-catalog-v1: it tracks the SHAPE of the catalog record

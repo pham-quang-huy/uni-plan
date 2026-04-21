@@ -161,6 +161,8 @@ ParsePhaseQueryOptions(const std::vector<std::string> &InTokens);
 FLaneSetOptions ParseLaneSetOptions(const std::vector<std::string> &InTokens);
 FLaneCompleteOptions
 ParseLaneCompleteOptions(const std::vector<std::string> &InTokens);
+FPhaseSyncExecutionOptions
+ParsePhaseSyncExecutionOptions(const std::vector<std::string> &InTokens);
 FTestingAddOptions
 ParseTestingAddOptions(const std::vector<std::string> &InTokens);
 FManifestAddOptions
@@ -462,6 +464,8 @@ int RunLaneSetCommand(const std::vector<std::string> &InArgs,
                       const std::string &InRepoRoot);
 int RunLaneCompleteCommand(const std::vector<std::string> &InArgs,
                            const std::string &InRepoRoot);
+int RunPhaseSyncExecutionCommand(const std::vector<std::string> &InArgs,
+                                 const std::string &InRepoRoot);
 int RunTestingAddCommand(const std::vector<std::string> &InArgs,
                          const std::string &InRepoRoot);
 int RunManifestAddCommand(const std::vector<std::string> &InArgs,

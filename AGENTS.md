@@ -377,6 +377,23 @@ kCliVersion bump: 0.99.1 → 0.100.0. Note: pre-1.0 discipline — we go 0.99.x 
 - New validator `completed_jobs_have_completed_tasks` (ErrorMinor) — fires when `job.status=completed` but any task is not terminal. Closes the jobs→tasks gap parallel to the existing phases→lanes `phase_status_lane_alignment`.
 - kCliVersion bump: 0.100.0 → 0.101.0.
 
+### v0.102.0 behavior note — `phase sync-execution` reconciliation command
+
+New subcommand `uni-plan phase sync-execution --topic <T> --phase <N> [--dry-run]` rolls up terminal status from tasks → jobs → lanes in one shot. Output schema `uni-plan-sync-execution-v1`.
+
+Strict child → parent only. Never flips a child, never downgrades a terminal parent, never touches phase status. Symmetric rollup rules for jobs ← tasks and lanes ← jobs:
+
+- Zero children or parent already terminal → skip
+- All children terminal AND ≥1 Completed → parent → Completed
+- All children terminal AND every child Canceled → parent → Canceled
+- Any child not terminal → skip
+
+Two-pass order (jobs first, then lanes off updated job state) so an entire phase's descendants propagate in one call. `--dry-run` previews without writing. Idempotent. Routes through GuardedWriteBundle so v0.99.x lock + atomic-rename + stale-check guarantees apply.
+
+Intended usage: after a batch of `task set --status completed` / `task set --status canceled`, run this to propagate up before the final `phase complete`. NOT a data-repair command — does not downgrade parents when children are inconsistent; the `completed_jobs_have_completed_tasks` validator surfaces that separately.
+
+kCliVersion bump: 0.101.0 → 0.102.0.
+
 ## documentation_rules
 
 ### V4 bundle model
