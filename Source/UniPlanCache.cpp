@@ -1,4 +1,5 @@
 #include "UniPlanTypes.h"
+#include "UniPlanHashHelpers.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanForwardDecls.h"
 
@@ -207,39 +208,8 @@ DocConfig LoadConfig(const fs::path &InExeDir)
     return Config;
 }
 
-void Fnv1aUpdateByte(uint64_t &InOutState, const uint8_t InValue)
-{
-    InOutState ^= static_cast<uint64_t>(InValue);
-    InOutState *= 1099511628211ull;
-}
-
-void Fnv1aUpdateString(uint64_t &InOutState, const std::string &InValue)
-{
-    for (const char Character : InValue)
-    {
-        Fnv1aUpdateByte(InOutState, static_cast<uint8_t>(Character));
-    }
-}
-
-void Fnv1aUpdateUint64(uint64_t &InOutState, uint64_t InValue)
-{
-    for (int ByteIndex = 0; ByteIndex < 8; ++ByteIndex)
-    {
-        Fnv1aUpdateByte(InOutState, static_cast<uint8_t>(InValue & 0xFFull));
-        InValue >>= 8;
-    }
-}
-
-std::string ToHexString(const uint64_t InValue)
-{
-    std::ostringstream Stream;
-    Stream << std::hex << std::nouppercase << std::setw(16) << std::setfill('0')
-           << InValue;
-    return Stream.str();
-}
-
-
-
+// FNV-1a helpers and ToHexString moved to UniPlanHashHelpers.h (inline).
+// Kept here as a pointer for greppers who land on the old locations.
 
 fs::path ResolveCacheRoot(const std::string &InConfigCacheDir = "")
 {
@@ -421,8 +391,6 @@ bool TryComputeMarkdownCorpusSignature(const fs::path &InRepoRoot,
     OutSignature = HashState;
     return true;
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Cache utility helpers

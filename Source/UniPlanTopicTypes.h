@@ -2,6 +2,7 @@
 
 #include "UniPlanTaxonomyTypes.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -153,6 +154,28 @@ struct FPlanMetadata
 };
 
 // ---------------------------------------------------------------------------
+// FBundleReadSession — file-identity snapshot captured at bundle-read time.
+// Used by the guarded-write flow (UniPlanBundleWriteGuard) to detect that
+// another uni-plan instance mutated the same bundle between our read and
+// our write. When mbValid=true, GuardedWriteBundle re-stats and re-hashes
+// the on-disk file under its exclusive lock and refuses the write if any
+// field disagrees — the caller must re-read and retry.
+//
+// mbValid=false is the skip-stale-check path: bundles built in memory
+// (topic add, migration rewriters, test fixtures that never touched disk)
+// correctly have no prior read-session to verify against, so the guard
+// falls through to lock + atomic-rename only.
+// ---------------------------------------------------------------------------
+
+struct FBundleReadSession
+{
+    std::uint64_t mFileSize = 0;
+    std::int64_t mMTimeNanos = 0;   // file_time_type::time_since_epoch() in ns
+    std::uint64_t mContentHash = 0; // FNV-1a-64 over the full file bytes
+    bool mbValid = false;
+};
+
+// ---------------------------------------------------------------------------
 // FTopicBundle — complete governance bundle for one topic.
 // Stored as a single <TopicKey>.Plan.json file.
 // ---------------------------------------------------------------------------
@@ -174,6 +197,13 @@ struct FTopicBundle
     // LoadAllBundles. Used by WriteBundleBack to write back
     // to the same location.
     std::string mBundlePath;
+
+    // Runtime-only: captured at read time by CaptureReadSession in
+    // UniPlanBundleWriteGuard. Consumed by GuardedWriteBundle to gate
+    // writes against concurrent out-of-band mutation. Not serialized.
+    // Default (mbValid=false) means "no prior read", so the guard skips
+    // the stale-check and relies on the exclusive lock + atomic-rename.
+    FBundleReadSession mReadSession;
 };
 
 // ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 | Language | C++17 |
 | Build | CMake + Ninja |
 | Namespace | `UniPlan` |
-| Version source | `Source/UniPlanTypes.h` → `kCliVersion` |
+| Version source | `Source/UniPlanCliConstants.h` → `kCliVersion` |
 | Binary | `~/bin/uni-plan` |
 | Watch mode | FTXUI (optional, `UPLAN_WATCH=1`) |
 
@@ -184,7 +184,7 @@ While in the 0.x range:
 **MAJOR will be reserved for v1.0 and later** once the CLI surface is
 locked. Do not bump MAJOR while in the 0.x range.
 
-**Version source**: `Source/UniPlanTypes.h` → `kCliVersion`
+**Version source**: `Source/UniPlanCliConstants.h` → `kCliVersion`
 **Trigger files**: All files in `Source/`
 
 Before committing any `Source/` changes, verify `kCliVersion` was bumped
@@ -337,6 +337,23 @@ Every query surface — JSON and `--human` — now emits byte-identical stored p
 - **Guard tests** (Test/UniPlanTestQuery.cpp) seed scope / done / change / detail with a 2000-byte payload + unique sentinel, then assert byte-identical survival through: `topic get` JSON phase_summary, `phase get --phases` batch JSON, `phase get --brief` JSON done, changelog JSON change + phase_label, verification JSON check + detail, validate JSON no_duplicate_changelog issue detail, `topic get --human`, `changelog --human`. Suite 373 → 381 passing (+8 guards).
 
 Historical note: reported as "many get commands return trimmed string (with ...), so the content is lost and human and AI Agents can't get real content". The report was correct. Pre-v0.97.0 the CLI silently broke the `hard_rule_cli_only` contract at the top of this file — agents asking for `.Plan.json` content through the CLI couldn't recover what they asked for past the per-command truncation threshold.
+
+### v0.99.0 behavior note — guarded bundle write flow (concurrent-mutation race fix)
+
+Every mutation write now routes through `GuardedWriteBundle` (new [Source/UniPlanBundleWriteGuard.h](Source/UniPlanBundleWriteGuard.h)), which: acquires an exclusive advisory lock on the target bundle, verifies the file has not changed since this process read it, serializes to a sibling `<bundle>.tmp.<pid>.<tid>`, fsyncs + closes + `std::filesystem::rename(tmp, final)`. Closes a concurrent-mutation race where two `uni-plan` instances operating on the same bundle could clobber each other's changes between read and write (the previous code did a direct truncate-write with no lock, no stale-check, no atomic rename).
+
+- **Lock primitive**: `flock(LOCK_EX)` on POSIX, `LockFileEx(LOCKFILE_EXCLUSIVE_LOCK)` on Windows. Kernel-owned advisory locks — release automatically on process death, no stale-lock sidecar/cleanup dance. 5 s acquisition timeout as defense-in-depth.
+- **Stale-check**: every `TryLoadBundleByTopic` and `LoadAllBundles` now stamps `OutBundle.mReadSession` with `(file_size, mtime_nanos, FNV-1a-64 of file bytes)`. On write-back, the guard re-stats and re-hashes under the lock; any mismatch fails exit 1 with `"bundle changed during mutation; re-read and retry"`. The `(size, mtime)` tuple is the fast path; the FNV-1a-64 hash closes HFS+'s 1-second mtime ambiguity window.
+- **Atomic rename**: write to sibling tmp in the same directory, `fsync` (or `FlushFileBuffers` on Windows), release lock handle, then `fs::rename` into place. POSIX rename is atomic same-filesystem; Windows `MOVEFILE_REPLACE_EXISTING` semantics via `fs::rename`. Cross-filesystem rename (EXDEV) surfaces as an error directing operators not to symlink `Docs/Plans` across filesystems — no non-atomic copy-fallback.
+- **No bypass flag**: conflict is hard-stop exit 1. There is no `--force`. The callers' recovery protocol is re-read and retry.
+- **Raw `TryWriteTopicBundle` is unchanged** — it remains the serialize-and-write primitive used by test fixtures and by the fresh-in-memory path inside the guard. The guard wraps it.
+- **`FTopicBundle.mReadSession`**: new runtime-only field alongside `mBundlePath`, not serialized. `mbValid=false` for bundles built in memory (topic add, tests, migration rewrite that already holds the only reader of record) — those skip the stale-check and rely on lock-only protection. All 40+ test call sites using `TryWriteTopicBundle` or building bundles in memory continue to work unchanged.
+- **FNV-1a helpers promoted** to new [Source/UniPlanHashHelpers.h](Source/UniPlanHashHelpers.h) as inline functions, so `UniPlanCache.cpp` and `UniPlanBundleWriteGuard.cpp` share one implementation (no algorithm duplication). The historic UniPlanCache seed value (`1469598103934665603ull`, two digits shorter than the canonical offset basis) is preserved as-is — changing it would invalidate in-flight cache entries; any correction must update both consumers together.
+- **Fault injection**: setting the `UPLAN_FAULT_PRE_RENAME` environment variable causes the guard to abort after writing the tmp file but before renaming, returning the same exit 1 error contract. Test-only; zero-cost one `getenv` call on the normal path. No `#ifdef` scaffolding in the production binary.
+- **kCliVersion bump**: 0.98.0 → 0.99.0. MINOR per SemVer discipline — the new conflict exit path is an observable behavior change for callers that previously assumed the last write always wins.
+- **Tests**: new [Test/UniPlanTestBundleWriteGuard.cpp](Test/UniPlanTestBundleWriteGuard.cpp) covers seven invariants — rename atomicity (no tmp detritus), stale-check conflict detection on out-of-band peer write, concurrent `std::thread` racers (one winner one loser), concurrent `fork()`-ed processes (POSIX only), pre-rename fault leaves original bit-identical, external `FBundleFileLock` holder blocks a peer until released, raw-primitive / `mbValid=false` skip path for fresh-in-memory bundles.
+
+Historical context: reported as an open program of work on bundle concurrency safety. Prior to 0.99.0 there was no mention of locks / races / atomic writes anywhere in the codebase — `TryWriteTopicBundle` did `ios::out | ios::trunc`, and `WriteBundleBack` called it directly. Two parallel `uni-plan phase set` invocations on the same topic could silently lose one side's mutation.
 
 ## documentation_rules
 

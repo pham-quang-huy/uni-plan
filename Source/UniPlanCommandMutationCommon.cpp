@@ -1,5 +1,6 @@
 #include "UniPlanCommandMutationCommon.h"
 
+#include "UniPlanBundleWriteGuard.h"
 #include "UniPlanEnums.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanJSONIO.h"
@@ -73,8 +74,7 @@ int WriteBundleBack(const FTopicBundle &InBundle,
                    "TryLoadBundleByTopic?)";
         return 1;
     }
-    return TryWriteTopicBundle(InBundle, InBundle.mBundlePath, OutError) ? 0
-                                                                         : 1;
+    return GuardedWriteBundle(InBundle, OutError);
 }
 
 } // namespace UniPlan

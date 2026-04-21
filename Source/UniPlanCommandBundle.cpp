@@ -1,3 +1,4 @@
+#include "UniPlanBundleWriteGuard.h"
 #include "UniPlanCommandMutationCommon.h"
 #include "UniPlanEnums.h"
 #include "UniPlanFileHelpers.h"
@@ -22,7 +23,6 @@ namespace fs = std::filesystem;
 
 namespace UniPlan
 {
-
 
 // ---------------------------------------------------------------------------
 // TryLoadBundleByTopic — recursive search for <TopicKey>.Plan.json
@@ -52,6 +52,13 @@ bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
         if (!TryReadTopicBundle(Iterator->path(), OutBundle, OutError))
             return false;
         OutBundle.mBundlePath = Iterator->path().string();
+        std::string SessionError;
+        if (!CaptureReadSession(Iterator->path(), OutBundle.mReadSession,
+                                SessionError))
+        {
+            OutError = "Bundle read-session capture failed: " + SessionError;
+            return false;
+        }
         return true;
     }
     OutError = "Bundle not found: " + TargetName +
@@ -102,9 +109,8 @@ std::vector<BlockerItem> CollectBundleBlockers(const FTopicBundle &InBundle)
         Item.mSourcePath = InBundle.mBundlePath;
         Item.mPhaseIndex = static_cast<int>(I);
         Item.mStatus = ToString(Phase.mLifecycle.mStatus);
-        Item.mKind = bStatusBlocked
-                         ? (bHasText ? "status+text" : "status")
-                         : "text";
+        Item.mKind =
+            bStatusBlocked ? (bHasText ? "status+text" : "status") : "text";
         Item.mAction = Phase.mLifecycle.mBlockers;
         Item.mNotes = Phase.mScope;
         Blockers.push_back(std::move(Item));
@@ -145,6 +151,11 @@ std::vector<FTopicBundle> LoadAllBundles(const fs::path &InRepoRoot,
         if (TryReadTopicBundle(Iterator->path(), Bundle, Error))
         {
             Bundle.mBundlePath = Iterator->path().string();
+            // Advisory: capture failure leaves mReadSession.mbValid=false,
+            // which falls back to lock-only protection in GuardedWriteBundle.
+            std::string IgnoredSessionErr;
+            CaptureReadSession(Iterator->path(), Bundle.mReadSession,
+                               IgnoredSessionErr);
             Bundles.push_back(std::move(Bundle));
         }
         else
@@ -159,8 +170,5 @@ std::vector<FTopicBundle> LoadAllBundles(const fs::path &InRepoRoot,
               { return A.mTopicKey < B.mTopicKey; });
     return Bundles;
 }
-
-
-
 
 } // namespace UniPlan

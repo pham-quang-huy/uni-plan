@@ -21,7 +21,7 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 | Language | C++17 |
 | Build | CMake + Ninja |
 | Namespace | `UniPlan` |
-| Version source | `Source/UniPlanTypes.h` → `kCliVersion` |
+| Version source | `Source/UniPlanCliConstants.h` → `kCliVersion` |
 | Binary | `~/bin/uni-plan` |
 | Watch mode | FTXUI (optional, `UPLAN_WATCH=1`) |
 
@@ -184,7 +184,7 @@ While in the 0.x range:
 **MAJOR will be reserved for v1.0 and later** once the CLI surface is
 locked. Do not bump MAJOR while in the 0.x range.
 
-**Version source**: `Source/UniPlanTypes.h` → `kCliVersion`
+**Version source**: `Source/UniPlanCliConstants.h` → `kCliVersion`
 **Trigger files**: All files in `Source/`
 
 Before committing any `Source/` changes, verify `kCliVersion` was bumped
@@ -337,6 +337,21 @@ Every query surface — JSON and `--human` — now emits byte-identical stored p
 - **Guard tests** (Test/UniPlanTestQuery.cpp) seed scope / done / change / detail with a 2000-byte payload + unique sentinel, then assert byte-identical survival through: `topic get` JSON phase_summary, `phase get --phases` batch JSON, `phase get --brief` JSON done, changelog JSON change + phase_label, verification JSON check + detail, validate JSON no_duplicate_changelog issue detail, `topic get --human`, `changelog --human`. Suite 373 → 381 passing (+8 guards).
 
 Historical note: reported as "many get commands return trimmed string (with ...), so the content is lost and human and AI Agents can't get real content". The report was correct. Pre-v0.97.0 the CLI silently broke the `hard_rule_cli_only` contract at the top of this file — agents asking for `.Plan.json` content through the CLI couldn't recover what they asked for past the per-command truncation threshold.
+
+### v0.99.0 behavior note — guarded bundle write flow (concurrent-mutation race fix)
+
+Every mutation write now routes through `GuardedWriteBundle` (new `Source/UniPlanBundleWriteGuard.h`), which: acquires an exclusive advisory lock on the target bundle, verifies the file has not changed since this process read it, serializes to a sibling `<bundle>.tmp.<pid>.<tid>`, fsyncs + closes + `std::filesystem::rename(tmp, final)`. Closes a concurrent-mutation race where two `uni-plan` instances operating on the same bundle could clobber each other's changes between read and write.
+
+- **Lock primitive**: `flock(LOCK_EX)` on POSIX, `LockFileEx(LOCKFILE_EXCLUSIVE_LOCK)` on Windows. Kernel-owned advisory locks release on process death. 5 s acquisition timeout as defense-in-depth.
+- **Stale-check**: `TryLoadBundleByTopic` / `LoadAllBundles` stamp `OutBundle.mReadSession` with `(file_size, mtime_nanos, FNV-1a-64 of file bytes)`. On write-back, the guard re-stats and re-hashes under the lock; any mismatch fails exit 1 with `"bundle changed during mutation; re-read and retry"`.
+- **Atomic rename**: write to sibling tmp, `fsync`, release lock handle, `fs::rename`. Cross-filesystem rename (EXDEV) fails actionably — no non-atomic copy-fallback.
+- **No bypass flag**: conflict is hard-stop exit 1. The caller's recovery protocol is re-read and retry.
+- **Raw `TryWriteTopicBundle` is unchanged** — retained as the serialize-and-write primitive for test fixtures and for the fresh-in-memory path inside the guard.
+- **`FTopicBundle.mReadSession`**: new runtime-only field, not serialized. `mbValid=false` for bundles built in memory (topic add, tests) — those skip the stale-check and rely on lock-only protection.
+- **FNV-1a helpers** promoted to `Source/UniPlanHashHelpers.h` as inline functions, shared between `UniPlanCache.cpp` and `UniPlanBundleWriteGuard.cpp`.
+- **Fault injection**: `UPLAN_FAULT_PRE_RENAME` env var triggers an abort between tmp-write and rename. Test-only; zero-cost `getenv` call on the normal path.
+- **kCliVersion bump**: 0.98.0 → 0.99.0. MINOR per SemVer discipline.
+- **Tests**: new `Test/UniPlanTestBundleWriteGuard.cpp` — rename atomicity, stale-check conflict, concurrent `std::thread` race, concurrent `fork()` race (POSIX only), pre-rename fault, external lock holder blocks peer, raw-primitive skip path.
 
 ## documentation_rules
 

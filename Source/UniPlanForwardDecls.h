@@ -41,8 +41,7 @@ void EmitAcceptanceCriteriaJson(
 // `index` field per entry so `<group> set --index <N>` targets the
 // stable storage position even after filtering.
 void EmitPriorityGroupingsJson(
-    const char *InName,
-    const std::vector<FPriorityGrouping> &InGroupings,
+    const char *InName, const std::vector<FPriorityGrouping> &InGroupings,
     bool InTrailingComma = true,
     const std::vector<size_t> *InOriginalIndices = nullptr);
 void EmitRunbooksJson(const char *InName,
@@ -50,8 +49,7 @@ void EmitRunbooksJson(const char *InName,
                       bool InTrailingComma = true,
                       const std::vector<size_t> *InOriginalIndices = nullptr);
 void EmitResidualRisksJson(
-    const char *InName,
-    const std::vector<FResidualRiskEntry> &InRisks,
+    const char *InName, const std::vector<FResidualRiskEntry> &InRisks,
     bool InTrailingComma = true,
     const std::vector<size_t> *InOriginalIndices = nullptr);
 
@@ -60,10 +58,8 @@ fs::path ResolveExecutableDirectory();
 std::string ExpandEnvVars(const std::string &InValue);
 IniData ParseIniFile(const fs::path &InPath);
 DocConfig LoadConfig(const fs::path &InExeDir);
-void Fnv1aUpdateByte(uint64_t &InOutState, const uint8_t InValue);
-void Fnv1aUpdateString(uint64_t &InOutState, const std::string &InValue);
-void Fnv1aUpdateUint64(uint64_t &InOutState, uint64_t InValue);
-std::string ToHexString(const uint64_t InValue);
+// Fnv1aUpdateByte/String/Uint64 and ToHexString are now inline in
+// UniPlanHashHelpers.h. Include that header directly where needed.
 fs::path ResolveCacheRoot(const std::string &InConfigCacheDir);
 fs::path BuildInventoryCachePath(const fs::path &InRepoRoot,
                                  const std::string &InConfigCacheDir);

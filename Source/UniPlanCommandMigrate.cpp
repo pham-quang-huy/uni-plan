@@ -1,3 +1,4 @@
+#include "UniPlanBundleWriteGuard.h"
 #include "UniPlanCliConstants.h"
 #include "UniPlanCommandMutationCommon.h"
 #include "UniPlanForwardDecls.h"
@@ -57,8 +58,8 @@ bool FieldIsLegacyStringOnDisk(const std::string &InRaw,
         return false;
     ++Pos;
     // Skip whitespace after the colon.
-    while (Pos < InRaw.size() && std::isspace(static_cast<unsigned char>(
-                                                  InRaw[Pos])))
+    while (Pos < InRaw.size() &&
+           std::isspace(static_cast<unsigned char>(InRaw[Pos])))
         ++Pos;
     if (Pos >= InRaw.size())
         return false;
@@ -86,8 +87,8 @@ struct FMigrateFinding
 
     bool NeedsRewrite() const
     {
-        return mbRisksLegacy || mbNextActionsLegacy
-               || mbAcceptanceCriteriaLegacy;
+        return mbRisksLegacy || mbNextActionsLegacy ||
+               mbAcceptanceCriteriaLegacy;
     }
 };
 
@@ -192,18 +193,19 @@ int RunMigrateCommand(const std::vector<std::string> &InArgs,
         if (!TryReadFileRaw(B.mBundlePath, Raw))
             continue;
         F.mbRisksLegacy = FieldIsLegacyStringOnDisk(Raw, "risks");
-        F.mbNextActionsLegacy =
-            FieldIsLegacyStringOnDisk(Raw, "next_actions");
+        F.mbNextActionsLegacy = FieldIsLegacyStringOnDisk(Raw, "next_actions");
         F.mbAcceptanceCriteriaLegacy =
             FieldIsLegacyStringOnDisk(Raw, "acceptance_criteria");
         Findings.push_back(F);
         if (!bApply || !F.NeedsRewrite())
             continue;
         // Rewrite: the in-memory bundle is already in array form (dual-
-        // read promoted it on load). Write it back and the serializer
-        // emits canonical array JSON.
+        // read promoted it on load). Route through GuardedWriteBundle so
+        // the rewrite gets lock + atomic-rename parity with every other
+        // mutation path; LoadAllBundles stamped mReadSession so this also
+        // picks up stale-check protection against a concurrent peer.
         std::string WriteError;
-        if (!TryWriteTopicBundle(B, B.mBundlePath, WriteError))
+        if (GuardedWriteBundle(B, WriteError) != 0)
         {
             std::cerr << "migrate: " << B.mTopicKey << ": " << WriteError
                       << "\n";
