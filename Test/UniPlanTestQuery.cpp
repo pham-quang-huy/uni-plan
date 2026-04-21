@@ -544,8 +544,7 @@ TEST_F(FBundleTestFixture, PhaseDriftDetectsStatusLagLane)
     L.mStatus = UniPlan::EExecutionStatus::Completed;
     L.mScope = "Implemented sub-task A";
     Bundle.mPhases[0].mLanes.push_back(L);
-    const fs::path Path =
-        mRepoRoot / "Docs" / "Plans" / "DriftLane.Plan.json";
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "DriftLane.Plan.json";
     std::string Error;
     ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
 
@@ -577,8 +576,7 @@ TEST_F(FBundleTestFixture, PhaseDriftDetectsStatusLagDone)
     Bundle.mPhases[0].mLifecycle.mDone =
         "Implemented subcommand dispatcher in Main.cpp and verified on both "
         "platforms; 224/224 tests pass.";
-    const fs::path Path =
-        mRepoRoot / "Docs" / "Plans" / "DriftDone.Plan.json";
+    const fs::path Path = mRepoRoot / "Docs" / "Plans" / "DriftDone.Plan.json";
     std::string Error;
     ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
 
@@ -604,9 +602,8 @@ TEST_F(FBundleTestFixture, PhaseDriftDetectsStatusLagDone)
 
 TEST_F(FBundleTestFixture, PhaseDriftIgnoresPlaceholderDone)
 {
-    CreateMinimalFixture("DriftPlaceholder",
-                         UniPlan::ETopicStatus::InProgress, 1,
-                         UniPlan::EExecutionStatus::NotStarted, false);
+    CreateMinimalFixture("DriftPlaceholder", UniPlan::ETopicStatus::InProgress,
+                         1, UniPlan::EExecutionStatus::NotStarted, false);
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("DriftPlaceholder", Bundle));
     // "Not started" is a status-word placeholder — should not drift.
@@ -617,10 +614,10 @@ TEST_F(FBundleTestFixture, PhaseDriftIgnoresPlaceholderDone)
     ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
 
     StartCapture();
-    const int Code = UniPlan::RunBundlePhaseCommand(
-        {"drift", "--topic", "DriftPlaceholder", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
+    const int Code =
+        UniPlan::RunBundlePhaseCommand({"drift", "--topic", "DriftPlaceholder",
+                                        "--repo-root", mRepoRoot.string()},
+                                       mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
@@ -651,10 +648,10 @@ TEST_F(FBundleTestFixture, PhaseDriftDetectsCompletionLagLane)
     ASSERT_TRUE(UniPlan::TryWriteTopicBundle(Bundle, Path, Error)) << Error;
 
     StartCapture();
-    const int Code = UniPlan::RunBundlePhaseCommand(
-        {"drift", "--topic", "DriftCompletion", "--repo-root",
-         mRepoRoot.string()},
-        mRepoRoot.string());
+    const int Code =
+        UniPlan::RunBundlePhaseCommand({"drift", "--topic", "DriftCompletion",
+                                        "--repo-root", mRepoRoot.string()},
+                                       mRepoRoot.string());
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
@@ -1159,11 +1156,10 @@ TEST_F(FBundleTestFixture, ChangelogQueryEmitsStableIndexAcrossSort)
     // query claimed.
     CopyFixture("SampleTopic");
     StartCapture();
-    ASSERT_EQ(
-        UniPlan::RunBundleChangelogCommand(
-            {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
-            mRepoRoot.string()),
-        0);
+    ASSERT_EQ(UniPlan::RunBundleChangelogCommand(
+                  {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
     StopCapture();
     const auto Json = ParseCapturedJSON();
     ASSERT_TRUE(Json.contains("entries"));
@@ -1214,12 +1210,11 @@ TEST_F(FBundleTestFixture, ChangelogQueryEmitsStableIndexUnderPhaseFilter)
     // the wrong row.
     CopyFixture("SampleTopic");
     StartCapture();
-    ASSERT_EQ(
-        UniPlan::RunBundleChangelogCommand(
-            {"--topic", "SampleTopic", "--phase", "1", "--repo-root",
-             mRepoRoot.string()},
-            mRepoRoot.string()),
-        0);
+    ASSERT_EQ(UniPlan::RunBundleChangelogCommand({"--topic", "SampleTopic",
+                                                  "--phase", "1", "--repo-root",
+                                                  mRepoRoot.string()},
+                                                 mRepoRoot.string()),
+              0);
     StopCapture();
     const auto Json = ParseCapturedJSON();
     ASSERT_TRUE(Json.contains("entries"));
@@ -1241,11 +1236,10 @@ TEST_F(FBundleTestFixture, VerificationQueryEmitsStableIndex)
 {
     CopyFixture("SampleTopic");
     StartCapture();
-    ASSERT_EQ(
-        UniPlan::RunBundleVerificationCommand(
-            {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
-            mRepoRoot.string()),
-        0);
+    ASSERT_EQ(UniPlan::RunBundleVerificationCommand(
+                  {"--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
     StopCapture();
     const auto Json = ParseCapturedJSON();
     ASSERT_TRUE(Json.contains("entries"));
@@ -1269,17 +1263,16 @@ TEST_F(FBundleTestFixture, RiskListEmitsStableIndexAcrossFilter)
     // `high` and verify the surviving row carries its original
     // storage index (not the filtered 0-position).
     CopyFixture("SampleTopic");
+    ASSERT_EQ(UniPlan::RunRiskAddCommand(
+                  {"--topic", "SampleTopic", "--statement", "Low-severity risk",
+                   "--severity", "low", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
     ASSERT_EQ(
-        UniPlan::RunRiskAddCommand(
-            {"--topic", "SampleTopic", "--statement", "Low-severity risk",
-             "--severity", "low", "--repo-root", mRepoRoot.string()},
-            mRepoRoot.string()),
-        0);
-    ASSERT_EQ(
-        UniPlan::RunRiskAddCommand(
-            {"--topic", "SampleTopic", "--statement", "High-severity risk",
-             "--severity", "high", "--repo-root", mRepoRoot.string()},
-            mRepoRoot.string()),
+        UniPlan::RunRiskAddCommand({"--topic", "SampleTopic", "--statement",
+                                    "High-severity risk", "--severity", "high",
+                                    "--repo-root", mRepoRoot.string()},
+                                   mRepoRoot.string()),
         0);
 
     UniPlan::FTopicBundle Bundle;
@@ -1294,11 +1287,11 @@ TEST_F(FBundleTestFixture, RiskListEmitsStableIndexAcrossFilter)
     ASSERT_LT(HighSeverityIdx, Bundle.mMetadata.mRisks.size());
 
     StartCapture();
-    ASSERT_EQ(UniPlan::RunRiskListCommand(
-                  {"--topic", "SampleTopic", "--severity", "high",
-                   "--repo-root", mRepoRoot.string()},
-                  mRepoRoot.string()),
-              0);
+    ASSERT_EQ(
+        UniPlan::RunRiskListCommand({"--topic", "SampleTopic", "--severity",
+                                     "high", "--repo-root", mRepoRoot.string()},
+                                    mRepoRoot.string()),
+        0);
     StopCapture();
     const auto Json = ParseCapturedJSON();
     ASSERT_TRUE(Json.contains("risks"));
@@ -1327,8 +1320,7 @@ TEST_F(FBundleTestFixture, NextActionListEmitsStableIndexAcrossFilter)
               0);
     ASSERT_EQ(UniPlan::RunNextActionAddCommand(
                   {"--topic", "SampleTopic", "--statement", "Completed action",
-                   "--status", "completed", "--repo-root",
-                   mRepoRoot.string()},
+                   "--status", "completed", "--repo-root", mRepoRoot.string()},
                   mRepoRoot.string()),
               0);
 
@@ -1367,12 +1359,11 @@ TEST_F(FBundleTestFixture, NextActionListEmitsStableIndexAcrossFilter)
 TEST_F(FBundleTestFixture, AcceptanceCriterionListEmitsStableIndexAcrossFilter)
 {
     CopyFixture("SampleTopic");
-    ASSERT_EQ(
-        UniPlan::RunAcceptanceCriterionAddCommand(
-            {"--topic", "SampleTopic", "--statement", "Unmet criterion",
-             "--status", "not_met", "--repo-root", mRepoRoot.string()},
-            mRepoRoot.string()),
-        0);
+    ASSERT_EQ(UniPlan::RunAcceptanceCriterionAddCommand(
+                  {"--topic", "SampleTopic", "--statement", "Unmet criterion",
+                   "--status", "not_met", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
     ASSERT_EQ(UniPlan::RunAcceptanceCriterionAddCommand(
                   {"--topic", "SampleTopic", "--statement", "Met criterion",
                    "--status", "met", "--repo-root", mRepoRoot.string()},
@@ -1384,8 +1375,8 @@ TEST_F(FBundleTestFixture, AcceptanceCriterionListEmitsStableIndexAcrossFilter)
     size_t MetIdx = Bundle.mMetadata.mAcceptanceCriteria.size();
     for (size_t I = 0; I < Bundle.mMetadata.mAcceptanceCriteria.size(); ++I)
     {
-        if (Bundle.mMetadata.mAcceptanceCriteria[I].mStatement
-            == "Met criterion")
+        if (Bundle.mMetadata.mAcceptanceCriteria[I].mStatement ==
+            "Met criterion")
             MetIdx = I;
     }
     ASSERT_LT(MetIdx, Bundle.mMetadata.mAcceptanceCriteria.size());
@@ -1410,4 +1401,255 @@ TEST_F(FBundleTestFixture, AcceptanceCriterionListEmitsStableIndexAcrossFilter)
         }
     }
     EXPECT_TRUE(bFound);
+}
+
+// ===================================================================
+// No-truncation contract (v0.97.0+)
+//
+// Every query surface — JSON and --human — emits byte-identical stored
+// content. No string is clipped, no `...` ellipsis is appended by the
+// renderer. Guards seed content 2000+ bytes long with a unique
+// sentinel at the end; any upstream clip loses the sentinel from
+// output. Covers every prior truncation threshold
+// (200, 120, 80, 77, 60, 50, 40, 35).
+// ===================================================================
+
+static std::string MakeLongSeed(const std::string &InPrefix)
+{
+    return InPrefix + std::string(2000, 'A') + "_SENTINEL_UNIQUE_TAIL_0x97";
+}
+
+TEST_F(FBundleTestFixture, TopicGetJsonEmitsFullPhaseScope)
+{
+    CreateMinimalFixture("LongTopic", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    const std::string LongScope = MakeLongSeed("Long scope prefix. ");
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand({"--topic", "LongTopic", "--phase",
+                                           "0", "--scope", LongScope,
+                                           "--repo-root", mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTopicCommand({"get", "--topic", "LongTopic",
+                                        "--repo-root", mRepoRoot.string()},
+                                       mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("phase_summary"));
+    ASSERT_GT(Json["phase_summary"].size(), 0u);
+    EXPECT_EQ(Json["phase_summary"][0]["scope"].get<std::string>(), LongScope)
+        << "topic get must emit the phase scope byte-identical to storage";
+}
+
+TEST_F(FBundleTestFixture, PhaseGetBatchJsonEmitsFullScope)
+{
+    CreateMinimalFixture("PGBatch", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    const std::string LongScope = MakeLongSeed("Batch seed. ");
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand({"--topic", "PGBatch", "--phase", "1",
+                                           "--scope", LongScope, "--repo-root",
+                                           mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunBundlePhaseCommand({"get", "--topic", "PGBatch",
+                                              "--phases", "0,1", "--repo-root",
+                                              mRepoRoot.string()},
+                                             mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("phases"));
+    ASSERT_EQ(Json["phases"].size(), 2u);
+    EXPECT_EQ(Json["phases"][1]["scope"].get<std::string>(), LongScope)
+        << "phase get --phases <csv> batch path must emit full scope";
+}
+
+TEST_F(FBundleTestFixture, PhaseGetBriefJsonEmitsFullDone)
+{
+    CreateMinimalFixture("BriefSeed", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    const std::string LongDone = MakeLongSeed("Done prefix. ");
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand({"--topic", "BriefSeed", "--phase",
+                                           "0", "--done", LongDone,
+                                           "--repo-root", mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunBundlePhaseCommand(
+                  {"get", "--topic", "BriefSeed", "--phase", "0", "--brief",
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["done"].get<std::string>(), LongDone)
+        << "phase get --brief JSON `done` must emit full content";
+}
+
+TEST_F(FBundleTestFixture, ChangelogQueryJsonEmitsFullPhaseLabelAndChange)
+{
+    CreateMinimalFixture("CLFull", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    const std::string LongScope =
+        MakeLongSeed("Changelog phase_label scope seed. ");
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand({"--topic", "CLFull", "--phase", "0",
+                                           "--scope", LongScope, "--repo-root",
+                                           mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+    const std::string LongChange = MakeLongSeed("Changelog body. ");
+    ASSERT_EQ(UniPlan::RunChangelogAddCommand(
+                  {"--topic", "CLFull", "--phase", "0", "--change", LongChange,
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunBundleChangelogCommand(
+                  {"--topic", "CLFull", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("entries"));
+    bool bSawChange = false;
+    for (const auto &Entry : Json["entries"])
+    {
+        if (Entry.contains("change") &&
+            Entry["change"].get<std::string>() == LongChange)
+        {
+            bSawChange = true;
+            EXPECT_NE(Entry["phase_label"].get<std::string>().find(
+                          "_SENTINEL_UNIQUE_TAIL_0x97"),
+                      std::string::npos)
+                << "phase_label must embed the full phase scope";
+        }
+    }
+    EXPECT_TRUE(bSawChange);
+}
+
+TEST_F(FBundleTestFixture, VerificationQueryJsonEmitsFullCheckAndDetail)
+{
+    CreateMinimalFixture("VFull", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    const std::string LongCheck = MakeLongSeed("Verification check. ");
+    const std::string LongDetail = MakeLongSeed("Verification detail. ");
+    ASSERT_EQ(UniPlan::RunVerificationAddCommand(
+                  {"--topic", "VFull", "--phase", "0", "--check", LongCheck,
+                   "--detail", LongDetail, "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunBundleVerificationCommand(
+                  {"--topic", "VFull", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("entries"));
+    bool bFound = false;
+    for (const auto &Entry : Json["entries"])
+    {
+        if (Entry.contains("check") &&
+            Entry["check"].get<std::string>() == LongCheck)
+        {
+            bFound = true;
+            EXPECT_EQ(Entry["detail"].get<std::string>(), LongDetail);
+        }
+    }
+    EXPECT_TRUE(bFound);
+}
+
+TEST_F(FBundleTestFixture, ValidateJsonEmitsFullDuplicateChangelogDetail)
+{
+    // no_duplicate_changelog previously clipped the duplicate `change`
+    // text preview at 60 chars + "..." inside issue.detail. v0.97.0
+    // removes the clip — the full duplicate change text must appear.
+    CreateMinimalFixture("DupCL", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    const std::string LongChange = MakeLongSeed("Duplicate changelog body. ");
+    ASSERT_EQ(UniPlan::RunChangelogAddCommand(
+                  {"--topic", "DupCL", "--phase", "0", "--change", LongChange,
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    ASSERT_EQ(UniPlan::RunChangelogAddCommand(
+                  {"--topic", "DupCL", "--phase", "0", "--change", LongChange,
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunBundleValidateCommand(
+                  {"--topic", "DupCL", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    ASSERT_TRUE(Json.contains("issues"));
+    bool bFoundFullDetail = false;
+    for (const auto &Issue : Json["issues"])
+    {
+        if (Issue["id"].get<std::string>() == "no_duplicate_changelog")
+        {
+            const std::string Detail = Issue["detail"].get<std::string>();
+            if (Detail.find("_SENTINEL_UNIQUE_TAIL_0x97") != std::string::npos)
+                bFoundFullDetail = true;
+        }
+    }
+    EXPECT_TRUE(bFoundFullDetail)
+        << "validate issue detail must carry the full duplicate change "
+           "text (v0.97.0 — previously clipped at 60 chars)";
+}
+
+TEST_F(FBundleTestFixture, TopicGetHumanEmitsFullPhaseScope)
+{
+    CreateMinimalFixture("HumanLong", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    const std::string LongScope = MakeLongSeed("Human render seed. ");
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand({"--topic", "HumanLong", "--phase",
+                                           "0", "--scope", LongScope,
+                                           "--repo-root", mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(
+        UniPlan::RunTopicCommand({"get", "--topic", "HumanLong", "--human",
+                                  "--repo-root", mRepoRoot.string()},
+                                 mRepoRoot.string()),
+        0);
+    StopCapture();
+    EXPECT_NE(mCapturedStdout.find("_SENTINEL_UNIQUE_TAIL_0x97"),
+              std::string::npos)
+        << "--human must emit the full phase scope verbatim";
+}
+
+TEST_F(FBundleTestFixture, ChangelogHumanEmitsFullChange)
+{
+    CreateMinimalFixture("CLH", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::InProgress, false);
+    const std::string LongChange = MakeLongSeed("Human changelog body. ");
+    ASSERT_EQ(UniPlan::RunChangelogAddCommand(
+                  {"--topic", "CLH", "--phase", "0", "--change", LongChange,
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+
+    StartCapture();
+    ASSERT_EQ(
+        UniPlan::RunBundleChangelogCommand(
+            {"--topic", "CLH", "--human", "--repo-root", mRepoRoot.string()},
+            mRepoRoot.string()),
+        0);
+    StopCapture();
+    EXPECT_NE(mCapturedStdout.find("_SENTINEL_UNIQUE_TAIL_0x97"),
+              std::string::npos)
+        << "changelog --human must emit the full change byte-identical";
 }

@@ -110,8 +110,7 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
         }
     }
 
-    std::vector<ValidateCheck> Checks =
-        ValidateAllBundles(Bundles, InRepoRoot);
+    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // When --topic scopes the output, drop checks for other topics so
@@ -318,8 +317,7 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
         }
     }
 
-    std::vector<ValidateCheck> Checks =
-        ValidateAllBundles(Bundles, InRepoRoot);
+    std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // Filter checks to target topic when --topic scopes the output.
@@ -397,16 +395,12 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
             else
                 Sev = kColorDim + std::string("warn") + kColorReset;
 
-            std::string Detail = C.mDetail;
-            if (Detail.size() > 50)
-                Detail = Detail.substr(0, 47) + "...";
-            std::string Path = C.mPath;
-            if (Path.size() > 35)
-                Path = Path.substr(0, 32) + "...";
+            // v0.97.0 no-truncation contract: emit the full path and
+            // detail verbatim. Tables auto-size to the widest cell.
             const std::string LineCell =
                 C.mLine > 0 ? std::to_string(C.mLine) : "-";
             Table.AddRow({Sev, C.mTopic, LineCell,
-                          kColorDim + Path + kColorReset, Detail});
+                          kColorDim + C.mPath + kColorReset, C.mDetail});
         }
         Table.Print();
     }

@@ -25,7 +25,10 @@ namespace UniPlan
 // Changelog — JSON
 // ---------------------------------------------------------------------------
 
-// Resolve phase index to human-readable label
+// Resolve phase index to human-readable label. Returns full scope text
+// verbatim — v0.97.0 no-truncation contract: callers (JSON `phase_label`
+// field + human rendering) receive byte-identical prose so agents / humans
+// can reconstruct the exact bundle content from query output.
 static std::string ResolvePhaseLabel(int InPhase,
                                      const std::vector<FPhaseRecord> &InPhases)
 {
@@ -34,10 +37,8 @@ static std::string ResolvePhaseLabel(int InPhase,
     const size_t Idx = static_cast<size_t>(InPhase);
     if (Idx < InPhases.size())
     {
-        std::string Scope = InPhases[Idx].mScope;
-        if (Scope.size() > 60)
-            Scope = Scope.substr(0, 57) + "...";
-        return "phases[" + std::to_string(InPhase) + "] " + Scope;
+        return "phases[" + std::to_string(InPhase) + "] " +
+               InPhases[Idx].mScope;
     }
     return std::to_string(InPhase);
 }
@@ -191,25 +192,19 @@ static int RunBundleChangelogHuman(const fs::path &InRepoRoot,
     HumanTable Table;
     Table.mHeaders = {"Idx",   "Phase",    "Date",  "Type",
                       "Actor", "Affected", "Change"};
+    // v0.97.0 no-truncation contract: every cell carries the verbatim
+    // bundle value. Columns auto-size to widest cell; long scopes /
+    // changelog prose render full-width and wrap at the terminal.
     for (const std::pair<size_t, const FChangeLogEntry *> &Row : Filtered)
     {
         const size_t StorageIndex = Row.first;
         const FChangeLogEntry *rpEntry = Row.second;
-        std::string Change = rpEntry->mChange;
-        if (Change.size() > 80)
-            Change = Change.substr(0, 77) + "...";
-        const std::string Label =
+        const std::string PhaseDisplay =
             ResolvePhaseLabel(rpEntry->mPhase, Bundle.mPhases);
-        std::string PhaseDisplay = Label;
-        if (PhaseDisplay.size() > 40)
-            PhaseDisplay = PhaseDisplay.substr(0, 37) + "...";
-        std::string Affected = rpEntry->mAffected;
-        if (Affected.size() > 40)
-            Affected = Affected.substr(0, 37) + "...";
         Table.AddRow({std::to_string(StorageIndex), PhaseDisplay,
                       rpEntry->mDate, ToString(rpEntry->mType),
-                      ToString(rpEntry->mActor), Affected,
-                      kColorDim + Change + kColorReset});
+                      ToString(rpEntry->mActor), rpEntry->mAffected,
+                      kColorDim + rpEntry->mChange + kColorReset});
     }
     Table.Print();
     return 0;
@@ -368,21 +363,16 @@ RunBundleVerificationHuman(const fs::path &InRepoRoot,
 
     HumanTable Table;
     Table.mHeaders = {"Idx", "Phase", "Date", "Check", "Result", "Detail"};
+    // v0.97.0 no-truncation contract.
     for (const std::pair<size_t, const FVerificationEntry *> &Row : Filtered)
     {
         const size_t StorageIndex = Row.first;
         const FVerificationEntry *rpEntry = Row.second;
-        std::string Check = rpEntry->mCheck;
-        if (Check.size() > 60)
-            Check = Check.substr(0, 57) + "...";
-        std::string Detail = rpEntry->mDetail;
-        if (Detail.size() > 60)
-            Detail = Detail.substr(0, 57) + "...";
         const std::string PhaseDisplay =
             rpEntry->mPhase < 0 ? "(topic)" : std::to_string(rpEntry->mPhase);
         Table.AddRow({std::to_string(StorageIndex), PhaseDisplay,
-                      rpEntry->mDate, kColorDim + Check + kColorReset,
-                      rpEntry->mResult, Detail});
+                      rpEntry->mDate, kColorDim + rpEntry->mCheck + kColorReset,
+                      rpEntry->mResult, rpEntry->mDetail});
     }
     Table.Print();
     return 0;
@@ -568,15 +558,13 @@ static int RunBundleTimelineHuman(const fs::path &InRepoRoot,
 
     HumanTable Table;
     Table.mHeaders = {"Date", "Kind", "Phase", "Type/Result", "Text"};
+    // v0.97.0 no-truncation contract.
     for (const FTimelineEntry &E : Entries)
     {
-        std::string Text = E.mText;
-        if (Text.size() > 60)
-            Text = Text.substr(0, 57) + "...";
         const std::string PhaseDisplay =
             E.mPhase < 0 ? "(topic)" : std::to_string(E.mPhase);
         Table.AddRow({E.mDate, E.mKind, PhaseDisplay, E.mType,
-                      kColorDim + Text + kColorReset});
+                      kColorDim + E.mText + kColorReset});
     }
     Table.Print();
     return 0;
@@ -705,13 +693,11 @@ static int RunBundleBlockersHuman(const fs::path &InRepoRoot,
 
     HumanTable Table;
     Table.mHeaders = {"Topic", "Phase", "Status", "Scope", "Blockers"};
+    // v0.97.0 no-truncation contract.
     for (const BlockerItem &E : BlockerEntries)
     {
-        std::string Scope = E.mNotes;
-        if (Scope.size() > 40)
-            Scope = Scope.substr(0, 37) + "...";
         Table.AddRow({E.mTopicKey, std::to_string(E.mPhaseIndex), E.mStatus,
-                      Scope, E.mAction});
+                      E.mNotes, E.mAction});
     }
     Table.Print();
     return 0;

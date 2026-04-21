@@ -87,19 +87,11 @@ inline void PrintHumanWarnings(const std::vector<std::string> &InWarnings)
     }
 }
 
-inline std::string TruncateForDisplay(const std::string &InText,
-                                      size_t InMaxWidth)
-{
-    if (InMaxWidth == 0 || InText.size() <= InMaxWidth)
-    {
-        return InText;
-    }
-    if (InMaxWidth <= 3)
-    {
-        return InText.substr(0, InMaxWidth);
-    }
-    return InText.substr(0, InMaxWidth - 3) + "...";
-}
+// TruncateForDisplay (removed in v0.97.0) — the CLI no longer
+// truncates prose anywhere. Every query and mutation emits byte-
+// identical stored content in both JSON and --human paths. If an
+// operator or agent needs a preview they perform the trim at the
+// consumer end.
 
 struct HumanTable
 {

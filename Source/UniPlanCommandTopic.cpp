@@ -335,6 +335,9 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
     {
         // Phase summary — compact index/status/scope
         std::cout << "\"phase_summary\":[";
+        // v0.97.0 no-truncation contract: emit `scope` byte-identical
+        // with the stored `Phase.mScope`. Callers that want a truncated
+        // preview are responsible for trimming on their end.
         for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
         {
             const FPhaseRecord &Phase = Bundle.mPhases[I];
@@ -342,11 +345,7 @@ static int RunTopicGetJson(const fs::path &InRepoRoot,
             std::cout << "{";
             EmitJsonFieldSizeT("index", I);
             EmitJsonField("status", ToString(Phase.mLifecycle.mStatus));
-            // Truncate scope to 120 chars for compactness
-            std::string Scope = Phase.mScope;
-            if (Scope.size() > 120)
-                Scope = Scope.substr(0, 117) + "...";
-            EmitJsonField("scope", Scope, false);
+            EmitJsonField("scope", Phase.mScope, false);
             std::cout << "}";
         }
         std::cout << "],";
@@ -496,15 +495,13 @@ static int RunTopicGetHuman(const fs::path &InRepoRoot,
         std::cout << kColorBold << "Phases" << kColorReset << "\n";
         HumanTable Table;
         Table.mHeaders = {"Index", "Status", "Scope"};
+        // v0.97.0 no-truncation contract.
         for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
         {
             const FPhaseRecord &Phase = Bundle.mPhases[I];
-            std::string Scope = Phase.mScope;
-            if (Scope.size() > 80)
-                Scope = Scope.substr(0, 77) + "...";
             Table.AddRow({std::to_string(I),
                           ColorizeStatus(ToString(Phase.mLifecycle.mStatus)),
-                          kColorDim + Scope + kColorReset});
+                          kColorDim + Phase.mScope + kColorReset});
         }
         Table.Print();
     }

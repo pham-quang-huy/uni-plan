@@ -172,18 +172,9 @@ static Element DesignCharsBar(size_t InChars)
     return hbox(std::move(Bar));
 }
 
-static std::string Truncate(const std::string &InText, size_t InMax)
-{
-    if (InText.size() <= InMax)
-    {
-        return InText;
-    }
-    if (InMax <= 3)
-    {
-        return InText.substr(0, InMax);
-    }
-    return InText.substr(0, InMax - 2) + "..";
-}
+// Truncate helper removed in v0.97.0 — FTXUI renders panel content
+// verbatim; frame overflow is handled by the layout engine. Consumers
+// that need a preview trim on their end.
 
 // Insert separatorEmpty() between each cell in a gridbox row for consistent
 // column spacing.
@@ -603,9 +594,11 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
                             dim);
     }
 
-    const std::string Title =
-        " [P]HASE DETAIL: " + Truncate(InPlan.mTopicKey, 30) + " (" +
-        std::to_string(Count) + ") ";
+    // v0.97.0 no-truncation contract applies here too — FTXUI's frame
+    // handles overflow at the terminal boundary; the CLI layer emits
+    // the verbatim topic key.
+    const std::string Title = " [P]HASE DETAIL: " + InPlan.mTopicKey + " (" +
+                              std::to_string(Count) + ") ";
     return window(text(Title) | bold | color(Color::Cyan),
                   vbox(std::move(FinalRows))) |
            size(HEIGHT, EQUAL, 25);

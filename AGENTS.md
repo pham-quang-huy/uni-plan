@@ -324,6 +324,20 @@ Regression guards in [Test/UniPlanTestQuery.cpp](Test/UniPlanTestQuery.cpp) cove
 
 Historical note: the bug was reported by an AI agent running a repair loop that concluded it was unsafe to keep using the CLI for changelog set/remove and switched to manual bundle edits. Agent was correct; this release closes the gap so the CLI is safe again.
 
+### v0.97.0 behavior note — no-truncation contract on every query surface
+
+Every query surface — JSON and `--human` — now emits byte-identical stored prose. Nothing is clipped, no `...` ellipsis is appended by the renderer. Closes a silent content-loss bug where `topic get`, `phase get --phases`, `phase get --brief`, and every `--human` table previously ran prose through `substr(0, N) + "..."` before emitting, so agents and humans alike received a corrupted tail they had no way to reconstruct.
+
+- **20 truncation sites removed** across 6 source files. JSON paths affected (agent-visible content loss): `ResolvePhaseLabel` in changelog `phase_label`, `topic get` phase_summary scope, `phase get --phases` batch scope, `phase get --brief` done + job_summary scope, `no_duplicate_changelog` / `no_duplicate_phase_field` / `ScanContentPatterns` issue detail previews. `--human` paths affected (operator-visible content loss): changelog (Change, PhaseDisplay, Affected), verification (Check, Detail), timeline (Text), blockers (notes), topic get phases table, phase list scope, validate (Detail, Path), manifest list Description. Watch TUI panel title also emits verbatim; FTXUI's frame layout handles any terminal-width overflow.
+- **`TruncateForDisplay` helper removed** from `Source/UniPlanOutputHelpers.h`. The no-truncation contract is the default, not an opt-in.
+- **HumanTable auto-sizes columns** to the widest cell. Long prose renders full-width; terminal wrap handles overflow naturally (same as every other long-output Unix tool). If a caller needs a fixed-width preview, they trim on their end.
+- **`--brief` semantics**: "compact view" now means **fewer fields**, never **clipped fields**. Every field `--brief` emits carries its full stored content; the compactness comes from omitting design material, jobs/lanes detail, file_manifest, testing, etc. Callers concerned with token budget can combine `--brief` with explicit field filtering (or post-process themselves).
+- **Validator `issues[].detail`** now embeds the full match context. `no_duplicate_changelog`/`no_duplicate_phase_field`/`ScanContentPatterns` previously wrote `'...preview...'` capped at 60 chars; a caller reading a duplicate-detection issue couldn't recover which exact duplicate pair fired. Now the full text is there.
+- **kCliVersion bump**: 0.96.0 → 0.97.0. MINOR per SemVer discipline — the output-contract change is strictly additive (callers that previously saw a trimmed string now see the full string; the suffix `...` is no longer synthetic and any `...` present in output comes from the underlying bundle content). Consumers that were relying on the clip to limit their own output size must add their own trim.
+- **Guard tests** (Test/UniPlanTestQuery.cpp) seed scope / done / change / detail with a 2000-byte payload + unique sentinel, then assert byte-identical survival through: `topic get` JSON phase_summary, `phase get --phases` batch JSON, `phase get --brief` JSON done, changelog JSON change + phase_label, verification JSON check + detail, validate JSON no_duplicate_changelog issue detail, `topic get --human`, `changelog --human`. Suite 373 → 381 passing (+8 guards).
+
+Historical note: reported as "many get commands return trimmed string (with ...), so the content is lost and human and AI Agents can't get real content". The report was correct. Pre-v0.97.0 the CLI silently broke the `hard_rule_cli_only` contract at the top of this file — agents asking for `.Plan.json` content through the CLI couldn't recover what they asked for past the per-command truncation threshold.
+
 ## documentation_rules
 
 ### V4 bundle model

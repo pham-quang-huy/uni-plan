@@ -65,10 +65,8 @@ static int RunBundlePhaseListJson(const fs::path &InRepoRoot,
         std::cout << "{";
         EmitJsonFieldSizeT("index", I);
         EmitJsonField("status", ToString(Phase.mLifecycle.mStatus));
-        std::string Scope = Phase.mScope;
-        if (Scope.size() > 120)
-            Scope = Scope.substr(0, 117) + "...";
-        EmitJsonField("scope", Scope);
+        // v0.97.0 no-truncation contract: emit the verbatim stored scope.
+        EmitJsonField("scope", Phase.mScope);
         EmitJsonFieldSizeT("lane_count", Phase.mLanes.size());
         EmitJsonFieldSizeT("job_count", Phase.mJobs.size());
         size_t TaskCount = 0;
@@ -124,15 +122,13 @@ static int RunBundlePhaseListHuman(const fs::path &InRepoRoot,
         size_t TaskCount = 0;
         for (const FJobRecord &J : Phase.mJobs)
             TaskCount += J.mTasks.size();
-        std::string Scope = Phase.mScope;
-        if (Scope.size() > 60)
-            Scope = Scope.substr(0, 57) + "...";
         const size_t DesignChars = ComputePhaseDesignChars(Phase);
+        // v0.97.0 no-truncation contract.
         Table.AddRow({std::to_string(I), ColorizeStatus(Status),
                       std::to_string(Phase.mJobs.size()),
                       std::to_string(TaskCount),
                       ColorizeDesignChars(DesignChars),
-                      kColorDim + Scope + kColorReset});
+                      kColorDim + Phase.mScope + kColorReset});
     }
     Table.Print();
     return 0;
@@ -273,13 +269,13 @@ static void EmitPhaseGetFieldsJson(const FTopicBundle &InBundle,
                           Phase.mFileManifestSkipReason);
     EmitJsonFieldNullable("scope", Phase.mScope);
 
-    // --brief: compact view for session resume (~500 tokens)
+    // --brief: compact view for session resume. v0.97.0+ the view is
+    // "fewer fields" not "truncated fields" — every emitted field
+    // carries its byte-identical stored value; callers that want a
+    // token-budgeted preview are responsible for trimming on their end.
     if (InOptions.mbBrief)
     {
-        std::string Done = Phase.mLifecycle.mDone;
-        if (Done.size() > 200)
-            Done = Done.substr(0, 197) + "...";
-        EmitJsonFieldNullable("done", Done);
+        EmitJsonFieldNullable("done", Phase.mLifecycle.mDone);
         EmitJsonFieldNullable("remaining", Phase.mLifecycle.mRemaining);
         EmitJsonFieldNullable("blockers", Phase.mLifecycle.mBlockers);
         EmitJsonFieldNullable("agent_context", Phase.mLifecycle.mAgentContext);
@@ -292,10 +288,7 @@ static void EmitPhaseGetFieldsJson(const FTopicBundle &InBundle,
             std::cout << "{";
             EmitJsonFieldSizeT("index", I);
             EmitJsonField("status", ToString(Phase.mJobs[I].mStatus));
-            std::string Scope = Phase.mJobs[I].mScope;
-            if (Scope.size() > 80)
-                Scope = Scope.substr(0, 77) + "...";
-            EmitJsonField("scope", Scope, false);
+            EmitJsonField("scope", Phase.mJobs[I].mScope, false);
             std::cout << "}";
         }
         std::cout << "],";

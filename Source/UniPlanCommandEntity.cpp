@@ -659,9 +659,9 @@ int RunManifestRemoveCommand(const std::vector<std::string> &InArgs,
 // Classify one FFileManifestItem against disk reality. Empty string means
 // the manifest intent and on-disk reality agree. Shared between JSON and
 // human renderers so both emit the same verdict per row. Added v0.84.0.
-static std::string
-ComputeManifestStaleReason(const fs::path &InRepoRoot,
-                           const FFileManifestItem &InItem, bool &OutExists)
+static std::string ComputeManifestStaleReason(const fs::path &InRepoRoot,
+                                              const FFileManifestItem &InItem,
+                                              bool &OutExists)
 {
     OutExists = ManifestPathExists(InRepoRoot, InItem.mFilePath);
     if (InItem.mAction == EFileAction::Create && OutExists)
@@ -750,7 +750,8 @@ static int RunManifestListJson(const fs::path &InRepoRoot,
 // Human-mode renderer (v0.84.0+). Replaces the silent-fallback-to-JSON
 // behavior that `manifest list` had before — `--human` is now a real
 // ANSI-table surface. Columns: Topic, Ph, M, Action, Exists, Stale,
-// File, Description (truncated). Header line summarizes total count +
+// File, Description (full content; v0.97.0+ no-truncation contract).
+// Header line summarizes total count +
 // active filters so a human reader sees context at a glance.
 static int RunManifestListHuman(const fs::path &InRepoRoot,
                                 const FManifestListOptions &InOptions,
@@ -781,11 +782,10 @@ static int RunManifestListHuman(const fs::path &InRepoRoot,
                 const std::string ExistsCell =
                     bExists ? Colorize(kColorGreen, "yes")
                             : Colorize(kColorRed, "no");
-                Table.AddRow(
-                    {B.mTopicKey, std::to_string(PI), std::to_string(MI),
-                     ToString(FM.mAction), ExistsCell,
-                     ColorizeStaleReason(StaleReason), FM.mFilePath,
-                     TruncateForDisplay(FM.mDescription, 60)});
+                Table.AddRow({B.mTopicKey, std::to_string(PI),
+                              std::to_string(MI), ToString(FM.mAction),
+                              ExistsCell, ColorizeStaleReason(StaleReason),
+                              FM.mFilePath, FM.mDescription});
             }
         }
     }
@@ -793,8 +793,8 @@ static int RunManifestListHuman(const fs::path &InRepoRoot,
     // Header summary line — mirrors the agent-facing JSON `entry_count`
     // but adds filter context so a human reader isn't surprised by a
     // short result.
-    std::cout << kColorBold << "File manifest" << kColorReset << "  count="
-              << kColorOrange << TotalEntries << kColorReset;
+    std::cout << kColorBold << "File manifest" << kColorReset
+              << "  count=" << kColorOrange << TotalEntries << kColorReset;
     if (!InOptions.mTopic.empty())
         std::cout << "  topic=" << kColorOrange << InOptions.mTopic
                   << kColorReset;
@@ -847,8 +847,7 @@ int RunManifestListCommand(const std::vector<std::string> &InArgs,
     }
 
     if (Options.mbHuman)
-        return RunManifestListHuman(RepoRoot, Options, Bundles,
-                                    BundleWarnings);
+        return RunManifestListHuman(RepoRoot, Options, Bundles, BundleWarnings);
     return RunManifestListJson(RepoRoot, Options, Bundles, BundleWarnings);
 }
 
@@ -1125,8 +1124,7 @@ static bool RunGitLogNameStatusInWindow(const fs::path &InRepoRoot,
     if (ExitCode != 0)
     {
         OutError = "manifest suggest: `git log` exited non-zero (status=" +
-                   std::to_string(ExitCode) +
-                   "); is the repo a git checkout?";
+                   std::to_string(ExitCode) + "); is the repo a git checkout?";
         return false;
     }
     return true;
@@ -1210,8 +1208,7 @@ CollapseGitLogToSuggestions(const std::string &InGitLog)
 int RunManifestSuggestCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot)
 {
-    const FManifestSuggestOptions Options =
-        ParseManifestSuggestOptions(InArgs);
+    const FManifestSuggestOptions Options = ParseManifestSuggestOptions(InArgs);
     const fs::path RepoRoot = NormalizeRepoRootPath(
         Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
 
@@ -1226,8 +1223,7 @@ int RunManifestSuggestCommand(const std::vector<std::string> &InArgs,
         static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
     {
         std::cerr << "Phase index " << Options.mPhaseIndex
-                  << " out of range (0.." << Bundle.mPhases.size() - 1
-                  << ")\n";
+                  << " out of range (0.." << Bundle.mPhases.size() - 1 << ")\n";
         return 1;
     }
     const FPhaseRecord &Phase =

@@ -35,11 +35,12 @@ ScanProseField(const std::string &InTopic, const std::string &InPath,
     std::smatch Match;
     if (std::regex_search(InContent, Match, InPattern))
     {
-        std::string Hit = Match.str();
-        if (Hit.size() > 60)
-            Hit = Hit.substr(0, 57) + "...";
+        // v0.97.0 no-truncation contract: embed the full regex match
+        // in the issue detail. Callers that triage validator output
+        // can still filter by check id / path / severity before
+        // reading detail.
         Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
-             InDetailPrefix + Hit);
+             InDetailPrefix + Match.str());
     }
 }
 
@@ -926,14 +927,13 @@ void EvalNoDuplicateChangelog(const std::vector<FTopicBundle> &InBundles,
                 FirstSeen.emplace(Key, I);
                 continue;
             }
-            std::string Preview = C.mChange;
-            if (Preview.size() > 60)
-                Preview = Preview.substr(0, 57) + "...";
+            // v0.97.0 no-truncation contract: embed the full change
+            // text so callers can reconstruct the duplicate pair.
             Fail(OutChecks, "no_duplicate_changelog",
                  EValidationSeverity::Warning, B.mTopicKey,
                  "changelogs[" + std::to_string(I) + "].change",
                  "duplicate of changelogs[" + std::to_string(Found->second) +
-                     "]: '" + Preview + "'");
+                     "]: '" + C.mChange + "'");
         }
     }
 }
@@ -988,14 +988,13 @@ void EvalNoDuplicatePhaseField(const std::vector<FTopicBundle> &InBundles,
                     FirstSeen.emplace(Value, PI);
                     continue;
                 }
-                std::string Preview = Value;
-                if (Preview.size() > 60)
-                    Preview = Preview.substr(0, 57) + "...";
+                // v0.97.0 no-truncation contract: embed the full
+                // identical value so callers see the exact duplicate.
                 Fail(OutChecks, "no_duplicate_phase_field",
                      EValidationSeverity::Warning, B.mTopicKey,
                      "phases[" + std::to_string(PI) + "]." + Field.first,
                      "identical to phases[" + std::to_string(Found->second) +
-                         "]." + Field.first + ": '" + Preview + "'");
+                         "]." + Field.first + ": '" + Value + "'");
             }
         }
     }
@@ -1228,8 +1227,7 @@ static bool BuildFirstCommitMap(const fs::path &InRepoRoot,
     while (std::fgets(Buffer, sizeof(Buffer), rpPipe) != nullptr)
     {
         std::string Line(Buffer);
-        while (!Line.empty() &&
-               (Line.back() == '\n' || Line.back() == '\r'))
+        while (!Line.empty() && (Line.back() == '\n' || Line.back() == '\r'))
             Line.pop_back();
         if (Line.empty())
             continue;
@@ -1318,12 +1316,12 @@ void EvalStaleMislabeledModify(const std::vector<FTopicBundle> &InBundles,
                      EValidationSeverity::Warning, B.mTopicKey,
                      "phases[" + std::to_string(PI) + "].file_manifest[" +
                          std::to_string(MI) + "]",
-                     "action=modify but file was first committed at " +
-                         Born + " (after phase started_at=" + Started +
+                     "action=modify but file was first committed at " + Born +
+                         " (after phase started_at=" + Started +
                          "); the action should have been `create`. Update "
                          "via `manifest set --topic <T> --phase " +
-                         std::to_string(PI) + " --index " +
-                         std::to_string(MI) + " --action create`.");
+                         std::to_string(PI) + " --index " + std::to_string(MI) +
+                         " --action create`.");
             }
         }
     }
@@ -1348,8 +1346,8 @@ void EvalScopeAndNonScopePopulated(const std::vector<FTopicBundle> &InBundles,
 {
     for (const FTopicBundle &B : InBundles)
     {
-        if (B.mStatus == ETopicStatus::NotStarted
-            || B.mStatus == ETopicStatus::Canceled)
+        if (B.mStatus == ETopicStatus::NotStarted ||
+            B.mStatus == ETopicStatus::Canceled)
             continue;
         const bool bGoalsEmpty = B.mMetadata.mGoals.empty();
         const bool bNonGoalsEmpty = B.mMetadata.mNonGoals.empty();
@@ -1363,9 +1361,9 @@ void EvalScopeAndNonScopePopulated(const std::vector<FTopicBundle> &InBundles,
             Detail = "goals is empty";
         else
             Detail = "non_goals is empty";
-        Detail += "; populate via `uni-plan topic set --topic " + B.mTopicKey
-                  + " --goals <text> --non-goals <text>` so watch TUI PLAN "
-                    "DETAIL can render Scope / Non-Scope panels";
+        Detail += "; populate via `uni-plan topic set --topic " + B.mTopicKey +
+                  " --goals <text> --non-goals <text>` so watch TUI PLAN "
+                  "DETAIL can render Scope / Non-Scope panels";
         Fail(OutChecks, "scope_and_non_scope_populated",
              EValidationSeverity::Warning, B.mTopicKey, Path, Detail);
     }
@@ -1406,21 +1404,21 @@ void EvalRiskSeverityPopulatedForHighImpact(
         for (size_t I = 0; I < B.mMetadata.mRisks.size(); ++I)
         {
             const FRiskEntry &R = B.mMetadata.mRisks[I];
-            const bool bHighImpact = (R.mSeverity == ERiskSeverity::High
-                                      || R.mSeverity == ERiskSeverity::Critical);
+            const bool bHighImpact = (R.mSeverity == ERiskSeverity::High ||
+                                      R.mSeverity == ERiskSeverity::Critical);
             if (!bHighImpact)
                 continue;
-            if (R.mStatus == ERiskStatus::Accepted
-                || R.mStatus == ERiskStatus::Closed)
+            if (R.mStatus == ERiskStatus::Accepted ||
+                R.mStatus == ERiskStatus::Closed)
                 continue;
             if (!R.mMitigation.empty())
                 continue;
             Fail(OutChecks, "risk_severity_populated_for_high_impact",
                  EValidationSeverity::Warning, B.mTopicKey,
                  "risks[" + std::to_string(I) + "]",
-                 std::string("severity=") + ToString(R.mSeverity)
-                     + " risk missing mitigation (set --mitigation or move "
-                       "status to accepted/closed)");
+                 std::string("severity=") + ToString(R.mSeverity) +
+                     " risk missing mitigation (set --mitigation or move "
+                     "status to accepted/closed)");
         }
     }
 }
@@ -1442,8 +1440,8 @@ void EvalRiskIdUnique(const std::vector<FTopicBundle> &InBundles,
                 Fail(OutChecks, "risk_id_unique",
                      EValidationSeverity::ErrorMinor, B.mTopicKey,
                      "risks[" + std::to_string(I) + "].id",
-                     "id '" + R.mId + "' duplicates risks["
-                         + std::to_string(It->second) + "].id");
+                     "id '" + R.mId + "' duplicates risks[" +
+                         std::to_string(It->second) + "].id");
                 continue;
             }
             Seen[R.mId] = I;
@@ -1471,7 +1469,8 @@ void EvalNextActionWellformed(const std::vector<FTopicBundle> &InBundles,
                 Fail(OutChecks, "next_action_wellformed",
                      EValidationSeverity::ErrorMinor, B.mTopicKey,
                      "next_actions[" + std::to_string(I) + "].order",
-                     "order must be >= 1 (got " + std::to_string(A.mOrder) + ")");
+                     "order must be >= 1 (got " + std::to_string(A.mOrder) +
+                         ")");
             }
         }
     }
@@ -1494,9 +1493,9 @@ void EvalNextActionOrderUnique(const std::vector<FTopicBundle> &InBundles,
                 Fail(OutChecks, "next_action_order_unique",
                      EValidationSeverity::ErrorMinor, B.mTopicKey,
                      "next_actions[" + std::to_string(I) + "].order",
-                     "order=" + std::to_string(A.mOrder)
-                         + " duplicates next_actions["
-                         + std::to_string(It->second) + "].order");
+                     "order=" + std::to_string(A.mOrder) +
+                         " duplicates next_actions[" +
+                         std::to_string(It->second) + "].order");
                 continue;
             }
             Seen[A.mOrder] = I;
@@ -1509,17 +1508,17 @@ void EvalNextActionHasEntries(const std::vector<FTopicBundle> &InBundles,
 {
     for (const FTopicBundle &B : InBundles)
     {
-        if (B.mStatus != ETopicStatus::InProgress
-            && B.mStatus != ETopicStatus::Blocked)
+        if (B.mStatus != ETopicStatus::InProgress &&
+            B.mStatus != ETopicStatus::Blocked)
             continue;
         if (!B.mNextActions.empty())
             continue;
-        Fail(OutChecks, "next_action_has_entries",
-             EValidationSeverity::Warning, B.mTopicKey, "next_actions",
-             std::string("active topic (status=") + ToString(B.mStatus)
-                 + ") has no next_actions — add at least one via "
-                   "`uni-plan next-action add --topic " + B.mTopicKey
-                 + " --statement <text>`");
+        Fail(OutChecks, "next_action_has_entries", EValidationSeverity::Warning,
+             B.mTopicKey, "next_actions",
+             std::string("active topic (status=") + ToString(B.mStatus) +
+                 ") has no next_actions — add at least one via "
+                 "`uni-plan next-action add --topic " +
+                 B.mTopicKey + " --statement <text>`");
     }
 }
 
@@ -1544,9 +1543,8 @@ void EvalAcceptanceCriterionWellformed(
     }
 }
 
-void EvalAcceptanceCriterionIdUnique(
-    const std::vector<FTopicBundle> &InBundles,
-    std::vector<ValidateCheck> &OutChecks)
+void EvalAcceptanceCriterionIdUnique(const std::vector<FTopicBundle> &InBundles,
+                                     std::vector<ValidateCheck> &OutChecks)
 {
     for (const FTopicBundle &B : InBundles)
     {
@@ -1563,8 +1561,8 @@ void EvalAcceptanceCriterionIdUnique(
                 Fail(OutChecks, "acceptance_criterion_id_unique",
                      EValidationSeverity::ErrorMinor, B.mTopicKey,
                      "acceptance_criteria[" + std::to_string(I) + "].id",
-                     "id '" + C.mId + "' duplicates acceptance_criteria["
-                         + std::to_string(It->second) + "].id");
+                     "id '" + C.mId + "' duplicates acceptance_criteria[" +
+                         std::to_string(It->second) + "].id");
                 continue;
             }
             Seen[C.mId] = I;
@@ -1588,7 +1586,8 @@ void EvalAcceptanceCriteriaHasEntries(
              "completed topic has no acceptance_criteria — a completed "
              "topic with zero criteria provides no audit trail for what "
              "was delivered; backfill via `uni-plan acceptance-criterion "
-             "add --topic " + B.mTopicKey + " --statement <text>`");
+             "add --topic " +
+                 B.mTopicKey + " --statement <text>`");
     }
 }
 
@@ -1604,16 +1603,15 @@ void EvalCompletedTopicCriteriaAllMet(
         {
             const FAcceptanceCriterionEntry &C =
                 B.mMetadata.mAcceptanceCriteria[I];
-            if (C.mStatus == ECriterionStatus::Met
-                || C.mStatus == ECriterionStatus::NotApplicable)
+            if (C.mStatus == ECriterionStatus::Met ||
+                C.mStatus == ECriterionStatus::NotApplicable)
                 continue;
             Fail(OutChecks, "completed_topic_criteria_all_met",
                  EValidationSeverity::Warning, B.mTopicKey,
                  "acceptance_criteria[" + std::to_string(I) + "].status",
-                 std::string("completed topic has acceptance_criteria[")
-                     + std::to_string(I) + "] with status="
-                     + ToString(C.mStatus)
-                     + " (expected met or not_applicable)");
+                 std::string("completed topic has acceptance_criteria[") +
+                     std::to_string(I) + "] with status=" +
+                     ToString(C.mStatus) + " (expected met or not_applicable)");
         }
     }
 }
