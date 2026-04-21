@@ -441,6 +441,10 @@ uni-plan phase readiness --topic A --phase 3  # gate-by-gate status for a specif
 
 `phase next` surfaces both the candidate phase and its readiness report, so an agent can decide whether to `phase start` or finish remaining prerequisites first.
 
+**Governance-phase readiness (v0.96.0+).** Each gate now reports `pass`, `fail`, or `not_applicable`. Code-bearing gates (`code_entity_contract`, `code_snippets`, `multi_platforming`) report `not_applicable` when a phase has opted out via `phase set --no-file-manifest=true --no-file-manifest-reason "..."` — the gate does not block readiness. This eliminates the former false-positive where governance phases (topic bundle creation, taxonomy rollouts, doc-only plans) were perpetually flagged `fail` on code-bearing gates even though they legitimately produce no code. Aggregate `ready` is true when every gate is `pass` or `not_applicable`. The registry of gates + their applicability predicates lives in a single source of truth at [Source/UniPlanPhaseKind.h](Source/UniPlanPhaseKind.h); `phase next`, `phase readiness`, and the `file_manifest_required_for_code_phases` validator all consult it.
+
+**phase-get exposes the opt-out (v0.96.0+).** `uni-plan phase get` now emits `no_file_manifest` (bool) and `file_manifest_skip_reason` (nullable string) in every mode (`--brief` / `--design` / `--execution` / full). Closes the CLI gap where auditors could set the opt-out but not read it back without raw JSON access.
+
 ### audit_the_entire_corpus_through_one_command
 
 > Target: get aggregate stats across every `.Plan.json` bundle without raw JSON reads.

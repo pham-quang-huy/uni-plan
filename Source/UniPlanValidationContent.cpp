@@ -1,6 +1,7 @@
 #include "UniPlanEnums.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanPhaseKind.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
@@ -1147,14 +1148,11 @@ void EvalNoDuplicateLaneScope(const std::vector<FTopicBundle> &InBundles,
 // ErrorMinor once `manifest suggest` has bought the migration window.
 // ---------------------------------------------------------------------------
 
-static bool IsCodeBearingPhase(const FPhaseRecord &InPhase)
-{
-    // Same signal authors already use to declare "code-bearing" via
-    // existing design material. Avoids a new bool flag and avoids
-    // false-firing on doc/governance/coordination phases.
-    return !InPhase.mDesign.mCodeEntityContract.empty() ||
-           !InPhase.mDesign.mCodeSnippets.empty();
-}
+// IsCodeBearingPhase is provided by UniPlanPhaseKind.h as the single-
+// source-of-truth predicate for every consumer (phase readiness,
+// phase next, phase complete mutation-gate, and this validator). The
+// earlier static-local copy was removed in v0.96.0 to eliminate drift
+// risk; re-adding it here is a regression.
 
 void EvalFileManifestRequiredForCodePhases(
     const std::vector<FTopicBundle> &InBundles,

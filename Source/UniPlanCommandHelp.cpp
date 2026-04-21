@@ -670,9 +670,22 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
     {
         "readiness",
         "Usage: uni-plan phase readiness --topic <T> --phase <N> [--human]\n\n",
-        "Report gate-by-gate readiness for a phase: design material, best-\n"
-        "practice investigation, code-entity contract, code snippets,\n"
-        "multi-platforming, testing, validation commands.\n\n",
+        "Report gate-by-gate readiness for a phase. Each gate returns one\n"
+        "of three statuses (v0.96.0+):\n"
+        "  pass            — gate applies and the phase satisfies it\n"
+        "  fail            — gate applies and the phase does not satisfy it\n"
+        "  not_applicable  — gate does not apply to this phase kind\n"
+        "                    (code-bearing gates on governance phases\n"
+        "                     opted out via no_file_manifest=true)\n"
+        "\n"
+        "Overall `ready` is true when every gate is pass or not_applicable —\n"
+        "NotApplicable gates do not block readiness. Current gate list:\n"
+        "  investigation (applies to all phases)\n"
+        "  code_entity_contract (code-bearing only; N/A on governance)\n"
+        "  code_snippets (code-bearing only; N/A on governance)\n"
+        "  best_practices (applies to all phases)\n"
+        "  multi_platforming (code-bearing only; N/A on governance)\n"
+        "  testing (applies to all phases)\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n"
         "  --phase <N>             Phase index\n\n",

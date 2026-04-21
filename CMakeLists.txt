@@ -55,6 +55,7 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanCommandPhase.cpp
     Source/UniPlanCommandLegacyGap.cpp
     Source/UniPlanLegacyDiscovery.cpp
+    Source/UniPlanPhaseKind.cpp
 )
 
 target_include_directories(uni-plan-lib PUBLIC
@@ -118,6 +119,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestEntity.cpp
         Test/UniPlanTestValidationContent.cpp
         Test/UniPlanTestHelp.cpp
+        Test/UniPlanTestPhaseKind.cpp
     )
 
     target_link_libraries(uni-plan-tests PRIVATE

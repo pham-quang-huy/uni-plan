@@ -1,6 +1,7 @@
 #include "UniPlanEnums.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanPhaseKind.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
@@ -68,18 +69,19 @@ int RunPhaseNextCommand(const std::vector<std::string> &InArgs,
 
     const FPhaseRecord &Phase = Bundle.mPhases[static_cast<size_t>(NextIndex)];
 
-    // Check readiness gates
+    // Check readiness gates — iterate the canonical registry so this
+    // stays in lock-step with `phase readiness` and picks up governance-
+    // phase applicability rules automatically. A gate reported as
+    // NotApplicable never enters MissingFields (governance phases opted
+    // out of code-bearing gates are not "missing" those fields).
     std::vector<std::string> MissingFields;
-    if (Phase.mDesign.mInvestigation.empty())
-        MissingFields.push_back("investigation");
-    if (Phase.mDesign.mCodeEntityContract.empty())
-        MissingFields.push_back("code_entity_contract");
-    if (Phase.mDesign.mBestPractices.empty())
-        MissingFields.push_back("best_practices");
-    if (Phase.mDesign.mMultiPlatforming.empty())
-        MissingFields.push_back("multi_platforming");
-    if (Phase.mTesting.empty())
-        MissingFields.push_back("testing");
+    for (const FPhaseReadinessGate &Gate : GetPhaseReadinessGates())
+    {
+        if (Gate.Evaluate(Phase) == EReadinessGateStatus::Fail)
+        {
+            MissingFields.emplace_back(Gate.mName);
+        }
+    }
 
     const bool Ready = MissingFields.empty();
 
@@ -283,27 +285,24 @@ int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,
     const FPhaseRecord &Phase =
         Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
 
-    struct FGateCheck
+    // Iterate the canonical readiness-gate registry so this command
+    // reports the same gate set as `phase next` and validator code
+    // paths. Each gate reports one of three statuses:
+    //   pass            — gate applies + phase satisfies it
+    //   fail            — gate applies + phase does not satisfy it
+    //   not_applicable  — gate does not apply to this phase kind
+    //                     (e.g. code_entity_contract on a governance
+    //                      phase opted out via no_file_manifest=true)
+    // The `ready` aggregate is true only when every gate is Pass or
+    // NotApplicable — NotApplicable gates do not block readiness.
+    const std::vector<FPhaseReadinessGate> &Gates = GetPhaseReadinessGates();
+    std::vector<EReadinessGateStatus> GateStatuses;
+    GateStatuses.reserve(Gates.size());
+    for (const FPhaseReadinessGate &Gate : Gates)
     {
-        const char *mName;
-        bool mbPass;
-    };
-
-    const FGateCheck Gates[] = {
-        {"investigation", !Phase.mDesign.mInvestigation.empty()},
-        {"code_entity_contract", !Phase.mDesign.mCodeEntityContract.empty()},
-        {"code_snippets", !Phase.mDesign.mCodeSnippets.empty()},
-        {"best_practices", !Phase.mDesign.mBestPractices.empty()},
-        {"multi_platforming", !Phase.mDesign.mMultiPlatforming.empty()},
-        {"testing", !Phase.mTesting.empty()},
-    };
-
-    bool AllPass = true;
-    for (const auto &Gate : Gates)
-    {
-        if (!Gate.mbPass)
-            AllPass = false;
+        GateStatuses.push_back(Gate.Evaluate(Phase));
     }
+    const bool AllPass = AllReadinessGatesSatisfied(Phase);
 
     if (Options.mbHuman)
     {
@@ -317,10 +316,10 @@ int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,
 
         HumanTable Table;
         Table.mHeaders = {"Gate", "Status"};
-        for (const auto &Gate : Gates)
+        for (size_t I = 0; I < Gates.size(); ++I)
         {
             Table.AddRow(
-                {Gate.mName, ColorizeStatus(Gate.mbPass ? "pass" : "fail")});
+                {Gates[I].mName, ColorizeStatus(ToString(GateStatuses[I]))});
         }
         Table.Print();
         return 0;
@@ -332,13 +331,12 @@ int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,
     EmitJsonFieldInt("phase_index", Options.mPhaseIndex);
     EmitJsonFieldBool("ready", AllPass);
     std::cout << "\"gates\":[";
-    constexpr size_t GateCount = sizeof(Gates) / sizeof(Gates[0]);
-    for (size_t I = 0; I < GateCount; ++I)
+    for (size_t I = 0; I < Gates.size(); ++I)
     {
         PrintJsonSep(I);
         std::cout << "{";
         EmitJsonField("name", Gates[I].mName);
-        EmitJsonField("status", Gates[I].mbPass ? "pass" : "fail", false);
+        EmitJsonField("status", ToString(GateStatuses[I]), false);
         std::cout << "}";
     }
     std::cout << "]}\n";

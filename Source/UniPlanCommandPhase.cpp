@@ -261,6 +261,16 @@ static void EmitPhaseGetFieldsJson(const FTopicBundle &InBundle,
     // `phase get` mode (brief / reference / full / execution) so agents
     // can gate readiness checks without a second command round-trip.
     EmitJsonFieldSizeT("design_chars", ComputePhaseDesignChars(Phase));
+    // Governance-phase opt-out signal — surfaced in every mode so
+    // auditors can see, in one query, whether a phase is exempt from
+    // code-bearing gates (file_manifest, code_entity_contract,
+    // code_snippets, multi_platforming). When mbNoFileManifest is
+    // true the JSON deserializer guarantees mFileManifestSkipReason
+    // is non-empty, so the reason string is always usable when the
+    // bool is true. Added v0.96.0 to close the `phase get` CLI gap.
+    EmitJsonFieldBool("no_file_manifest", Phase.mbNoFileManifest);
+    EmitJsonFieldNullable("file_manifest_skip_reason",
+                          Phase.mFileManifestSkipReason);
     EmitJsonFieldNullable("scope", Phase.mScope);
 
     // --brief: compact view for session resume (~500 tokens)
