@@ -1,5 +1,6 @@
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJSON.h"
 #include "UniPlanStatusHelpers.h"
 #include "UniPlanStringHelpers.h"
 #include "UniPlanTypes.h"
@@ -216,6 +217,253 @@ TryConsumeValidationCommandsProse(const std::vector<std::string> &InTokens,
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// JSON-file input helpers (v0.100.0) — shell-hostile-safe alternative to the
+// pipe-delimited `--validation-commands` / `--validation-add` / `--dependency-
+// add` grammars. The file is parsed as a JSON array of objects matching the
+// canonical bundle shape. Bypasses shell escaping entirely: commands/paths/
+// notes can contain `|`, backticks, `$`, `"`, `\`, newlines, etc.
+//
+// Schema:
+//   validation commands: [{"platform": "any|macos|windows|linux",
+//                          "command": "<required non-empty>",
+//                          "description": "<optional>"}, ...]
+//   dependencies:        [{"kind": "bundle|phase|governance|external",
+//                          "topic": "<required for bundle/phase>",
+//                          "phase": <int, optional>,
+//                          "path":  "<required for governance/external>",
+//                          "note":  "<optional>"}, ...]
+//
+// Legacy pipe forms remain supported but are documented as authoring-input
+// only — the JSON-file form is the canonical choice for any content that
+// could be shell-hostile.
+// ---------------------------------------------------------------------------
+
+inline bool TryReadJsonArrayFile(const std::string &InFlag,
+                                 const std::string &InPath, JSONValue &OutArray)
+{
+    std::string Raw;
+    std::string Error;
+    if (!TryReadFileToString(fs::path(InPath), Raw, Error))
+    {
+        throw UsageError(InFlag + " '" + InPath + "': " + Error);
+    }
+    try
+    {
+        OutArray = JSONValue::parse(Raw);
+    }
+    catch (const JSONValue::parse_error &Ex)
+    {
+        throw UsageError(InFlag + " '" + InPath +
+                         "': JSON parse error: " + Ex.what());
+    }
+    if (!OutArray.is_array())
+    {
+        throw UsageError(InFlag + " '" + InPath +
+                         "': expected a JSON array at the top level");
+    }
+    return true;
+}
+
+inline FValidationCommand
+ParseValidationCommandJsonEntry(const std::string &InFlag,
+                                const std::string &InPath, size_t InIndex,
+                                const JSONValue &InEntry)
+{
+    if (!InEntry.is_object())
+    {
+        throw UsageError(InFlag + " '" + InPath + "' [" +
+                         std::to_string(InIndex) + "]: expected object");
+    }
+    FValidationCommand C;
+    std::string Platform = "any";
+    if (InEntry.contains("platform"))
+    {
+        if (!InEntry["platform"].is_string())
+        {
+            throw UsageError(InFlag + " '" + InPath + "' [" +
+                             std::to_string(InIndex) +
+                             "].platform: expected string");
+        }
+        Platform = InEntry["platform"].get<std::string>();
+    }
+    if (!PlatformScopeFromString(Platform, C.mPlatform))
+    {
+        throw UsageError(InFlag + " '" + InPath + "' [" +
+                         std::to_string(InIndex) + "].platform: invalid '" +
+                         Platform + "' (expected any|macos|windows|linux)");
+    }
+    if (!InEntry.contains("command") || !InEntry["command"].is_string() ||
+        InEntry["command"].get<std::string>().empty())
+    {
+        throw UsageError(InFlag + " '" + InPath + "' [" +
+                         std::to_string(InIndex) +
+                         "].command: required non-empty string");
+    }
+    C.mCommand = InEntry["command"].get<std::string>();
+    if (InEntry.contains("description"))
+    {
+        if (!InEntry["description"].is_string())
+        {
+            throw UsageError(InFlag + " '" + InPath + "' [" +
+                             std::to_string(InIndex) +
+                             "].description: expected string");
+        }
+        C.mDescription = InEntry["description"].get<std::string>();
+    }
+    return C;
+}
+
+inline FBundleReference ParseDependencyJsonEntry(const std::string &InFlag,
+                                                 const std::string &InPath,
+                                                 size_t InIndex,
+                                                 const JSONValue &InEntry)
+{
+    if (!InEntry.is_object())
+    {
+        throw UsageError(InFlag + " '" + InPath + "' [" +
+                         std::to_string(InIndex) + "]: expected object");
+    }
+    FBundleReference R;
+    std::string Kind = "bundle";
+    if (InEntry.contains("kind"))
+    {
+        if (!InEntry["kind"].is_string())
+        {
+            throw UsageError(InFlag + " '" + InPath + "' [" +
+                             std::to_string(InIndex) +
+                             "].kind: expected string");
+        }
+        Kind = InEntry["kind"].get<std::string>();
+    }
+    if (!DependencyKindFromString(Kind, R.mKind))
+    {
+        throw UsageError(InFlag + " '" + InPath + "' [" +
+                         std::to_string(InIndex) + "].kind: invalid '" + Kind +
+                         "' (expected bundle|phase|governance|external)");
+    }
+    if (InEntry.contains("topic"))
+    {
+        if (!InEntry["topic"].is_string())
+        {
+            throw UsageError(InFlag + " '" + InPath + "' [" +
+                             std::to_string(InIndex) +
+                             "].topic: expected string");
+        }
+        R.mTopic = InEntry["topic"].get<std::string>();
+    }
+    if (InEntry.contains("phase") && !InEntry["phase"].is_null())
+    {
+        if (!InEntry["phase"].is_number_integer())
+        {
+            throw UsageError(InFlag + " '" + InPath + "' [" +
+                             std::to_string(InIndex) +
+                             "].phase: expected integer");
+        }
+        R.mPhase = InEntry["phase"].get<int>();
+    }
+    if (InEntry.contains("path"))
+    {
+        if (!InEntry["path"].is_string())
+        {
+            throw UsageError(InFlag + " '" + InPath + "' [" +
+                             std::to_string(InIndex) +
+                             "].path: expected string");
+        }
+        R.mPath = InEntry["path"].get<std::string>();
+    }
+    if (InEntry.contains("note"))
+    {
+        if (!InEntry["note"].is_string())
+        {
+            throw UsageError(InFlag + " '" + InPath + "' [" +
+                             std::to_string(InIndex) +
+                             "].note: expected string");
+        }
+        R.mNote = InEntry["note"].get<std::string>();
+    }
+    if ((R.mKind == EDependencyKind::Bundle ||
+         R.mKind == EDependencyKind::Phase) &&
+        R.mTopic.empty())
+    {
+        throw UsageError(InFlag + " '" + InPath + "' [" +
+                         std::to_string(InIndex) +
+                         "]: kind=bundle|phase requires non-empty 'topic'");
+    }
+    if ((R.mKind == EDependencyKind::Governance ||
+         R.mKind == EDependencyKind::External) &&
+        R.mPath.empty())
+    {
+        throw UsageError(
+            InFlag + " '" + InPath + "' [" + std::to_string(InIndex) +
+            "]: kind=governance|external requires non-empty 'path'");
+    }
+    return R;
+}
+
+// REPLACE semantics — mirrors `--validation-commands`.
+inline bool TryConsumeValidationCommandsJsonFile(
+    const std::vector<std::string> &InTokens, size_t &InOutIndex,
+    bool &OutbValidationClear, std::vector<FValidationCommand> &OutAdd)
+{
+    const std::string &Token = InTokens[InOutIndex];
+    if (Token != "--validation-commands-json-file")
+        return false;
+    const std::string Path = ConsumeValuedOption(
+        InTokens, InOutIndex, "--validation-commands-json-file");
+    JSONValue Arr;
+    TryReadJsonArrayFile("--validation-commands-json-file", Path, Arr);
+    OutbValidationClear = true;
+    for (size_t I = 0; I < Arr.size(); ++I)
+    {
+        OutAdd.push_back(ParseValidationCommandJsonEntry(
+            "--validation-commands-json-file", Path, I, Arr[I]));
+    }
+    return true;
+}
+
+// APPEND semantics — mirrors `--validation-add`.
+inline bool
+TryConsumeValidationAddJsonFile(const std::vector<std::string> &InTokens,
+                                size_t &InOutIndex,
+                                std::vector<FValidationCommand> &OutAdd)
+{
+    const std::string &Token = InTokens[InOutIndex];
+    if (Token != "--validation-add-json-file")
+        return false;
+    const std::string Path =
+        ConsumeValuedOption(InTokens, InOutIndex, "--validation-add-json-file");
+    JSONValue Arr;
+    TryReadJsonArrayFile("--validation-add-json-file", Path, Arr);
+    for (size_t I = 0; I < Arr.size(); ++I)
+    {
+        OutAdd.push_back(ParseValidationCommandJsonEntry(
+            "--validation-add-json-file", Path, I, Arr[I]));
+    }
+    return true;
+}
+
+// APPEND semantics — mirrors `--dependency-add`.
+inline bool
+TryConsumeDependencyAddJsonFile(const std::vector<std::string> &InTokens,
+                                size_t &InOutIndex,
+                                std::vector<FBundleReference> &OutAdd)
+{
+    const std::string &Token = InTokens[InOutIndex];
+    if (Token != "--dependency-add-json-file")
+        return false;
+    const std::string Path =
+        ConsumeValuedOption(InTokens, InOutIndex, "--dependency-add-json-file");
+    JSONValue Arr;
+    TryReadJsonArrayFile("--dependency-add-json-file", Path, Arr);
+    for (size_t I = 0; I < Arr.size(); ++I)
+    {
+        OutAdd.push_back(ParseDependencyJsonEntry("--dependency-add-json-file",
+                                                  Path, I, Arr[I]));
+    }
+    return true;
+}
+
 bool ContainsHelpFlag(const std::vector<std::string> &InTokens)
 {
     for (const std::string &Token : InTokens)
@@ -386,25 +634,14 @@ ParseTopicListOptions(const std::vector<std::string> &InTokens)
 // sectionable. Unknown names throw UsageError at parse time.
 static bool IsValidTopicSection(const std::string &InName)
 {
-    static const char *const kValid[] = {"summary",
-                                         "goals",
-                                         "non_goals",
-                                         "risks",
-                                         "acceptance_criteria",
-                                         "problem_statement",
-                                         "validation_commands",
-                                         "baseline_audit",
-                                         "execution_strategy",
-                                         "locked_decisions",
-                                         "source_references",
-                                         "dependencies",
-                                         "next_actions",
-                                         "phases",
-                                         // v0.98.0 typed sidecar-replacement
-                                         // arrays.
-                                         "priority_groupings",
-                                         "runbooks",
-                                         "residual_risks"};
+    static const char *const kValid[] = {
+        "summary", "goals", "non_goals", "risks", "acceptance_criteria",
+        "problem_statement", "validation_commands", "baseline_audit",
+        "execution_strategy", "locked_decisions", "source_references",
+        "dependencies", "next_actions", "phases",
+        // v0.98.0 typed sidecar-replacement
+        // arrays.
+        "priority_groupings", "runbooks", "residual_risks"};
     for (const char *V : kValid)
     {
         if (InName == V)
@@ -882,6 +1119,13 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
                                               Options.mbValidationClear,
                                               Options.mValidationAdd))
             continue;
+        if (TryConsumeValidationCommandsJsonFile(Remaining, Index,
+                                                 Options.mbValidationClear,
+                                                 Options.mValidationAdd))
+            continue;
+        if (TryConsumeValidationAddJsonFile(Remaining, Index,
+                                            Options.mValidationAdd))
+            continue;
         if (Token == "--validation-clear")
         {
             Options.mbValidationClear = true;
@@ -945,6 +1189,9 @@ FTopicSetOptions ParseTopicSetOptions(const std::vector<std::string> &InTokens)
             Options.mbDependencyClear = true;
             continue;
         }
+        if (TryConsumeDependencyAddJsonFile(Remaining, Index,
+                                            Options.mDependencyAdd))
+            continue;
         if (Token == "--dependency-add")
         {
             // Parse "<kind>|<topic>|<phase>|<path>|<note>" (pipe-delimited).
@@ -1190,6 +1437,13 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
                                               Options.mbValidationClear,
                                               Options.mValidationAdd))
             continue;
+        if (TryConsumeValidationCommandsJsonFile(Remaining, Index,
+                                                 Options.mbValidationClear,
+                                                 Options.mValidationAdd))
+            continue;
+        if (TryConsumeValidationAddJsonFile(Remaining, Index,
+                                            Options.mValidationAdd))
+            continue;
         if (Token == "--validation-clear")
         {
             Options.mbValidationClear = true;
@@ -1237,6 +1491,9 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
             Options.mbDependencyClear = true;
             continue;
         }
+        if (TryConsumeDependencyAddJsonFile(Remaining, Index,
+                                            Options.mDependencyAdd))
+            continue;
         if (Token == "--dependency-add")
         {
             const std::string Raw =
@@ -3593,8 +3850,7 @@ ParseAcceptanceCriterionListOptions(const std::vector<std::string> &InTokens)
 // Helper: parse --phase-index <N> or --phase-indices <csv>. Appends to
 // the caller's vector (supports mixed repeated-flag + CSV invocations).
 static void ParsePhaseIndexOrCsv(const std::vector<std::string> &InRemaining,
-                                 size_t &InOutIndex,
-                                 const std::string &InFlag,
+                                 size_t &InOutIndex, const std::string &InFlag,
                                  std::vector<int> &OutPhaseIndices)
 {
     if (InFlag == "--phase-index")
@@ -3655,7 +3911,8 @@ ParsePriorityGroupingAddOptions(const std::vector<std::string> &InTokens)
             continue;
         if (Token == "--phase-index" || Token == "--phase-indices")
         {
-            ParsePhaseIndexOrCsv(Remaining, Index, Token, Options.mPhaseIndices);
+            ParsePhaseIndexOrCsv(Remaining, Index, Token,
+                                 Options.mPhaseIndices);
             continue;
         }
         if (TryConsumeStringOrFileOption(Remaining, Index, "--rule",
@@ -3699,7 +3956,8 @@ ParsePriorityGroupingSetOptions(const std::vector<std::string> &InTokens)
         if (Token == "--phase-index" || Token == "--phase-indices")
         {
             Options.mbPhaseIndicesSet = true;
-            ParsePhaseIndexOrCsv(Remaining, Index, Token, Options.mPhaseIndices);
+            ParsePhaseIndexOrCsv(Remaining, Index, Token,
+                                 Options.mPhaseIndices);
             continue;
         }
         if (Token == "--phase-indices-clear")

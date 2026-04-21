@@ -23,7 +23,23 @@ static constexpr const char *kFileFlagFooter =
     "`$VAR`,\n"
     "  backticks, and double quotes round-trip safely. Prefer the file "
     "form\n"
-    "  for long content or anything containing shell metachars.\n";
+    "  for long content or anything containing shell metachars.\n"
+    "\n"
+    "JSON-file structured input (v0.100.0+) — PREFERRED for typed arrays:\n"
+    "  --validation-commands-json-file <path>  REPLACE validation_commands\n"
+    "  --validation-add-json-file <path>       APPEND to validation_commands\n"
+    "  --dependency-add-json-file <path>       APPEND to dependencies\n"
+    "  The file is a JSON array matching the canonical bundle shape:\n"
+    "    validation_commands: "
+    "[{\"platform\",\"command\",\"description\"}, ...]\n"
+    "    dependencies:        "
+    "[{\"kind\",\"topic\",\"phase\",\"path\",\"note\"}, ...]\n"
+    "  The pipe-delimited forms (`--validation-commands`, "
+    "`--validation-add`,\n"
+    "  `--dependency-add`) remain supported as legacy authoring input; prefer\n"
+    "  the JSON-file form for any content that might contain `|`, `$`, "
+    "backticks,\n"
+    "  quotes, or newlines.\n";
 
 // ===========================================================================
 // Subcommand-level help registries (v0.85.0 Commit 2).

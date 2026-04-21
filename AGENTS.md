@@ -353,6 +353,23 @@ Every mutation write now routes through `GuardedWriteBundle` (new `Source/UniPla
 - **kCliVersion bump**: 0.98.0 → 0.99.0. MINOR per SemVer discipline.
 - **Tests**: new `Test/UniPlanTestBundleWriteGuard.cpp` — rename atomicity, stale-check conflict, concurrent `std::thread` race, concurrent `fork()` race (POSIX only), pre-rename fault, external lock holder blocks peer, raw-primitive skip path.
 
+### v0.100.0 behavior note — JSON-file setters for typed-array inputs
+
+Three new flags for shell-hostility-safe typed-array input:
+
+- `--validation-commands-json-file <path>` (topic set / phase set) — REPLACE, parallels `--validation-commands`
+- `--validation-add-json-file <path>` (topic set / phase set) — APPEND, parallels `--validation-add`
+- `--dependency-add-json-file <path>` (topic set / phase set) — APPEND, parallels `--dependency-add`
+
+File shape matches canonical bundle JSON:
+
+- validation commands: `[{"platform":"any|macos|windows|linux","command":"<required>","description":"<optional>"}, ...]`
+- dependencies: `[{"kind":"bundle|phase|governance|external","topic":"<req for bundle/phase>","phase":<int,optional>,"path":"<req for governance/external>","note":"<optional>"}, ...]`
+
+Pipe-delimited grammars (`<platform>|<command>|<description>` etc.) remain supported as legacy authoring input but cannot carry literal `|`, `$`, backticks, or quotes without silent mangling. The JSON-file form is now the documented preferred choice for shell-hostile content. Parse errors surface as `UsageError` (exit 2).
+
+kCliVersion bump: 0.99.1 → 0.100.0. Note: pre-1.0 discipline — we go 0.99.x → 0.100.0, not 1.0.0.
+
 ## documentation_rules
 
 ### V4 bundle model

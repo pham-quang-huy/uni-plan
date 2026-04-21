@@ -355,6 +355,26 @@ Every mutation write now routes through `GuardedWriteBundle` (new [Source/UniPla
 
 Historical context: reported as an open program of work on bundle concurrency safety. Prior to 0.99.0 there was no mention of locks / races / atomic writes anywhere in the codebase — `TryWriteTopicBundle` did `ios::out | ios::trunc`, and `WriteBundleBack` called it directly. Two parallel `uni-plan phase set` invocations on the same topic could silently lose one side's mutation.
 
+### v0.100.0 behavior note — JSON-file setters for typed-array inputs
+
+Three new flags close the shell-hostility gap in the last pipe-delimited input grammars. The `--validation-commands` / `--validation-add` / `--dependency-add` pipe grammars remain supported as legacy authoring input, but the JSON-file siblings are now the documented preferred form for any content that might be shell-hostile (contain literal `|`, `$`, backticks, double quotes, or newlines). JSON in a file is read as raw bytes by the CLI — bash never touches the content.
+
+- **`--validation-commands-json-file <path>`** (on `topic set` and `phase set`) — REPLACE semantics: clears existing `validation_commands` and fills from the JSON array. Parallels `--validation-commands`. File shape: `[{"platform": "any|macos|windows|linux", "command": "<required>", "description": "<optional>"}, ...]`.
+- **`--validation-add-json-file <path>`** (on `topic set` and `phase set`) — APPEND semantics: no clear, just adds each entry. Parallels `--validation-add`. Same JSON shape.
+- **`--dependency-add-json-file <path>`** (on `topic set` and `phase set`) — APPEND semantics. Parallels `--dependency-add`. File shape: `[{"kind": "bundle|phase|governance|external", "topic": "<required for bundle/phase>", "phase": <int, optional>, "path": "<required for governance/external>", "note": "<optional>"}, ...]`.
+
+Parse errors (malformed JSON, missing required fields, wrong top-level type, invalid enum values) surface as `UsageError` (exit 2) at parse time with `<flag> '<path>' [<index>].<field>: <reason>` diagnostics.
+
+Why this matters: the pipe grammars `<platform>|<command>|<description>` and `<kind>|<topic>|<phase>|<path>|<note>` cannot carry a literal `|` without silent mangling. Commands containing bash pipelines (`grep foo bar.log | wc -l`), URLs with query strings (`https://example.com/?a=1|2`), and free-form notes were all hazardous via the pipe path. JSON is inert to these metachars.
+
+Semantics are otherwise identical to the pipe counterparts — `mbValidationClear` is set by `--validation-commands-json-file` (REPLACE) and NOT set by `--validation-add-json-file` (APPEND), and dependency kind/topic/path validation matches `--dependency-add` exactly (kind=bundle|phase requires `topic`; kind=governance|external requires `path`).
+
+**Tests** (`Test/UniPlanTestOptionParsing.cpp`): 9 new guards covering pipe-in-command round-trip, shell-hostile content (backticks/$/$(..)/quotes) round-trip, REPLACE vs APPEND semantics, every dependency kind including notes with literal `|`, and every malformed-input path (JSON parse error, empty command, missing required topic, top-level-not-array).
+
+**kCliVersion bump**: 0.99.1 → 0.100.0. MINOR per pre-1.0 SemVer — new flags added to the command surface. Zero behavior change for callers using only the legacy pipe forms.
+
+**Note on version numbering**: uni-plan goes 0.99.x → 0.100.0, NOT 1.0.0. v1.0 is reserved for an explicit surface lock and is not ratified yet.
+
 ## documentation_rules
 
 ### V4 bundle model

@@ -462,3 +462,131 @@ TEST(OptionParsing, PhaseSetInvestigationFlagAndFileAreInterchangeable)
         {"--topic", "X", "--phase", "0", "--investigation-file", Path});
     EXPECT_EQ(Inline.mInvestigation, ViaFile.mInvestigation);
 }
+
+// ===================================================================
+// v0.100.0 — JSON-file setters for typed-array inputs
+//
+// The pipe grammar (`<platform>|<command>|<description>`) used by
+// --validation-commands / --validation-add / --dependency-add is
+// fundamentally shell-hostile: a command containing literal `|` (common
+// in bash pipelines) is silently split. The JSON-file flags sidestep
+// the pipe grammar entirely — all content is inert JSON bytes.
+// ===================================================================
+
+TEST(OptionParsing, PhaseSetValidationCommandsJsonFilePreservesPipeInCommand)
+{
+    // A command containing literal `|` would be silently mangled by
+    // --validation-add / --validation-commands. Via the JSON-file path,
+    // every byte including the pipe must survive round-trip.
+    const std::string JsonContent = R"([
+        {"platform":"macos","command":"grep foo bar.log | wc -l","description":"count foos"},
+        {"platform":"any","command":"echo `pwd` && ls $HOME","description":"shell-hostile"}
+    ])";
+    const std::string Path = WriteTempProseFile(JsonContent);
+    const auto O = UniPlan::ParsePhaseSetOptions(
+        {"--topic", "X", "--phase", "0", "--validation-commands-json-file",
+         Path});
+    EXPECT_TRUE(O.mbValidationClear);
+    ASSERT_EQ(O.mValidationAdd.size(), 2u);
+    EXPECT_EQ(O.mValidationAdd[0].mPlatform, UniPlan::EPlatformScope::MacOS);
+    EXPECT_EQ(O.mValidationAdd[0].mCommand, "grep foo bar.log | wc -l");
+    EXPECT_EQ(O.mValidationAdd[0].mDescription, "count foos");
+    EXPECT_EQ(O.mValidationAdd[1].mPlatform, UniPlan::EPlatformScope::Any);
+    EXPECT_EQ(O.mValidationAdd[1].mCommand, "echo `pwd` && ls $HOME");
+    EXPECT_EQ(O.mValidationAdd[1].mDescription, "shell-hostile");
+}
+
+TEST(OptionParsing, TopicSetValidationCommandsJsonFileHasReplaceSemantics)
+{
+    // --validation-commands-json-file mirrors --validation-commands:
+    // the first use sets mbValidationClear=true (REPLACE).
+    const std::string JsonContent = R"([
+        {"platform":"linux","command":"make test","description":"CI"}
+    ])";
+    const std::string Path = WriteTempProseFile(JsonContent);
+    const auto O = UniPlan::ParseTopicSetOptions(
+        {"--topic", "X", "--validation-commands-json-file", Path});
+    EXPECT_TRUE(O.mbValidationClear);
+    ASSERT_EQ(O.mValidationAdd.size(), 1u);
+    EXPECT_EQ(O.mValidationAdd[0].mCommand, "make test");
+}
+
+TEST(OptionParsing, PhaseSetValidationAddJsonFileHasAppendSemantics)
+{
+    // --validation-add-json-file appends, does NOT set mbValidationClear.
+    const std::string JsonContent = R"([
+        {"platform":"windows","command":"Tests\\smoke.bat","description":""}
+    ])";
+    const std::string Path = WriteTempProseFile(JsonContent);
+    const auto O = UniPlan::ParsePhaseSetOptions(
+        {"--topic", "X", "--phase", "0", "--validation-add-json-file", Path});
+    EXPECT_FALSE(O.mbValidationClear);
+    ASSERT_EQ(O.mValidationAdd.size(), 1u);
+    EXPECT_EQ(O.mValidationAdd[0].mPlatform, UniPlan::EPlatformScope::Windows);
+    EXPECT_EQ(O.mValidationAdd[0].mCommand, "Tests\\smoke.bat");
+}
+
+TEST(OptionParsing, PhaseSetDependencyAddJsonFileHandlesAllKinds)
+{
+    // Every dependency kind: bundle/phase/governance/external. The `note`
+    // field can contain a literal `|` — impossible via --dependency-add.
+    const std::string JsonContent = R"([
+        {"kind":"bundle","topic":"Foo"},
+        {"kind":"phase","topic":"Bar","phase":3},
+        {"kind":"governance","path":"CODING.md","note":"a | b | c"},
+        {"kind":"external","path":"https://example.com/?a=1|2","note":""}
+    ])";
+    const std::string Path = WriteTempProseFile(JsonContent);
+    const auto O = UniPlan::ParsePhaseSetOptions(
+        {"--topic", "X", "--phase", "0", "--dependency-add-json-file", Path});
+    ASSERT_EQ(O.mDependencyAdd.size(), 4u);
+    EXPECT_EQ(O.mDependencyAdd[0].mKind, UniPlan::EDependencyKind::Bundle);
+    EXPECT_EQ(O.mDependencyAdd[0].mTopic, "Foo");
+    EXPECT_EQ(O.mDependencyAdd[1].mKind, UniPlan::EDependencyKind::Phase);
+    EXPECT_EQ(O.mDependencyAdd[1].mPhase, 3);
+    EXPECT_EQ(O.mDependencyAdd[2].mKind, UniPlan::EDependencyKind::Governance);
+    EXPECT_EQ(O.mDependencyAdd[2].mPath, "CODING.md");
+    EXPECT_EQ(O.mDependencyAdd[2].mNote, "a | b | c");
+    EXPECT_EQ(O.mDependencyAdd[3].mKind, UniPlan::EDependencyKind::External);
+    EXPECT_EQ(O.mDependencyAdd[3].mPath, "https://example.com/?a=1|2");
+}
+
+TEST(OptionParsing, ValidationCommandsJsonFileMalformedThrows)
+{
+    // JSON parse error surfaces as UsageError (exit 2).
+    const std::string Path = WriteTempProseFile("not json at all");
+    EXPECT_THROW(UniPlan::ParseTopicSetOptions(
+                     {"--topic", "X", "--validation-commands-json-file", Path}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, ValidationCommandsJsonFileEmptyCommandThrows)
+{
+    // Empty command is a UsageError — mirrors --validation-add's behavior.
+    const std::string Path = WriteTempProseFile(
+        R"([{"platform":"any","command":"","description":"nope"}])");
+    EXPECT_THROW(UniPlan::ParseTopicSetOptions(
+                     {"--topic", "X", "--validation-commands-json-file", Path}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, DependencyAddJsonFileBundleWithoutTopicThrows)
+{
+    // kind=bundle without a topic is a UsageError.
+    const std::string Path = WriteTempProseFile(R"([{"kind":"bundle"}])");
+    EXPECT_THROW(
+        UniPlan::ParsePhaseSetOptions({"--topic", "X", "--phase", "0",
+                                       "--dependency-add-json-file", Path}),
+        UniPlan::UsageError);
+}
+
+TEST(OptionParsing, DependencyAddJsonFileTopLevelMustBeArray)
+{
+    // Top-level object (not array) must fail fast.
+    const std::string Path =
+        WriteTempProseFile(R"({"kind":"bundle","topic":"X"})");
+    EXPECT_THROW(
+        UniPlan::ParsePhaseSetOptions({"--topic", "X", "--phase", "0",
+                                       "--dependency-add-json-file", Path}),
+        UniPlan::UsageError);
+}
