@@ -394,6 +394,15 @@ Intended usage: after a batch of `task set --status completed` / `task set --sta
 
 kCliVersion bump: 0.101.0 → 0.102.0.
 
+### v0.102.1 behavior note — End-to-end regression fixtures + dry-run pass-2 fix
+
+PATCH. Two changes:
+
+- **Bug fix**: `phase sync-execution --dry-run` now reports the full cascade (jobs_flipped + lanes_flipped both populated). Previously pass-1 skipped the in-memory mutation under `--dry-run`, so pass-2 saw stale job state and under-reported `lanes_flipped`. Only the disk write remains gated by `--dry-run`. Real-run behavior unchanged.
+- **Test addition**: new `Test/UniPlanTestEndToEnd.cpp` covers the full CLI chain from `topic add` through `phase complete` for a doc-only phase, a code-bearing phase, and a shell-hostile validation-command phase (literal `|` round-tripped via `--validation-commands-json-file`).
+
+kCliVersion bump: 0.102.0 → 0.102.1. Suite: 440 passing.
+
 ## documentation_rules
 
 ### V4 bundle model

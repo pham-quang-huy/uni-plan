@@ -424,6 +424,21 @@ Addresses the post-v0.101.0 ergonomic: after a batch of leaf-level `task set --s
 
 **Tests** (`Test/UniPlanTestSemantic.cpp`): 7 new guards covering happy path (task → job → lane chain), `--dry-run` leaves on-disk bytes byte-identical, mixed-statuses skip the job, all-canceled tasks roll up as Canceled, mixed Completed + Canceled tasks roll up as Completed (real work happened), already-terminal parent is skipped (non-destructive), idempotency on re-run.
 
+### v0.102.1 behavior note — End-to-end regression fixtures + dry-run pass-2 fix
+
+PATCH. Two changes — one bugfix, one test-coverage addition. Both discovered while adding the regression fixtures.
+
+1. **Bug fix: `phase sync-execution --dry-run` now previews the FULL cascade.** Previously dry-run's pass-1 (job rollup) skipped the in-memory mutation of `job.mStatus`, so pass-2 (lane rollup) saw the *original* in-flight job state and reported `lanes_flipped: 0` even when the non-dry-run would have rolled them up. The fix makes the in-memory mutation unconditional — only the disk write (`WriteBundleBack`) remains gated by `--dry-run`. Dry-run now emits the complete set of flips both passes would apply. The real (non-dry-run) behavior is unchanged. Fixes `Source/UniPlanCommandLifecycle.cpp` `RunPhaseSyncExecutionCommand`.
+
+2. **Test-coverage addition: `Test/UniPlanTestEndToEnd.cpp`** — 3 new regression fixtures covering the full CLI command chain from `topic add` through `phase complete`. Complements the per-command unit tests in `UniPlanTestMutation` / `UniPlanTestSemantic` / `UniPlanTestEntity` / `UniPlanTestValidationContent` / `UniPlanTestBundleWriteGuard` by proving the whole chain composes correctly across v0.94.0 – v0.102.0 surfaces:
+   - `EndToEndDocOnlyPhaseLifecycle` — doc-only phase: topic add → phase add → design → `--no-file-manifest=true` → lane/job/task add → testing (human + ai) → start → bulk `task set --status completed` → `sync-execution --dry-run` (verify jobs_flipped + lanes_flipped both reported, bytes unchanged) → `sync-execution` → `phase complete` → validate corpus clean.
+   - `EndToEndCodeBearingPhaseLifecycle` — code-bearing phase: same chain but with `code_entity_contract` + `manifest add` path, exercising the v0.88.0 file-manifest gate end-to-end.
+   - `EndToEndShellHostileValidationCommandViaJsonFile` — carries a literal `grep foo build.log | wc -l` pipe-containing command through `--validation-commands-json-file`, runs the whole lifecycle, asserts the `|` character survives byte-identically from file-read through lock+stale-check writes through final `ReloadBundle`.
+
+**kCliVersion bump**: 0.102.0 → 0.102.1. PATCH per pre-1.0 SemVer — dry-run now reports a previously-hidden set of flips (strictly additive; no caller is worse off), plus test-only additions. No command-surface change.
+
+Suite size after: 440 passing (was 437).
+
 ## documentation_rules
 
 ### V4 bundle model

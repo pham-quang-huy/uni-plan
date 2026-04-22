@@ -1022,15 +1022,17 @@ int RunPhaseSyncExecutionCommand(const std::vector<std::string> &InArgs,
                         ? "all tasks terminal; ≥1 completed"
                         : "all tasks canceled";
         Flips.push_back(std::move(F));
-        if (!Options.mbDryRun)
-            Job.mStatus = Rolled;
+        // Always mutate in memory so pass 2 sees the post-rollup job
+        // state. Only the disk write is gated by --dry-run below, which
+        // ensures dry-run previews the FULL set of changes (both pass 1
+        // job flips AND the pass 2 lane flips those enable).
+        Job.mStatus = Rolled;
     }
 
-    // Pass 2: lanes ← jobs (reads post-pass-1 job state — when --dry-run,
-    // pass 1 didn't mutate, so lanes see the ORIGINAL job state, which
-    // correctly previews only the rollups available without pass 1's
-    // writes; the same dry-run invocation surfaces both-pass flips only
-    // if pass 1 wouldn't have changed anything).
+    // Pass 2: lanes ← jobs. Reads pass-1 in-memory job state (mutation
+    // above is unconditional so dry-run also previews the lane flips
+    // that pass-1 changes unlock). Disk writes remain gated by
+    // --dry-run via WriteBundleBack below.
     for (size_t LI = 0; LI < Phase.mLanes.size(); ++LI)
     {
         FLaneRecord &Lane = Phase.mLanes[LI];
@@ -1057,8 +1059,10 @@ int RunPhaseSyncExecutionCommand(const std::vector<std::string> &InArgs,
                         ? "all jobs terminal; ≥1 completed"
                         : "all jobs canceled";
         Flips.push_back(std::move(F));
-        if (!Options.mbDryRun)
-            Lane.mStatus = Rolled;
+        // Always mutate in memory (disk write gated by WriteBundleBack
+        // check below); preserves the symmetry with pass-1's behavior
+        // so a future third-pass rollup would see correct state.
+        Lane.mStatus = Rolled;
     }
 
     if (!Flips.empty() && !Options.mbDryRun)

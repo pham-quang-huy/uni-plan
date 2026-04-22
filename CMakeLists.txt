@@ -124,6 +124,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestPhaseKind.cpp
         Test/UniPlanTestGraph.cpp
         Test/UniPlanTestBundleWriteGuard.cpp
+        Test/UniPlanTestEndToEnd.cpp
     )
 
     target_link_libraries(uni-plan-tests PRIVATE
