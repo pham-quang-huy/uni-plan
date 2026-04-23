@@ -6,9 +6,30 @@ implicit_invocation: true
 
 # UPL Plan Execution
 
+**HARD RULE - CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. All reads and mutations go through the `uni-plan` CLI. See `AGENTS.md` for the full rule.
+
 **`--help` is the authoritative per-command reference (v0.85.0+).** Run `uni-plan <cmd> [<sub>] --help` for usage, required/optional flags, mutually exclusive modes, output schema, exit codes, and examples. Examples below use the most common modes; when a flag in this skill disagrees with what `--help` emits, trust `--help`.
 
 Use this skill to execute plan phases with proper governance gates and automatic re-auditing.
+
+## Agentic Execution Standard
+
+Treat every phase as a work order written for a future AI agent or junior
+developer. If the phase scope, lanes, jobs, tasks, target files, contracts, or
+validation commands are too vague for that executor to proceed without
+guessing, stop coding and deepen the bundle through `upl-plan-creation`
+before `phase start`.
+
+For code-bearing phases, apply the uni-plan refactor baseline while executing
+and when repairing deficient plan material:
+
+- Codex/project agents: `/Users/huypham/code/uni-plan/.agents/skills/upl-code-refactor/SKILL.md`
+- Claude agents: `/Users/huypham/code/uni-plan/.claude/skills/upl-code-refactor/SKILL.md`
+
+Preserve the phase boundary and the coding quality contract: structural cleanup
+precedes behavior changes, domain concepts get typed `F`/`E`/`I` contracts,
+monolith/god-struct/string-enum debt is not carried forward, and every
+completed task has concrete evidence a junior developer could verify.
 
 ## Required Context
 

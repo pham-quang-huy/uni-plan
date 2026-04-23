@@ -72,12 +72,15 @@ test -x ".claude/hooks/<hookname>.sh" && echo "OK"
 - Rules not contradicting each other
 - No duplicated definitions across artifacts
 
-### 8. No Stale FIE References
+### 8. No Foreign Repo References
 
 ```bash
-grep -r 'FIE_LOG\|FIE::\|FIE_\|fie-\|fie_' .claude/
+rg -n '/Users/.*/code/|~/code/' .claude/
 ```
-Must return zero hits.
+Every hit must either point at the current repository or at `~/code/uni-plan`
+when documenting the uni-plan CLI itself. No skill or rule may depend on a
+different product repository's project-specific skills, namespaces, scripts, or
+coding conventions.
 
 ### 9. Script Naming Convention
 

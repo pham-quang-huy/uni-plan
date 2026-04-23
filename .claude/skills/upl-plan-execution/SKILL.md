@@ -14,6 +14,25 @@ Use this skill to execute plan phases with proper governance gates and automatic
 
 Treat the bundle itself as the execution source of truth. Use `phases[n]`-style references in bundle text and evidence, and only mention legacy phase keys when quoting a real historical filename. Prefer CLI mutations, but honor explicit user requests for direct manual bundle repair and re-validate immediately after.
 
+## Agentic Execution Standard
+
+Treat every phase as a work order written for a future AI agent or junior
+developer. If the phase scope, lanes, jobs, tasks, target files, contracts, or
+validation commands are too vague for that executor to proceed without
+guessing, stop coding and deepen the bundle through `upl-plan-creation`
+before `phase start`.
+
+For code-bearing phases, apply the uni-plan refactor baseline while executing
+and when repairing deficient plan material:
+
+- Codex/project agents: `/Users/huypham/code/uni-plan/.agents/skills/upl-code-refactor/SKILL.md`
+- Claude agents: `/Users/huypham/code/uni-plan/.claude/skills/upl-code-refactor/SKILL.md`
+
+Preserve the phase boundary and the coding quality contract: structural cleanup
+precedes behavior changes, domain concepts get typed `F`/`E`/`I` contracts,
+monolith/god-struct/string-enum debt is not carried forward, and every
+completed task has concrete evidence a junior developer could verify.
+
 ## Required Context
 
 Before executing, read the topic bundle:

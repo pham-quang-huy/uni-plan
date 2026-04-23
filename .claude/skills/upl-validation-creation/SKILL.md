@@ -126,7 +126,9 @@ Update `CLAUDE.md` `validation_checks` section: add one row to the matching tier
 ```bash
 ./build.sh
 ./Build/CMake/uni-plan-tests --gtest_filter="*<CheckName>*"
-cd ~/code/FourImmortalsEngine && uni-plan validate --strict --human
+uni-plan validate --strict --human
+# Optional: validate an affected caller repo without hardcoding product repos.
+uni-plan validate --strict --human --repo-root <path-to-repo>
 ```
 
 Verify:

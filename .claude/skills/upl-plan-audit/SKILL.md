@@ -8,7 +8,28 @@ implicit_invocation: true
 
 Use this skill for CLI-first topic audits. uni-plan IS the audit tool — use it directly.
 
+**HARD RULE — CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. Use `uni-plan topic get`, `phase list`, `phase get`, `validate`, `blockers`, `changelog`, `verification`, and `manifest list` for audit evidence. If a needed query is not expressible through the CLI, report a CLI gap instead of raw-reading the bundle.
+
 Treat `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n]`, and `tasks[n]` as the canonical bundle entity references. Legacy phase keys should be reported only when they are being used as live bundle references, not when they appear inside a real historical filename.
+
+## Agentic Plan Audit Standard
+
+Audit the bundle as if a future AI agent or junior developer must implement the
+next phase using only the plan plus repo docs. A plan that is technically valid
+but vague is still an audit finding when it omits target files, owned modules,
+domain types, sequencing, acceptance evidence, or explicit non-goals.
+
+Use the uni-plan refactor baseline as the code-quality lens for code-bearing
+phases:
+
+- Codex/project agents: `/Users/huypham/code/uni-plan/.agents/skills/upl-code-refactor/SKILL.md`
+- Claude agents: `/Users/huypham/code/uni-plan/.claude/skills/upl-code-refactor/SKILL.md`
+
+Flag phase material that fails to carry that baseline into executable guidance:
+god structs, monolith files, string-keyed domain state, raw primitive domain
+concepts, duplicated logic, workaround debt, missing `F`/`E`/`I` contracts, or
+structural refactors mixed invisibly with behavior changes. Recommended fixes
+must name the owning plan skill and the exact bundle fields to deepen.
 
 ## Workflow
 

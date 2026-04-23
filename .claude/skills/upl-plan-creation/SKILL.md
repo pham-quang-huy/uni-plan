@@ -14,6 +14,26 @@ Use this skill to create governed V4 topic bundles for uni-plan's own developmen
 
 Use index-based entity references inside the bundle (`phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n]`, `tasks[n]`). Legacy keys like `P0` belong only in quoted archival filenames or historical notes.
 
+## Agentic Plan Handoff Standard
+
+A `.Plan.json` is a delegated work package for a future AI agent or junior
+developer, not a reminder list for the author. Write every topic, phase, lane,
+job, and task so that a competent junior developer can execute it without
+guessing architecture, ownership, or acceptance criteria.
+
+For code-bearing work, load the uni-plan refactor baseline as the quality
+reference before authoring design material:
+
+- Codex/project agents: `/Users/huypham/code/uni-plan/.agents/skills/upl-code-refactor/SKILL.md`
+- Claude agents: `/Users/huypham/code/uni-plan/.claude/skills/upl-code-refactor/SKILL.md`
+
+Reflect that baseline directly in the bundle: name target files/modules, new or
+changed `F`/`E`/`I` domain types, invariants, sequencing, validation commands,
+and SOLID/refactor risks. Split phases so structural cleanup comes before
+behavior changes; do not hide god structs, monolith files, string-keyed domain
+state, raw primitive domain concepts, duplication, or workaround debt inside
+vague tasks like "clean up code" or "implement feature".
+
 ## Workflow
 
 ### Step 1: Investigation

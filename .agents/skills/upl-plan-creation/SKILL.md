@@ -6,7 +6,33 @@ implicit_invocation: true
 
 # UPL Plan Creation
 
+**HARD RULE - CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. All reads and writes go through the `uni-plan` CLI. See `AGENTS.md` for the full rule.
+
+**`--help` is the authoritative per-command reference (v0.85.0+).** Run `uni-plan <cmd> [<sub>] --help` for usage, required/optional flags, output schema, exit codes, and examples. Use it to discover the full flag surface for every command referenced below.
+
 Use this skill to create governed V4 topic bundles for uni-plan's own development.
+
+Use index-based entity references inside the bundle (`phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n]`, `tasks[n]`). Legacy keys like `P0` belong only in quoted archival filenames or historical notes.
+
+## Agentic Plan Handoff Standard
+
+A `.Plan.json` is a delegated work package for a future AI agent or junior
+developer, not a reminder list for the author. Write every topic, phase, lane,
+job, and task so that a competent junior developer can execute it without
+guessing architecture, ownership, or acceptance criteria.
+
+For code-bearing work, load the uni-plan refactor baseline as the quality
+reference before authoring design material:
+
+- Codex/project agents: `/Users/huypham/code/uni-plan/.agents/skills/upl-code-refactor/SKILL.md`
+- Claude agents: `/Users/huypham/code/uni-plan/.claude/skills/upl-code-refactor/SKILL.md`
+
+Reflect that baseline directly in the bundle: name target files/modules, new or
+changed `F`/`E`/`I` domain types, invariants, sequencing, validation commands,
+and SOLID/refactor risks. Split phases so structural cleanup comes before
+behavior changes; do not hide god structs, monolith files, string-keyed domain
+state, raw primitive domain concepts, duplication, or workaround debt inside
+vague tasks like "clean up code" or "implement feature".
 
 ## Workflow
 
@@ -25,76 +51,66 @@ Use this skill to create governed V4 topic bundles for uni-plan's own developmen
 | C5 | Does this require a version bump? |
 | C6 | Does this affect existing plan topics? |
 
-### Step 2: Author the .Plan.json Bundle
+### Step 2: Create The Bundle Via CLI (v0.94.0+)
 
-Create `Docs/Plans/<TopicPascalCase>.Plan.json` with the V4 bundle schema.
-
-**FTopicBundle structure**:
-
-```json
-{
-  "$schema": "plan-v4",
-  "topic": "TopicPascalCase",
-  "status": "not_started",
-  "title": "descriptive_snake_case_title",
-  "summary": "Prose paragraph describing the plan goals and approach.",
-  "goals": "Goal 1\nGoal 2\nGoal 3",
-  "non_goals": "Non-goal 1\nNon-goal 2",
-  "risks": "Risk | Impact | Mitigation (pipe-separated rows)",
-  "acceptance_criteria": "AC-1 | Description\nAC-2 | Description",
-  "problem_statement": "",
-  "validation_commands": "",
-  "baseline_audit": "",
-  "execution_strategy": "",
-  "locked_decisions": "",
-  "source_references": "",
-  "dependencies": "",
-  "phases": [
-    {
-      "scope": "Phase 0 scope description",
-      "output": "Expected deliverables",
-      "status": "not_started",
-      "done": "",
-      "remaining": "",
-      "blockers": "",
-      "started_at": "",
-      "completed_at": "",
-      "agent_context": "",
-      "lanes": [],
-      "jobs": [],
-      "testing": [],
-      "file_manifest": [],
-      "investigation": "",
-      "code_snippets": "",
-      "dependencies": "",
-      "readiness_gate": "",
-      "handoff": "",
-      "code_entity_contract": "",
-      "best_practices": "",
-      "validation_commands": "",
-      "multi_platforming": ""
-    }
-  ],
-  "next_actions": "Prioritized next steps",
-  "changelogs": [],
-  "verifications": []
-}
-```
-
-### Step 3: Register Initial Evidence
+Use `uni-plan topic add` to instantiate `Docs/Plans/<TopicPascalCase>.Plan.json`. The CLI writes through the typed serializer, auto-stamps a creation changelog, enforces PascalCase key regex at parse time, and refuses collisions. **Do not hand-write the JSON** - that path violates `hard_rule_cli_only` in `AGENTS.md`.
 
 ```bash
-uni-plan changelog add --topic <topic> --change "Plan created" --type feat
-uni-plan verification add --topic <topic> --check "Bundle validates" --result pass --detail "uni-plan validate passes"
+uni-plan topic add --topic <TopicPascalCase> --title "<descriptive title>" \
+  [--summary-file <path>] [--goals-file <path>] \
+  [--non-goals-file <path>] [--problem-statement-file <path>] \
+  [--baseline-audit-file <path>] [--execution-strategy-file <path>] \
+  [--locked-decisions-file <path>] [--source-references-file <path>]
 ```
 
-### Step 4: Validation
+Flags:
+- `--topic <PascalCase>` - topic key, must match `^[A-Z][A-Za-z0-9]*$` (regex enforced at parse time, `UsageError` exit 2 on violation). Key also becomes the disk filename stem.
+- `--title <text>` - required. Enforced by the `required_fields` ErrorMajor evaluator.
+- All prose flags have `--<flag>-file <path>` siblings (read raw bytes, no shell expansion).
+
+Exit codes: `0` bundle created; `1` collision (bundle already exists under repo root); `2` UsageError (bad key regex, missing `--topic`/`--title`).
+
+### Step 3: Seed Phase 0
+
+A fresh bundle has no phases and fails `uni-plan validate` with `phases_present` ErrorMajor - that is the expected governance signal. Seed the first phase next:
+
+```bash
+uni-plan phase add --topic <TopicPascalCase> \
+  --scope-file <phase0-scope.txt> --output-file <phase0-output.txt>
+```
+
+Default status is `not_started`. Follow with `uni-plan phase set` to populate design material fields (`--investigation`, `--readiness-gate`, `--handoff`, etc.).
+
+### Step 4: Register Initial Evidence
+
+The creation changelog is auto-stamped by `topic add`. Add a verification entry manually:
+
+```bash
+uni-plan verification add --topic <topic> --check "Bundle validates" \
+  --result pass --detail "uni-plan validate passes after Phase 0 seed"
+```
+
+### Optional: Extend With Additional Phases
+
+Call `uni-plan phase add` again for each trailing phase. Auto-changelog + typed serializer handle the rest.
+
+### Step 5: Validation
 
 ```bash
 uni-plan validate --topic <topic> --human
 ```
 
 Fix all findings before considering the plan bundle complete.
+
+### Optional: Normalize Smart Characters
+
+If design material was pasted from documents (word processors, web pages, chat), em-dashes, curly quotes, and NBSP may sneak in. Sweep a phase before validating:
+
+```bash
+uni-plan phase normalize --topic <topic> --phase <N> [--dry-run]
+```
+
+This replaces em/en/figure dashes with `-`, smart quotes with straight quotes, and NBSP with regular space - keeps the bundle clean against `no_smart_quotes`.
 
 ## Placement Rules
 
