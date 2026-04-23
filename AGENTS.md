@@ -403,6 +403,14 @@ PATCH. Two changes:
 
 kCliVersion bump: 0.102.0 → 0.102.1. Suite: 440 passing.
 
+### v0.103.0 behavior note — runtime phase metrics
+
+New read-only subcommand `uni-plan phase metric --topic <T> [--phase <N>|--phases <csv>] [--status <filter>] [--human]` emits runtime-only phase-depth metrics under schema `uni-plan-phase-metric-v1`. It does not add fields to `.Plan.json`, does not change the plan schema, and does not migrate existing plans.
+
+Metrics include `design_chars`, `solid_words`, `recursive_words`, `field_coverage_percent`, `work_items`, `testing_records`, `file_manifest_entries`, and `evidence_items`. The same computation now feeds the watch PHASE DETAIL metrics view toggled with `d`, where each metric renders as a gauge bar.
+
+kCliVersion bump: 0.102.1 → 0.103.0. MINOR per pre-1.0 SemVer — adds a new query subcommand, output schema, and watch UI surface.
+
 ## documentation_rules
 
 ### V4 bundle model
@@ -582,7 +590,7 @@ uni-plan <cmd> <sub> --help                      # per-subcommand detail
 Every query command emits JSON with:
 - Top-level schema envelope: `schema`, `generated_utc`, `repo_root`
 - `issues[]` — one entry per failing check (id, severity, topic, path, line, detail) for validator commands
-- `summary` — aggregate stats for `validate`: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`. Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation.
+- `summary` — aggregate stats for `validate`: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`. Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation. For richer runtime-only phase depth/intensity metrics, use `uni-plan phase metric` (v0.103.0); it does not alter the plan schema.
 
 ### File-based prose input
 

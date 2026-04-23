@@ -16,6 +16,10 @@ Before modifying panels, read:
 3. `Source/UniPlanWatchApp.cpp` — layout orchestration and keyboard handling
 4. `Source/UniPlanWatchSnapshot.h` — data structures fed to panels
 
+For PHASE DETAIL metrics work, also read `Source/UniPlanPhaseMetrics.h/.cpp`.
+Those values must stay shared with `uni-plan phase metric`; do not add a
+watch-only metric calculation in panel code.
+
 ## Architecture
 
 ### Panel Class Pattern
@@ -37,6 +41,9 @@ Panels are stateless — they receive data and return an FTXUI element tree. Sta
 ```
 BuildWatchSnapshot() → FDocWatchSnapshot → App selects relevant data → Panel::Render() → Element tree
 ```
+
+PHASE DETAIL metric gauges use runtime-only data computed in
+`ComputePhaseDepthMetrics()`. The `d` key toggles the metrics view.
 
 ### FTXUI Element Patterns
 

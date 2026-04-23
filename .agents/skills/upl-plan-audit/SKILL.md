@@ -8,7 +8,7 @@ implicit_invocation: true
 
 Use this skill for CLI-first topic audits. uni-plan IS the audit tool — use it directly.
 
-**HARD RULE - CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. Use `uni-plan topic get`, `phase list`, `phase get`, `validate`, `blockers`, `changelog`, `verification`, and `manifest list` for audit evidence. If a needed query is not expressible through the CLI, report a CLI gap instead of raw-reading the bundle.
+**HARD RULE - CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. Use `uni-plan topic get`, `phase list`, `phase get`, `phase metric`, `validate`, `blockers`, `changelog`, `verification`, and `manifest list` for audit evidence. If a needed query is not expressible through the CLI, report a CLI gap instead of raw-reading the bundle.
 
 Treat `phases[n]`, `lanes[n]`, `waves[n]`, `jobs[n]`, and `tasks[n]` as the canonical bundle entity references. Legacy phase keys should be reported only when they are being used as live bundle references, not when they appear inside a real historical filename.
 
@@ -42,6 +42,10 @@ uni-plan topic get --topic <topic> --human
 # Phase breakdown with status
 uni-plan phase list --topic <topic> --human
 
+# Runtime-only phase depth/intensity metrics
+uni-plan phase metric --topic <topic> --human
+uni-plan phase metric --topic <topic> --phase <N>
+
 # Specific phase detail (jobs, lanes, design material)
 uni-plan phase get --topic <topic> --phase <N> --human
 
@@ -64,7 +68,7 @@ Flag violations when a phase advances to `in_progress` without satisfying these:
 | Gate | Requirement |
 |------|-------------|
 | Design material | Phase has populated investigation, code entity contract, and testing fields |
-| Content depth | Phase design material has substantive content, not empty strings |
+| Content depth | `uni-plan phase metric` reports substantive `design_chars`, `solid_words`, recursive words, field coverage, work items, tests, files, and evidence |
 | Testing fields | Testable active phases have testing records with actor and step fields, including both manual and automation-capable coverage (`human` + `ai`/`automated`) |
 | Validation clean | `uni-plan validate --topic <topic>` reports no ErrorMajor issues; under `--strict`, no Warning or ErrorMinor issues either |
 | Content hygiene | No V3 terminology drift (`v3_terminology_free`), no legacy `doc` CLI refs (`legacy_cli_free`), no smart quotes (`no_smart_quotes`), no placeholder literals like `"None"`/`"TBD"` (`no_empty_placeholder_literal`), no duplicate changelogs (`no_duplicate_changelog`), no stale `.Plan.md` refs (`stale_plan_md_reference`), no broken topic refs (`topic_ref_integrity`) |

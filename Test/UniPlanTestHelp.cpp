@@ -136,6 +136,9 @@ TEST(HelpRouting, SubcommandHelpExitsZeroStdoutOnly)
         {"phase get --help",
          &UniPlan::RunBundlePhaseCommand,
          {"get", "--help"}},
+        {"phase metric --help",
+         &UniPlan::RunBundlePhaseCommand,
+         {"metric", "--help"}},
         {"phase set --help",
          &UniPlan::RunBundlePhaseCommand,
          {"set", "--help"}},
@@ -307,6 +310,7 @@ TEST(HelpContent, QuerySubcommandsCiteSchemaConstants)
         {"phase", "list", "uni-plan-phase-list-v2"},
         {"phase", "get", "uni-plan-phase-get-v1"},
         {"phase", "get", "uni-plan-phase-get-v2"},
+        {"phase", "metric", "uni-plan-phase-metric-v1"},
         {"phase", "drift", "uni-plan-phase-drift-v1"},
         {"changelog", "query", "uni-plan-changelog-v2"},
         {"verification", "query", "uni-plan-verification-v2"},
@@ -327,10 +331,10 @@ TEST(HelpContent, QuerySubcommandsCiteSchemaConstants)
 TEST(HelpContent, EveryLeafEmitsExitCodes)
 {
     const char *const kLeaves[][2] = {
-        {"topic", "list"},  {"topic", "get"},     {"topic", "set"},
-        {"phase", "list"},  {"phase", "get"},     {"phase", "set"},
-        {"phase", "drift"}, {"changelog", "add"}, {"verification", "add"},
-        {"job", "set"},     {"task", "set"},
+        {"topic", "list"},       {"topic", "get"},   {"topic", "set"},
+        {"phase", "list"},       {"phase", "get"},   {"phase", "metric"},
+        {"phase", "set"},        {"phase", "drift"}, {"changelog", "add"},
+        {"verification", "add"}, {"job", "set"},     {"task", "set"},
     };
     for (const auto &C : kLeaves)
     {
@@ -381,7 +385,7 @@ TEST(HelpCoverage, EveryDispatchTargetHasHelpEntry)
         {"topic",
          {"list", "get", "set", "start", "complete", "block", "status"}},
         {"phase",
-         {"list", "get", "set", "add", "remove", "normalize", "start",
+         {"list", "get", "metric", "set", "add", "remove", "normalize", "start",
           "complete", "block", "unblock", "progress", "complete-jobs", "log",
           "verify", "next", "readiness", "wave-status", "drift"}},
         {"job", {"set"}},

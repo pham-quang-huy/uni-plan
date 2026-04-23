@@ -807,6 +807,88 @@ FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FPhaseMetricOptions
+ParsePhaseMetricOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseMetricOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            Options.mTopic = ConsumeValuedOption(Remaining, Index, "--topic");
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            const std::string Val =
+                ConsumeValuedOption(Remaining, Index, "--phase");
+            if (Val.empty() ||
+                !std::isdigit(static_cast<unsigned char>(Val[0])))
+            {
+                throw UsageError("Phase must be an integer index (e.g. 6), "
+                                 "not a key (e.g. " +
+                                 Val + ")");
+            }
+            Options.mPhaseIndex = std::atoi(Val.c_str());
+            continue;
+        }
+        if (Token == "--phases")
+        {
+            const std::string Val =
+                ConsumeValuedOption(Remaining, Index, "--phases");
+            try
+            {
+                Options.mPhaseIndices = SplitCsvInts(Val);
+            }
+            catch (const std::invalid_argument &InError)
+            {
+                throw UsageError(
+                    "--phases requires a comma-separated list of non-negative "
+                    "integers (e.g. 1,3,5): " +
+                    std::string(InError.what()));
+            }
+            std::sort(Options.mPhaseIndices.begin(),
+                      Options.mPhaseIndices.end());
+            Options.mPhaseIndices.erase(
+                std::unique(Options.mPhaseIndices.begin(),
+                            Options.mPhaseIndices.end()),
+                Options.mPhaseIndices.end());
+            continue;
+        }
+        if (Token == "--status")
+        {
+            const std::string Raw =
+                ConsumeValuedOption(Remaining, Index, "--status");
+            if (Raw != "all")
+            {
+                EExecutionStatus Parsed;
+                if (!ExecutionStatusFromString(Raw, Parsed))
+                {
+                    throw UsageError(
+                        "Unsupported status '" + Raw +
+                        "'. Expected not_started|in_progress|completed|"
+                        "blocked|canceled|all");
+                }
+            }
+            Options.mStatus = Raw;
+            continue;
+        }
+        throw UsageError("Unknown option for phase metric: " + Token);
+    }
+    if (Options.mTopic.empty())
+    {
+        throw UsageError("phase metric requires --topic <topic>");
+    }
+    if (Options.mPhaseIndex >= 0 && !Options.mPhaseIndices.empty())
+    {
+        throw UsageError("phase metric: --phase and --phases are mutually "
+                         "exclusive; pick one");
+    }
+    return Options;
+}
+
 FBundleChangelogOptions
 ParseBundleChangelogOptions(const std::vector<std::string> &InTokens)
 {

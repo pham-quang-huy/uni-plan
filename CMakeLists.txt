@@ -57,6 +57,7 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanCommandPhase.cpp
     Source/UniPlanCommandLegacyGap.cpp
     Source/UniPlanLegacyDiscovery.cpp
+    Source/UniPlanPhaseMetrics.cpp
     Source/UniPlanPhaseKind.cpp
 )
 
@@ -122,6 +123,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestValidationContent.cpp
         Test/UniPlanTestHelp.cpp
         Test/UniPlanTestPhaseKind.cpp
+        Test/UniPlanTestPhaseMetrics.cpp
         Test/UniPlanTestGraph.cpp
         Test/UniPlanTestBundleWriteGuard.cpp
         Test/UniPlanTestEndToEnd.cpp

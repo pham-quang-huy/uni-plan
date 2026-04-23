@@ -6,13 +6,13 @@ implicit_invocation: true
 
 # UPL Plan Execution
 
-**HARD RULE — CLI-only access to `.Plan.json`.** Never `json.load` / raw JSON parsing on bundle files. All reads and mutations go through the `uni-plan` CLI; the skill's "direct manual bundle repair" escape hatch refers to hand-editing via an editor when explicitly requested, not programmatic raw JSON access. See `CLAUDE.md` `V4 bundle access — CLI-only` for the full rule.
+**HARD RULE — CLI-only access to `.Plan.json`.** Never `json.load`, raw JSON parsing, or manual editor repairs on bundle files. All reads and mutations go through the `uni-plan` CLI. If a needed action is not expressible through the CLI, report the CLI gap and stop. See `CLAUDE.md` `V4 bundle access — CLI-only` for the full rule.
 
 **`--help` is the authoritative per-command reference (v0.85.0+).** Run `uni-plan <cmd> [<sub>] --help` for usage, required/optional flags, mutually exclusive modes, output schema, exit codes, and examples. Examples below use the most common modes; when a flag in this skill disagrees with what `--help` emits, trust `--help`.
 
 Use this skill to execute plan phases with proper governance gates and automatic re-auditing.
 
-Treat the bundle itself as the execution source of truth. Use `phases[n]`-style references in bundle text and evidence, and only mention legacy phase keys when quoting a real historical filename. Prefer CLI mutations, but honor explicit user requests for direct manual bundle repair and re-validate immediately after.
+Treat the bundle itself as the execution source of truth. Use `phases[n]`-style references in bundle text and evidence, and only mention legacy phase keys when quoting a real historical filename. Mutate bundle state only through the `uni-plan` CLI.
 
 ## Agentic Execution Standard
 
@@ -69,7 +69,7 @@ Before marking a phase `in_progress`, verify ALL gates:
 | Gate | Requirement | Check |
 |------|-------------|-------|
 | Design material | Phase has non-empty investigation and design fields | `uni-plan phase get --topic <T> --phase <N> --design` (renamed from `--reference` in v0.83.0) |
-| Content depth | `design_chars ≥ 3000` (`kPhaseHollowChars`) clears `no_hollow_completed_phase`; `≥ 10000` (`kPhaseRichMinChars`) is the aspirational "rich" bar | Inspect `design_chars` header from `--design` output |
+| Content depth | Runtime metrics show enough plan detail for a future AI agent or junior developer: design chars, SOLID language, recursive words, field coverage, work items, tests, files, and evidence | `uni-plan phase metric --topic <T> --phase <N>` |
 | Testing | For testable active phases: testing records exist with both manual and automation-capable coverage | `uni-plan phase get --topic <T> --phase <N> --execution` |
 | Validation clean | No ErrorMajor issues for this topic | `uni-plan validate --topic <T>` |
 

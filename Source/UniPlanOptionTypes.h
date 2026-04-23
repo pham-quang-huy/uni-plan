@@ -93,6 +93,14 @@ struct FPhaseGetOptions : BaseOptions
                               //           measure and FPhaseDesignMaterial.
 };
 
+struct FPhaseMetricOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::vector<int> mPhaseIndices;
+    std::string mStatus = "all";
+};
+
 struct FBundleChangelogOptions : BaseOptions
 {
     std::string mTopic;

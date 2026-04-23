@@ -439,6 +439,18 @@ PATCH. Two changes — one bugfix, one test-coverage addition. Both discovered w
 
 Suite size after: 440 passing (was 437).
 
+### v0.103.0 behavior note — runtime phase metrics
+
+Adds a read-only audit surface for plan detail and intensity without changing the `.Plan.json` schema.
+
+- **New command**: `uni-plan phase metric --topic <T> [--phase <N>|--phases <csv>] [--status <filter>] [--human]`.
+- **Output schema**: `uni-plan-phase-metric-v1`. This is a command-output contract only, not a persisted bundle schema.
+- **Runtime-only metrics**: `design_chars`, `solid_words`, `recursive_words`, `field_coverage_percent`, `work_items`, `testing_records`, `file_manifest_entries`, and `evidence_items`.
+- **Watch mode**: PHASE DETAIL now has a `d` toggle for a metrics view. Every metric cell renders as a gauge bar using the same visual language as the existing Design column.
+- **No migration**: existing plans are unchanged. The command computes from existing phase, child, changelog, and verification data at query time.
+
+**kCliVersion bump**: 0.102.1 → 0.103.0. MINOR per pre-1.0 SemVer — adds a new subcommand, output schema, and watch UI surface.
+
 ## documentation_rules
 
 ### V4 bundle model
@@ -618,7 +630,7 @@ uni-plan <cmd> <sub> --help                      # per-subcommand detail
 Every query command emits JSON with:
 - Top-level schema envelope: `schema`, `generated_utc`, `repo_root`
 - `issues[]` — one entry per failing check (id, severity, topic, path, line, detail) for validator commands
-- `summary` — aggregate stats for `validate`: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`. Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation.
+- `summary` — aggregate stats for `validate`: `topic_count`, `topics[].phase_count`, `topics[].status_distribution`, and per-phase `scope_chars`, `output_chars`, `design_chars` (sum of investigation + code_entity_contract + code_snippets + best_practices + handoff + readiness_gate + multi_platforming), `jobs_count`, `testing_count`, `file_manifest_count`, `file_manifest_missing`. Added in v0.71.0 so agents can audit the full corpus through a single CLI invocation. For richer runtime-only phase depth/intensity metrics, use `uni-plan phase metric` (v0.103.0); it does not alter the plan schema.
 
 ### File-based prose input
 

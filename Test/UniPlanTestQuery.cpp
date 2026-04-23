@@ -3,6 +3,7 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanJSONIO.h"
 #include "UniPlanTypes.h"
+#include "UniPlanWatchSnapshot.h"
 
 #include <gtest/gtest.h>
 
@@ -215,6 +216,133 @@ TEST_F(FBundleTestFixture, PhaseListMissingTopicFails)
     StopCapture();
     EXPECT_EQ(Code, 1);
 }
+
+// ===================================================================
+// phase metric
+// ===================================================================
+
+TEST_F(FBundleTestFixture, PhaseMetricJsonReturnsMetrics)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"metric", "--topic", "SampleTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-phase-metric-v1");
+    EXPECT_EQ(Json["topic"], "SampleTopic");
+    EXPECT_EQ(Json["status_filter"], "all");
+    EXPECT_EQ(Json["count"], 3);
+    ASSERT_TRUE(Json.contains("thresholds"));
+    ASSERT_TRUE(Json.contains("phases"));
+    ASSERT_TRUE(Json["phases"][0].contains("solid_words"));
+    ASSERT_TRUE(Json["phases"][0].contains("recursive_words"));
+    ASSERT_TRUE(Json["phases"][0].contains("field_coverage_percent"));
+    ASSERT_TRUE(Json["phases"][0].contains("evidence_items"));
+}
+
+TEST_F(FBundleTestFixture, PhaseMetricSinglePhaseSelector)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"metric", "--topic", "SampleTopic", "--phase", "1", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["count"], 1);
+    EXPECT_EQ(Json["phases"][0]["index"], 1);
+}
+
+TEST_F(FBundleTestFixture, PhaseMetricBatchSelectorSortsAndDedupes)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"metric", "--topic", "SampleTopic", "--phases", "2,0,2", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["count"], 2);
+    EXPECT_EQ(Json["phases"][0]["index"], 0);
+    EXPECT_EQ(Json["phases"][1]["index"], 2);
+}
+
+TEST_F(FBundleTestFixture, PhaseMetricStatusFilter)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"metric", "--topic", "SampleTopic", "--status", "in_progress",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["status_filter"], "in_progress");
+    ASSERT_EQ(Json["count"], 1);
+    EXPECT_EQ(Json["phases"][0]["status"], "in_progress");
+}
+
+TEST_F(FBundleTestFixture, PhaseMetricHumanRendersTable)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"metric", "--topic", "SampleTopic", "--phase", "0", "--human",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+    EXPECT_NE(mCapturedStdout.find("Phase Metrics"), std::string::npos);
+    EXPECT_NE(mCapturedStdout.find("SOLID"), std::string::npos);
+    EXPECT_NE(mCapturedStdout.find("Evidence"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseMetricMissingTopicFails)
+{
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"metric", "--topic", "NoSuchTopic", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+}
+
+TEST_F(FBundleTestFixture, PhaseMetricOutOfRangeFails)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"metric", "--topic", "SampleTopic", "--phase", "9", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("out of range"), std::string::npos);
+}
+
+#if defined(UPLAN_WATCH)
+TEST_F(FBundleTestFixture, PhaseMetricWatchSnapshotCarriesMetrics)
+{
+    CopyFixture("SampleTopic");
+    const UniPlan::FDocWatchSnapshot Snapshot =
+        UniPlan::BuildWatchSnapshot(mRepoRoot.string(), false, "", false);
+
+    ASSERT_EQ(Snapshot.mActivePlans.size(), 1);
+    const UniPlan::FWatchPlanSummary &Plan = Snapshot.mActivePlans[0];
+    ASSERT_FALSE(Plan.mPhases.empty());
+    EXPECT_EQ(Plan.mPhases[0].mV4DesignChars,
+              Plan.mPhases[0].mMetrics.mDesignChars);
+    EXPECT_GT(Plan.mPhases[0].mMetrics.mRecursiveWordCount, 0);
+}
+#endif
 
 // ===================================================================
 // phase get

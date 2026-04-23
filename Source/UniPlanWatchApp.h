@@ -46,6 +46,7 @@ class DocWatchApp
     int mSelectedLaneIndex = -1;
     bool mbShowSchemaPane = false;
     bool mbShowImplPane = false;
+    bool mbShowPhaseMetricView = false;
     // Focus mode (toggled via `): hides the left overview pane and the plan
     // detail row of the right pane to give execution detail more space.
     bool mbFocusMode = false;

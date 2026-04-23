@@ -172,6 +172,33 @@ static Element DesignCharsBar(size_t InChars)
     return hbox(std::move(Bar));
 }
 
+static Element MetricGaugeBar(const size_t InValue, const size_t InHollow,
+                              const size_t InRich, const std::string &InLabel)
+{
+    static constexpr int kMetricBarWidth = 8;
+    const int Filled =
+        InRich == 0
+            ? 0
+            : std::min(kMetricBarWidth,
+                       static_cast<int>(
+                           (InValue * kMetricBarWidth + InRich - 1) / InRich));
+    const int Empty = kMetricBarWidth - Filled;
+    const auto BarColor = (InValue < InHollow) ? color(Color::Red)
+                          : (InValue < InRich) ? color(Color::Yellow)
+                                               : color(Color::Green);
+    Elements Bar;
+    for (int Index = 0; Index < Filled; ++Index)
+    {
+        Bar.push_back(text("\xe2\x96\x88") | BarColor);
+    }
+    for (int Index = 0; Index < Empty; ++Index)
+    {
+        Bar.push_back(text("\xe2\x96\x91") | dim);
+    }
+    Bar.push_back(text(" " + InLabel));
+    return hbox(std::move(Bar));
+}
+
 // Truncate helper removed in v0.97.0 — FTXUI renders panel content
 // verbatim; frame overflow is handled by the layout engine. Consumers
 // that need a preview trim on their end.
@@ -435,7 +462,8 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
 // ---------------------------------------------------------------------------
 
 Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
-                                 int InSelectedPhaseIndex) const
+                                 int InSelectedPhaseIndex,
+                                 bool InMetricView) const
 {
     if (InPlan.mTopicKey.empty())
     {
@@ -445,14 +473,32 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
 
     // gridbox layout — auto-aligns columns without Table's flex_shrink override
     std::vector<Elements> GridRows;
-    GridRows.push_back(PadGridRow({
-        text("P") | bold | size(WIDTH, EQUAL, 3),
-        text("Status") | bold | size(WIDTH, EQUAL, 14),
-        text("Design") | bold | size(WIDTH, EQUAL, 16),
-        text("Taxonomy") | bold | size(WIDTH, EQUAL, 30),
-        text("Scope") | bold | flex,
-        text("Output") | bold | flex,
-    }));
+    if (InMetricView)
+    {
+        GridRows.push_back(PadGridRow({
+            text("P") | bold | size(WIDTH, EQUAL, 3),
+            text("Status") | bold | size(WIDTH, EQUAL, 12),
+            text("Design") | bold | size(WIDTH, EQUAL, 14),
+            text("SOLID") | bold | size(WIDTH, EQUAL, 14),
+            text("Words") | bold | size(WIDTH, EQUAL, 14),
+            text("Fields") | bold | size(WIDTH, EQUAL, 14),
+            text("Work") | bold | size(WIDTH, EQUAL, 14),
+            text("Tests") | bold | size(WIDTH, EQUAL, 14),
+            text("Files") | bold | size(WIDTH, EQUAL, 14),
+            text("Evidence") | bold | size(WIDTH, EQUAL, 14),
+        }));
+    }
+    else
+    {
+        GridRows.push_back(PadGridRow({
+            text("P") | bold | size(WIDTH, EQUAL, 3),
+            text("Status") | bold | size(WIDTH, EQUAL, 14),
+            text("Design") | bold | size(WIDTH, EQUAL, 16),
+            text("Taxonomy") | bold | size(WIDTH, EQUAL, 30),
+            text("Scope") | bold | flex,
+            text("Output") | bold | flex,
+        }));
+    }
 
     const int MaxPhases = 20;
     const int Count = static_cast<int>(InPlan.mPhases.size());
@@ -560,14 +606,66 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
             }
         }
 
-        Elements RowCells = PadGridRow({
-            text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 3),
-            ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 14),
-            DesignCharsBar(Phase.mV4DesignChars) | size(WIDTH, EQUAL, 16),
-            text(TaxSummary) | dim | size(WIDTH, EQUAL, 30),
-            text(Desc) | dim | flex,
-            text(Output) | dim | flex,
-        });
+        Elements RowCells;
+        if (InMetricView)
+        {
+            const FPhaseRuntimeMetrics &Metrics = Phase.mMetrics;
+            RowCells = PadGridRow({
+                text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 3),
+                ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 12),
+                MetricGaugeBar(Metrics.mDesignChars, kPhaseHollowChars,
+                               kPhaseRichMinChars,
+                               std::to_string(Metrics.mDesignChars)) |
+                    size(WIDTH, EQUAL, 14),
+                MetricGaugeBar(Metrics.mSolidWordCount,
+                               kPhaseMetricSolidHollowWords,
+                               kPhaseMetricSolidRichWords,
+                               std::to_string(Metrics.mSolidWordCount)) |
+                    size(WIDTH, EQUAL, 14),
+                MetricGaugeBar(Metrics.mRecursiveWordCount,
+                               kPhaseMetricRecursiveHollowWords,
+                               kPhaseMetricRecursiveRichWords,
+                               std::to_string(Metrics.mRecursiveWordCount)) |
+                    size(WIDTH, EQUAL, 14),
+                MetricGaugeBar(Metrics.mFieldCoveragePercent,
+                               kPhaseMetricFieldCoverageHollowPercent,
+                               kPhaseMetricFieldCoverageRichPercent,
+                               std::to_string(Metrics.mFieldCoveragePercent) +
+                                   "%") |
+                    size(WIDTH, EQUAL, 14),
+                MetricGaugeBar(Metrics.mWorkItemCount,
+                               kPhaseMetricWorkHollowItems,
+                               kPhaseMetricWorkRichItems,
+                               std::to_string(Metrics.mWorkItemCount)) |
+                    size(WIDTH, EQUAL, 14),
+                MetricGaugeBar(Metrics.mTestingRecordCount,
+                               kPhaseMetricTestingHollowRecords,
+                               kPhaseMetricTestingRichRecords,
+                               std::to_string(Metrics.mTestingRecordCount)) |
+                    size(WIDTH, EQUAL, 14),
+                MetricGaugeBar(Metrics.mFileManifestCount,
+                               kPhaseMetricFileManifestHollowEntries,
+                               kPhaseMetricFileManifestRichEntries,
+                               std::to_string(Metrics.mFileManifestCount)) |
+                    size(WIDTH, EQUAL, 14),
+                MetricGaugeBar(Metrics.mEvidenceItemCount,
+                               kPhaseMetricEvidenceHollowItems,
+                               kPhaseMetricEvidenceRichItems,
+                               std::to_string(Metrics.mEvidenceItemCount)) |
+                    size(WIDTH, EQUAL, 14),
+            });
+        }
+        else
+        {
+            RowCells = PadGridRow({
+                text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 3),
+                ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 14),
+                DesignCharsBar(Phase.mV4DesignChars) | size(WIDTH, EQUAL, 16),
+                text(TaxSummary) | dim | size(WIDTH, EQUAL, 30),
+                text(Desc) | dim | flex,
+                text(Output) | dim | flex,
+            });
+        }
         if (Selected)
         {
             for (auto &Cell : RowCells)
@@ -597,8 +695,9 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
     // v0.97.0 no-truncation contract applies here too — FTXUI's frame
     // handles overflow at the terminal boundary; the CLI layer emits
     // the verbatim topic key.
-    const std::string Title = " [P]HASE DETAIL: " + InPlan.mTopicKey + " (" +
-                              std::to_string(Count) + ") ";
+    const std::string Title =
+        std::string(" [P]HASE DETAIL") + (InMetricView ? " METRICS: " : ": ") +
+        InPlan.mTopicKey + " (" + std::to_string(Count) + ") ";
     return window(text(Title) | bold | color(Color::Cyan),
                   vbox(std::move(FinalRows))) |
            size(HEIGHT, EQUAL, 25);
@@ -1760,8 +1859,8 @@ Element WatchStatusBar::Render(const std::string &InVersion,
         text("  |  Last: " + std::to_string(InPollMs) + "ms") | dim,
         text("  |  Plans: " + std::to_string(InCounters.mPlanCount)) | dim,
         filler(),
-        text("q=quit  a/A=plan  n/N=non-active  p/P=phase  w/W=wave  l/L=lane  "
-             "f/F=files  s=schema  i=impl  r=refresh") |
+        text("q=quit  a/A=plan  n/N=non-active  p/P=phase  d=metrics  "
+             "w/W=wave  l/L=lane  f/F=files  s=schema  i=impl  r=refresh") |
             dim,
         text("  "),
     });

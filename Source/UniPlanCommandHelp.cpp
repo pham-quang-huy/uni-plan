@@ -341,6 +341,29 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         true,
     },
     {
+        "metric",
+        "Usage: uni-plan phase metric --topic <T>\n"
+        "                             [--phase <N> | --phases <csv>]\n"
+        "                             [--status <filter>] [--human]\n\n",
+        "Compute runtime-only phase depth metrics for AI audits and the\n"
+        "watch PHASE DETAIL metrics view. This command never writes metrics\n"
+        "into .Plan.json and does not require a plan schema migration.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n\n",
+        "  --phase <N>             Optional single-phase selector\n"
+        "  --phases <csv>          Optional comma-separated phase selector\n"
+        "  --status <filter>       Filter by status: not_started|in_progress|\n"
+        "                          completed|blocked|canceled|all\n",
+        nullptr,
+        "uni-plan-phase-metric-v1",
+        "Examples:\n"
+        "  uni-plan phase metric --topic X\n"
+        "  uni-plan phase metric --topic X --phase 6\n"
+        "  uni-plan phase metric --topic X --status in_progress --human\n",
+        false,
+        true,
+    },
+    {
         "set",
         "Usage: uni-plan phase set --topic <T> --phase <N> [options]\n\n",
         "Low-level mutation of phase fields. Prefer the semantic commands\n"

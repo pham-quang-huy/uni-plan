@@ -1,6 +1,7 @@
 #include "UniPlanWatchSnapshot.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanPhaseMetrics.h"
 #include "UniPlanTopicTypes.h" // ComputePhaseDesignChars
 #include "UniPlanTypes.h"
 
@@ -36,9 +37,9 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
 
     // Build PhaseItem list from bundle phases. Pure V4 projection — every
     // column the watch TUI shows reads typed members off FPhaseRecord.
-    // `mV4DesignChars` feeds the PHASE DETAIL `Design` column; see
-    // `ComputePhaseDesignChars` (UniPlanTopicTypes.h) for the measure,
-    // which matches `legacy-gap`'s `v4_design_chars`.
+    // Runtime metrics feed the PHASE DETAIL `Design` column and metrics
+    // view. They are computed from the loaded bundle only and never written
+    // back into .Plan.json.
     for (size_t I = 0; I < InBundle.mPhases.size(); ++I)
     {
         const FPhaseRecord &Phase = InBundle.mPhases[I];
@@ -50,7 +51,8 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
         Item.mOutput = Phase.mOutput;
         Item.mDone = Phase.mLifecycle.mDone;
         Item.mRemaining = Phase.mLifecycle.mRemaining;
-        Item.mV4DesignChars = ComputePhaseDesignChars(Phase);
+        Item.mMetrics = ComputePhaseDepthMetrics(InBundle, I);
+        Item.mV4DesignChars = Item.mMetrics.mDesignChars;
         Summary.mPhases.push_back(std::move(Item));
 
         switch (Phase.mLifecycle.mStatus)

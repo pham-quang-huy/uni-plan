@@ -13,12 +13,23 @@ Your job is to verify that every CLI command has complete test coverage. You pro
 
 ### Step 1: Build command inventory
 
-Read `Source/UniPlanForwardDecls.h` and extract every `Run*Command` function declaration. Categorize each as:
-- **Query** (read-only): RunTopicCommand, RunBundlePhaseCommand, RunBundleChangelogCommand, RunBundleVerificationCommand, RunBundleTimelineCommand, RunBundleBlockersCommand, RunBundleValidateCommand, RunPhaseNextCommand, RunPhaseReadinessCommand, RunTopicStatusCommand, RunPhaseWaveStatusCommand
-- **Raw mutation**: RunTopicSetCommand, RunPhaseSetCommand, RunJobSetCommand, RunTaskSetCommand, RunChangelogAddCommand, RunVerificationAddCommand, RunLaneSetCommand
-- **Semantic lifecycle**: RunPhaseStartCommand, RunPhaseCompleteCommand, RunPhaseBlockCommand, RunPhaseUnblockCommand, RunPhaseProgressCommand, RunPhaseCompleteJobsCommand, RunTopicStartCommand, RunTopicCompleteCommand, RunTopicBlockCommand
-- **Evidence**: RunPhaseLogCommand, RunPhaseVerifyCommand
-- **Entity**: RunTestingAddCommand, RunManifestAddCommand
+Read `Source/UniPlanCommandCatalog.cpp`, `Source/UniPlanCommandHelp.cpp`,
+and `Source/UniPlanForwardDecls.h`. Build the inventory from the actual
+registered command groups and leaf subcommands, not from a stale hand-written
+list. Categorize each leaf as:
+- **Query** (read-only): topic/phase/changelog/verification/timeline/blockers/
+  validate/graph/manifest-list/readiness/drift/wave-status style commands,
+  including `phase metric` (runtime-only plan-depth metrics with schema
+  `uni-plan-phase-metric-v1`).
+- **Raw mutation**: low-level `set` / `add` / `remove` commands that mutate
+  bundle fields or entity arrays.
+- **Semantic lifecycle**: gated lifecycle commands such as topic/phase start,
+  complete, block, unblock, cancel, progress, complete-jobs, sync-execution,
+  and lane complete.
+- **Evidence**: `phase log`, `phase verify`, changelog and verification
+  mutations.
+- **Entity**: job/task/lane/testing/manifest/risk/next-action/
+  acceptance-criterion/priority-grouping/runbook/residual-risk leaf commands.
 
 ### Step 2: Build test inventory
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UniPlanEnums.h"
+#include "UniPlanPhaseMetrics.h"
 
 #include <cstdint>
 #include <string>
@@ -141,11 +142,10 @@ struct BlockerItem
 // mOutput, mDone, mRemaining) — no key/value bag and no V3 fuzzy-match
 // heuristics. Populated by BuildPlanSummaryFromBundle from FPhaseRecord.
 //
-// `mV4DesignChars` drives the PHASE DETAIL `Design` column. It is the
-// same signal as `legacy-gap`'s `v4_design_chars` — the single unified
-// measure of "how much plan has been authored for this phase" across
-// V4 and migration tooling. See `ComputePhaseDesignChars` in
-// UniPlanTopicTypes.h.
+// `mV4DesignChars` drives the default PHASE DETAIL `Design` column. The
+// full `mMetrics` payload drives the metrics view and the `phase metric`
+// CLI command. Both are runtime projections computed from existing bundle
+// fields; no metric is persisted into .Plan.json.
 struct PhaseItem
 {
     std::string mPhaseKey; // stringified zero-based phase index
@@ -156,6 +156,7 @@ struct PhaseItem
     std::string mDone;
     std::string mRemaining;
     size_t mV4DesignChars = 0; // ComputePhaseDesignChars(FPhaseRecord)
+    FPhaseRuntimeMetrics mMetrics;
 };
 
 // Per-subcommand help entry (v0.85.0). Each FCommandHelpEntry carries an

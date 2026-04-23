@@ -138,8 +138,8 @@ int DocWatchApp::Run()
             }
 
             // ── RIGHT PANE (detail for selected plan) ─────────────
-            auto rightRow1 =
-                PanelPhaseDetail.Render(SelectedPlan, mSelectedPhaseIndex);
+            auto rightRow1 = PanelPhaseDetail.Render(
+                SelectedPlan, mSelectedPhaseIndex, mbShowPhaseMetricView);
             auto rightRow2 = PanelTaxonomy.Render(
                 SelectedPlan, mSelectedPhaseIndex, mSelectedWaveIndex,
                 mSelectedLaneIndex, mbFocusMode);
@@ -544,6 +544,11 @@ int DocWatchApp::Run()
             if (InEvent == Event::Character('i'))
             {
                 mbShowImplPane = !mbShowImplPane;
+                return true;
+            }
+            if (InEvent == Event::Character('d'))
+            {
+                mbShowPhaseMetricView = !mbShowPhaseMetricView;
                 return true;
             }
             if (InEvent == Event::Character('`'))

@@ -108,6 +108,8 @@ FTopicGetOptions ParseTopicGetOptions(const std::vector<std::string> &InTokens);
 FPhaseListOptions
 ParsePhaseListOptions(const std::vector<std::string> &InTokens);
 FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens);
+FPhaseMetricOptions
+ParsePhaseMetricOptions(const std::vector<std::string> &InTokens);
 FBundleChangelogOptions
 ParseBundleChangelogOptions(const std::vector<std::string> &InTokens);
 FBundleVerificationOptions

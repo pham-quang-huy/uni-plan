@@ -40,7 +40,7 @@ class PhaseDetailPanel
 {
   public:
     ftxui::Element Render(const FWatchPlanSummary &InPlan,
-                          int InSelectedPhaseIndex) const;
+                          int InSelectedPhaseIndex, bool InMetricView) const;
 };
 
 class BlockersPanel

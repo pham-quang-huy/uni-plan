@@ -3,6 +3,7 @@
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanPhaseMetrics.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
@@ -129,6 +130,277 @@ static int RunBundlePhaseListHuman(const fs::path &InRepoRoot,
                       std::to_string(TaskCount),
                       ColorizeDesignChars(DesignChars),
                       kColorDim + Phase.mScope + kColorReset});
+    }
+    Table.Print();
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Phase Metric — JSON / Human
+// ---------------------------------------------------------------------------
+
+static void EmitMetricThresholdRangeJson(const char *InName,
+                                         const size_t InHollow,
+                                         const size_t InRich,
+                                         const bool InTrailingComma = true)
+{
+    std::cout << "\"" << InName << "\":{";
+    EmitJsonFieldSizeT("hollow", InHollow);
+    EmitJsonFieldSizeT("rich", InRich, false);
+    std::cout << "}";
+    if (InTrailingComma)
+    {
+        std::cout << ",";
+    }
+}
+
+static void EmitPhaseMetricThresholdsJson()
+{
+    std::cout << "\"thresholds\":{";
+    EmitMetricThresholdRangeJson("design_chars", kPhaseHollowChars,
+                                 kPhaseRichMinChars);
+    EmitMetricThresholdRangeJson("solid_words", kPhaseMetricSolidHollowWords,
+                                 kPhaseMetricSolidRichWords);
+    EmitMetricThresholdRangeJson("recursive_words",
+                                 kPhaseMetricRecursiveHollowWords,
+                                 kPhaseMetricRecursiveRichWords);
+    EmitMetricThresholdRangeJson("field_coverage_percent",
+                                 kPhaseMetricFieldCoverageHollowPercent,
+                                 kPhaseMetricFieldCoverageRichPercent);
+    EmitMetricThresholdRangeJson("work_items", kPhaseMetricWorkHollowItems,
+                                 kPhaseMetricWorkRichItems);
+    EmitMetricThresholdRangeJson("testing_records",
+                                 kPhaseMetricTestingHollowRecords,
+                                 kPhaseMetricTestingRichRecords);
+    EmitMetricThresholdRangeJson("file_manifest_entries",
+                                 kPhaseMetricFileManifestHollowEntries,
+                                 kPhaseMetricFileManifestRichEntries);
+    EmitMetricThresholdRangeJson("evidence_items",
+                                 kPhaseMetricEvidenceHollowItems,
+                                 kPhaseMetricEvidenceRichItems, false);
+    std::cout << "},";
+}
+
+static void EmitPhaseMetricObjectJson(const size_t InIndex,
+                                      const FPhaseRecord &InPhase,
+                                      const FPhaseRuntimeMetrics &InMetrics)
+{
+    std::cout << "{";
+    EmitJsonFieldSizeT("index", InIndex);
+    EmitJsonField("status", ToString(InPhase.mLifecycle.mStatus));
+    EmitJsonFieldSizeT("design_chars", InMetrics.mDesignChars);
+    EmitJsonFieldSizeT("solid_words", InMetrics.mSolidWordCount);
+    EmitJsonFieldSizeT("recursive_words", InMetrics.mRecursiveWordCount);
+    EmitJsonFieldSizeT("authored_fields", InMetrics.mAuthoredFieldCount);
+    EmitJsonFieldSizeT("authored_fields_total", InMetrics.mAuthoredFieldTotal);
+    EmitJsonFieldSizeT("field_coverage_percent",
+                       InMetrics.mFieldCoveragePercent);
+    EmitJsonFieldSizeT("lane_count", InMetrics.mLaneCount);
+    EmitJsonFieldSizeT("job_count", InMetrics.mJobCount);
+    EmitJsonFieldSizeT("task_count", InMetrics.mTaskCount);
+    EmitJsonFieldSizeT("work_items", InMetrics.mWorkItemCount);
+    EmitJsonFieldSizeT("testing_records", InMetrics.mTestingRecordCount);
+    EmitJsonFieldSizeT("file_manifest_entries", InMetrics.mFileManifestCount);
+    EmitJsonFieldSizeT("evidence_items", InMetrics.mEvidenceItemCount);
+    EmitJsonFieldSizeT("verification_count", InMetrics.mVerificationCount);
+    EmitJsonFieldSizeT("changelog_count", InMetrics.mChangelogCount, false);
+    std::cout << "}";
+}
+
+static std::string PhaseMetricRangeText(const size_t InPhaseCount)
+{
+    if (InPhaseCount == 0)
+    {
+        return " (topic has no phases)";
+    }
+    return " (0.." + std::to_string(InPhaseCount - 1) + ")";
+}
+
+static bool TryAppendPhaseMetricIndex(const FTopicBundle &InBundle,
+                                      const FPhaseMetricOptions &InOptions,
+                                      const int InIndex,
+                                      std::vector<size_t> &OutIndices)
+{
+    if (InIndex < 0 || static_cast<size_t>(InIndex) >= InBundle.mPhases.size())
+    {
+        std::cerr << "Phase index " << InIndex << " out of range"
+                  << PhaseMetricRangeText(InBundle.mPhases.size()) << "\n";
+        return false;
+    }
+
+    const FPhaseRecord &Phase = InBundle.mPhases[static_cast<size_t>(InIndex)];
+    const std::string Status = ToString(Phase.mLifecycle.mStatus);
+    if (InOptions.mStatus == "all" || InOptions.mStatus == Status)
+    {
+        OutIndices.push_back(static_cast<size_t>(InIndex));
+    }
+    return true;
+}
+
+static bool TryCollectPhaseMetricIndices(const FTopicBundle &InBundle,
+                                         const FPhaseMetricOptions &InOptions,
+                                         std::vector<size_t> &OutIndices)
+{
+    if (InOptions.mPhaseIndex >= 0)
+    {
+        return TryAppendPhaseMetricIndex(InBundle, InOptions,
+                                         InOptions.mPhaseIndex, OutIndices);
+    }
+    if (!InOptions.mPhaseIndices.empty())
+    {
+        for (const int Index : InOptions.mPhaseIndices)
+        {
+            if (!TryAppendPhaseMetricIndex(InBundle, InOptions, Index,
+                                           OutIndices))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    for (size_t Index = 0; Index < InBundle.mPhases.size(); ++Index)
+    {
+        if (!TryAppendPhaseMetricIndex(InBundle, InOptions,
+                                       static_cast<int>(Index), OutIndices))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static int RunBundlePhaseMetricJson(const fs::path &InRepoRoot,
+                                    const FPhaseMetricOptions &InOptions)
+{
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::vector<size_t> Indices;
+    if (!TryCollectPhaseMetricIndices(Bundle, InOptions, Indices))
+    {
+        return 1;
+    }
+
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kPhaseMetricSchema, UTC, InRepoRoot.string());
+    EmitJsonField("topic", Bundle.mTopicKey);
+    EmitJsonField("status_filter", InOptions.mStatus);
+    EmitPhaseMetricThresholdsJson();
+    EmitJsonFieldSizeT("count", Indices.size());
+    std::cout << "\"phases\":[";
+    for (size_t Offset = 0; Offset < Indices.size(); ++Offset)
+    {
+        const size_t Index = Indices[Offset];
+        PrintJsonSep(Offset);
+        EmitPhaseMetricObjectJson(Index, Bundle.mPhases[Index],
+                                  ComputePhaseDepthMetrics(Bundle, Index));
+    }
+    std::cout << "],";
+    std::vector<std::string> Warnings;
+    PrintJsonClose(Warnings);
+    return 0;
+}
+
+static const char *ColorForMetric(const size_t InValue, const size_t InHollow,
+                                  const size_t InRich)
+{
+    if (InValue < InHollow)
+    {
+        return kColorRed;
+    }
+    if (InValue < InRich)
+    {
+        return kColorYellow;
+    }
+    return kColorGreen;
+}
+
+static std::string HumanMetricBar(const size_t InValue, const size_t InHollow,
+                                  const size_t InRich,
+                                  const std::string &InLabel)
+{
+    static constexpr size_t kWidth = 8;
+    const size_t Filled =
+        InRich == 0
+            ? 0
+            : (std::min)(kWidth, (InValue * kWidth + InRich - 1) / InRich);
+    const std::string Bar = "[" + std::string(Filled, '#') +
+                            std::string(kWidth - Filled, '.') + "] " + InLabel;
+    return Colorize(ColorForMetric(InValue, InHollow, InRich), Bar);
+}
+
+static int RunBundlePhaseMetricHuman(const fs::path &InRepoRoot,
+                                     const FPhaseMetricOptions &InOptions)
+{
+    FTopicBundle Bundle;
+    std::string Error;
+    if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    std::vector<size_t> Indices;
+    if (!TryCollectPhaseMetricIndices(Bundle, InOptions, Indices))
+    {
+        return 1;
+    }
+
+    std::cout << kColorBold << "Phase Metrics" << kColorReset
+              << " topic=" << kColorOrange << Bundle.mTopicKey << kColorReset;
+    if (InOptions.mStatus != "all")
+    {
+        std::cout << " [status=" << InOptions.mStatus << "]";
+    }
+    std::cout << "\n\n";
+
+    HumanTable Table;
+    Table.mHeaders = {"Index",  "Status", "Design", "SOLID", "Words",
+                      "Fields", "Work",   "Tests",  "Files", "Evidence"};
+    for (const size_t Index : Indices)
+    {
+        const FPhaseRecord &Phase = Bundle.mPhases[Index];
+        const FPhaseRuntimeMetrics Metrics =
+            ComputePhaseDepthMetrics(Bundle, Index);
+        Table.AddRow({
+            std::to_string(Index),
+            ColorizeStatus(ToString(Phase.mLifecycle.mStatus)),
+            HumanMetricBar(Metrics.mDesignChars, kPhaseHollowChars,
+                           kPhaseRichMinChars,
+                           std::to_string(Metrics.mDesignChars)),
+            HumanMetricBar(Metrics.mSolidWordCount,
+                           kPhaseMetricSolidHollowWords,
+                           kPhaseMetricSolidRichWords,
+                           std::to_string(Metrics.mSolidWordCount)),
+            HumanMetricBar(Metrics.mRecursiveWordCount,
+                           kPhaseMetricRecursiveHollowWords,
+                           kPhaseMetricRecursiveRichWords,
+                           std::to_string(Metrics.mRecursiveWordCount)),
+            HumanMetricBar(Metrics.mFieldCoveragePercent,
+                           kPhaseMetricFieldCoverageHollowPercent,
+                           kPhaseMetricFieldCoverageRichPercent,
+                           std::to_string(Metrics.mFieldCoveragePercent) + "%"),
+            HumanMetricBar(Metrics.mWorkItemCount, kPhaseMetricWorkHollowItems,
+                           kPhaseMetricWorkRichItems,
+                           std::to_string(Metrics.mWorkItemCount)),
+            HumanMetricBar(Metrics.mTestingRecordCount,
+                           kPhaseMetricTestingHollowRecords,
+                           kPhaseMetricTestingRichRecords,
+                           std::to_string(Metrics.mTestingRecordCount)),
+            HumanMetricBar(Metrics.mFileManifestCount,
+                           kPhaseMetricFileManifestHollowEntries,
+                           kPhaseMetricFileManifestRichEntries,
+                           std::to_string(Metrics.mFileManifestCount)),
+            HumanMetricBar(Metrics.mEvidenceItemCount,
+                           kPhaseMetricEvidenceHollowItems,
+                           kPhaseMetricEvidenceRichItems,
+                           std::to_string(Metrics.mEvidenceItemCount)),
+        });
     }
     Table.Print();
     return 0;
@@ -758,6 +1030,18 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         if (Options.mbHuman)
             return RunBundlePhaseGetHuman(RepoRoot, Options);
         return RunBundlePhaseGetJson(RepoRoot, Options);
+    }
+
+    if (Sub == "metric")
+    {
+        const FPhaseMetricOptions Options = ParsePhaseMetricOptions(SubArgs);
+        const fs::path RepoRoot = NormalizeRepoRootPath(
+            Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+        if (Options.mbHuman)
+        {
+            return RunBundlePhaseMetricHuman(RepoRoot, Options);
+        }
+        return RunBundlePhaseMetricJson(RepoRoot, Options);
     }
 
     if (Sub == "set")

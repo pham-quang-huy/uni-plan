@@ -34,6 +34,12 @@ behavior changes; do not hide god structs, monolith files, string-keyed domain
 state, raw primitive domain concepts, duplication, or workaround debt inside
 vague tasks like "clean up code" or "implement feature".
 
+Before handing off a newly authored phase, run
+`uni-plan phase metric --topic <Topic> --phase <N>` and treat weak
+`solid_words`, recursive words, field coverage, work items, tests, files, or
+evidence as an authoring gap. These are runtime-only advisory signals; do not
+add metric fields to `.Plan.json`.
+
 ## Workflow
 
 ### Step 1: Investigation
@@ -98,6 +104,7 @@ Call `uni-plan phase add` again for each trailing phase. Auto-changelog + typed 
 
 ```bash
 uni-plan validate --topic <topic> --human
+uni-plan phase metric --topic <topic> --human
 ```
 
 Fix all findings before considering the plan bundle complete.

@@ -46,6 +46,7 @@ cd Build/CMake && ctest --output-on-failure
 | **Fixture** | `Test/UniPlanTestFixture.h/.cpp` | Temp dir, stdout/stderr capture, JSON parse |
 | **Option parsing** | `Test/UniPlanTestOptionParsing.cpp` | Pure functions, no fixture |
 | **Query commands** | `Test/UniPlanTestQuery.cpp` | SampleTopic fixture |
+| **Runtime phase metrics** | `Test/UniPlanTestPhaseMetrics.cpp` | In-memory bundle metrics + phase metric command guards |
 | **Raw mutations** | `Test/UniPlanTestMutation.cpp` | SampleTopic fixture |
 | **Semantic lifecycle** | `Test/UniPlanTestSemantic.cpp` | Minimal fixtures via CreateMinimalFixture |
 | **Evidence shortcuts** | `Test/UniPlanTestEvidence.cpp` | SampleTopic fixture |

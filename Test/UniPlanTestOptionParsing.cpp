@@ -205,6 +205,39 @@ TEST(OptionParsing, PhaseQueryRequiresTopicAndPhase)
                  UniPlan::UsageError);
 }
 
+TEST(OptionParsing, PhaseMetricParsesSelectorsAndStatus)
+{
+    const auto Opts = UniPlan::ParsePhaseMetricOptions(
+        {"--topic", "X", "--phases", "2,0,2", "--status", "in_progress",
+         "--human"});
+    EXPECT_EQ(Opts.mTopic, "X");
+    ASSERT_EQ(Opts.mPhaseIndices.size(), 2);
+    EXPECT_EQ(Opts.mPhaseIndices[0], 0);
+    EXPECT_EQ(Opts.mPhaseIndices[1], 2);
+    EXPECT_EQ(Opts.mStatus, "in_progress");
+    EXPECT_TRUE(Opts.mbHuman);
+}
+
+TEST(OptionParsing, PhaseMetricRequiresTopic)
+{
+    EXPECT_THROW(UniPlan::ParsePhaseMetricOptions({"--phase", "0"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, PhaseMetricRejectsSelectorConflict)
+{
+    EXPECT_THROW(UniPlan::ParsePhaseMetricOptions(
+                     {"--topic", "X", "--phase", "0", "--phases", "1"}),
+                 UniPlan::UsageError);
+}
+
+TEST(OptionParsing, PhaseMetricRejectsUnsupportedStatus)
+{
+    EXPECT_THROW(
+        UniPlan::ParsePhaseMetricOptions({"--topic", "X", "--status", "done"}),
+        UniPlan::UsageError);
+}
+
 TEST(OptionParsing, JobSetRequiresAll)
 {
     EXPECT_THROW(UniPlan::ParseJobSetOptions({"--topic", "X", "--phase", "0"}),
