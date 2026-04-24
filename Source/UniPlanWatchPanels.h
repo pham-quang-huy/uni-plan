@@ -145,9 +145,10 @@ class PlanDetailPanel
 class WatchStatusBar
 {
   public:
-    ftxui::Element Render(const std::string &InVersion,
-                          const std::string &InTime, int InTick, int InPollMs,
-                          const FWatchInventoryCounters &InCounters) const;
+    ftxui::Element
+    Render(const std::string &InVersion, const std::string &InTime, int InTick,
+           int InPollMs, const FWatchInventoryCounters &InCounters,
+           const FDocWatchSnapshot::FPerformance &InPerformance) const;
 };
 
 } // namespace UniPlan

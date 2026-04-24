@@ -120,7 +120,7 @@ uni-plan/
 │   ├── Plans/                 # Active .Plan.json bundles
 │   ├── Implementation/        # Legacy markdown fixtures / historical references
 │   └── Playbooks/             # Legacy markdown fixtures / historical references
-├── Test/                      # GoogleTest suite (187 tests as of v0.72.0)
+├── Test/                      # GoogleTest suite (467 tests as of v0.104.0)
 ├── ThirdParty/                # FTXUI (terminal UI library)
 ├── Build/                     # CMake output directory
 ├── .claude/                   # Claude Code system
@@ -450,6 +450,22 @@ Adds a read-only audit surface for plan detail and intensity without changing th
 - **No migration**: existing plans are unchanged. The command computes from existing phase, child, changelog, and verification data at query time.
 
 **kCliVersion bump**: 0.102.1 → 0.103.0. MINOR per pre-1.0 SemVer — adds a new subcommand, output schema, and watch UI surface.
+
+### v0.104.0 behavior note — incremental watch snapshots
+
+`uni-plan watch` now uses an in-memory snapshot cache for long-running watch
+sessions. It fingerprints `.Plan.json` bundles separately from lint-relevant
+`.md` files, reloads only changed bundles, reuses unchanged phase summaries and
+runtime metrics, and reruns markdown lint only when markdown files change.
+
+The cache is process-local and is not the persisted `uni-plan cache` store.
+It does not add `.Plan.json` fields, does not change command JSON schemas, and
+does not persist runtime metrics. The watch footer now exposes operation-count
+telemetry (`reload/reuse`, metric recompute count, validation/lint run vs
+reuse) so performance can be audited without wall-clock-only guesses.
+
+**kCliVersion bump**: 0.103.0 → 0.104.0. MINOR per pre-1.0 SemVer — changes
+watch runtime behavior and visible watch status text.
 
 ## documentation_rules
 

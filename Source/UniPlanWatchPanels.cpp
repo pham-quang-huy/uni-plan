@@ -1849,15 +1849,32 @@ Element PlanDetailPanel::Render(const FWatchPlanSummary &InPlan) const
 // WatchStatusBar
 // ---------------------------------------------------------------------------
 
-Element WatchStatusBar::Render(const std::string &InVersion,
-                               const std::string &InTime, int InTick,
-                               int InPollMs,
-                               const FWatchInventoryCounters &InCounters) const
+Element WatchStatusBar::Render(
+    const std::string &InVersion, const std::string &InTime, int InTick,
+    int InPollMs, const FWatchInventoryCounters &InCounters,
+    const FDocWatchSnapshot::FPerformance &InPerformance) const
 {
+    const std::string Validation =
+        InPerformance.mbValidationRan
+            ? std::to_string(InPerformance.mValidationDurationMs) + "ms"
+            : "reuse";
+    const std::string Lint =
+        InPerformance.mbLintRan
+            ? std::to_string(InPerformance.mLintDurationMs) + "ms"
+            : "reuse";
     return hbox({
         text(" Poll #" + std::to_string(InTick)) | bold,
         text("  |  Last: " + std::to_string(InPollMs) + "ms") | dim,
         text("  |  Plans: " + std::to_string(InCounters.mPlanCount)) | dim,
+        text("  |  Bundles: " +
+             std::to_string(InPerformance.mBundleReloadCount) + "r/" +
+             std::to_string(InPerformance.mBundleReuseCount) + "u") |
+            dim,
+        text("  |  Metrics: " +
+             std::to_string(InPerformance.mMetricRecomputeCount)) |
+            dim,
+        text("  |  Val: " + Validation) | dim,
+        text("  |  Lint: " + Lint) | dim,
         filler(),
         text("q=quit  a/A=plan  n/N=non-active  p/P=phase  d=metrics  "
              "w/W=wave  l/L=lane  f/F=files  s=schema  i=impl  r=refresh") |

@@ -1,4 +1,5 @@
 #include "UniPlanTypes.h"
+#include "UniPlanBundleIndex.h"
 #include "UniPlanHashHelpers.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanForwardDecls.h"
@@ -253,142 +254,12 @@ bool TryComputeMarkdownCorpusSignature(const fs::path &InRepoRoot,
                                        uint64_t &OutSignature,
                                        std::string &OutError)
 {
-    std::vector<MarkdownSignatureEntry> Entries;
-    const fs::directory_options IteratorOptions =
-        fs::directory_options::skip_permission_denied;
-    std::error_code Error;
-    fs::recursive_directory_iterator Iterator(InRepoRoot, IteratorOptions,
-                                              Error);
-    fs::recursive_directory_iterator EndIterator;
-    if (Error)
+    FMarkdownFileIndexResult Index;
+    if (!TryBuildMarkdownFileIndex(InRepoRoot, Index, OutError))
     {
-        OutError =
-            "Signature traversal initialization failed: " + Error.message();
         return false;
     }
-
-    while (Iterator != EndIterator)
-    {
-        const fs::directory_entry Entry = *Iterator;
-        const fs::path AbsolutePath = Entry.path();
-        const auto AdvanceIterator =
-            [&Iterator, &EndIterator, &OutError, &AbsolutePath]()
-        {
-            std::error_code AdvanceError;
-            Iterator.increment(AdvanceError);
-            if (AdvanceError)
-            {
-                OutError = "Signature traversal advance failed at '" +
-                           AbsolutePath.string() +
-                           "': " + AdvanceError.message();
-                Iterator = EndIterator;
-            }
-        };
-
-        std::error_code PathTypeError;
-        const bool IsDirectory = Entry.is_directory(PathTypeError);
-        if (PathTypeError)
-        {
-            OutError = "Signature traversal directory-type read failed for '" +
-                       AbsolutePath.string() + "': " + PathTypeError.message();
-            return false;
-        }
-
-        if (IsDirectory && ShouldSkipRecursionDirectory(AbsolutePath))
-        {
-            Iterator.disable_recursion_pending();
-            AdvanceIterator();
-            if (!OutError.empty())
-            {
-                return false;
-            }
-            continue;
-        }
-
-        const bool IsRegularFile = Entry.is_regular_file(PathTypeError);
-        if (PathTypeError)
-        {
-            OutError = "Signature traversal file-type read failed for '" +
-                       AbsolutePath.string() + "': " + PathTypeError.message();
-            return false;
-        }
-
-        if (!IsRegularFile || AbsolutePath.extension() != ".json")
-        {
-            AdvanceIterator();
-            if (!OutError.empty())
-            {
-                return false;
-            }
-            continue;
-        }
-
-        fs::path RelativePath;
-        try
-        {
-            RelativePath = fs::relative(AbsolutePath, InRepoRoot);
-        }
-        catch (const fs::filesystem_error &InError)
-        {
-            OutError =
-                "Signature traversal relative-path resolution failed for '" +
-                AbsolutePath.string() + "': " + InError.what();
-            return false;
-        }
-
-        std::error_code WriteTimeError;
-        const fs::file_time_type WriteTime =
-            fs::last_write_time(AbsolutePath, WriteTimeError);
-        if (WriteTimeError)
-        {
-            OutError = "Signature traversal write-time read failed for '" +
-                       AbsolutePath.string() + "': " + WriteTimeError.message();
-            return false;
-        }
-
-        std::error_code FileSizeError;
-        const uint64_t FileSize =
-            static_cast<uint64_t>(Entry.file_size(FileSizeError));
-        if (FileSizeError)
-        {
-            OutError = "Signature traversal file-size read failed for '" +
-                       AbsolutePath.string() + "': " + FileSizeError.message();
-            return false;
-        }
-
-        MarkdownSignatureEntry SignatureEntry;
-        SignatureEntry.mPath = ToGenericPath(RelativePath);
-        SignatureEntry.mWriteTime =
-            static_cast<uint64_t>(WriteTime.time_since_epoch().count());
-        SignatureEntry.mFileSize = FileSize;
-        Entries.push_back(std::move(SignatureEntry));
-
-        AdvanceIterator();
-        if (!OutError.empty())
-        {
-            return false;
-        }
-    }
-
-    std::sort(Entries.begin(), Entries.end(),
-              [](const MarkdownSignatureEntry &InLeft,
-                 const MarkdownSignatureEntry &InRight)
-              { return InLeft.mPath < InRight.mPath; });
-
-    uint64_t HashState = 1469598103934665603ull;
-    Fnv1aUpdateString(HashState, ToGenericPath(InRepoRoot));
-    Fnv1aUpdateUint64(HashState, static_cast<uint64_t>(Entries.size()));
-    for (const MarkdownSignatureEntry &Entry : Entries)
-    {
-        Fnv1aUpdateString(HashState, Entry.mPath);
-        Fnv1aUpdateByte(HashState, 0x1F);
-        Fnv1aUpdateUint64(HashState, Entry.mWriteTime);
-        Fnv1aUpdateByte(HashState, 0x1E);
-        Fnv1aUpdateUint64(HashState, Entry.mFileSize);
-        Fnv1aUpdateByte(HashState, 0x1D);
-    }
-
-    OutSignature = HashState;
+    OutSignature = Index.mSignature;
     return true;
 }
 

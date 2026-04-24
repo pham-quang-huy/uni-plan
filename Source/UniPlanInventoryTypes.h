@@ -82,13 +82,6 @@ struct Inventory
     std::vector<std::string> mWarnings;
 };
 
-struct MarkdownSignatureEntry
-{
-    std::string mPath;
-    uint64_t mWriteTime = 0;
-    uint64_t mFileSize = 0;
-};
-
 struct MarkdownDocument
 {
     fs::path mAbsolutePath;

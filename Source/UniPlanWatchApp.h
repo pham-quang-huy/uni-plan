@@ -33,6 +33,7 @@ class DocWatchApp
     bool mbUseCache = true;
 
     FDocWatchSnapshot mSnapshot{};
+    FWatchSnapshotCache mSnapshotCache{};
     std::atomic<bool> mRunning{false};
     std::thread mDataThread;
     std::mutex mStopMutex;
@@ -51,7 +52,6 @@ class DocWatchApp
     // detail row of the right pane to give execution detail more space.
     bool mbFocusMode = false;
     int mFilePageIndex = 0;
-    uint64_t mLastSignature = 0;
     std::atomic<bool> mbForceRefresh{false};
 };
 

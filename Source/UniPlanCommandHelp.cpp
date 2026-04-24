@@ -2596,11 +2596,9 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan cache config [--dir <path>] [--enabled <true|false>]\n"
         "                        [--verbose <true|false>]\n\n",
         "Manage the persisted inventory cache.\n\n"
-        "uni-plan scans the repository to build a documentation inventory.\n"
-        "This scan is cached to avoid repeating it on every invocation.\n"
-        "The cache is automatically invalidated when any markdown file is\n"
-        "added, removed, resized, or modified (tracked via FNV-1a hash of\n"
-        "file paths, sizes, and timestamps).\n\n"
+        "This cache is reserved for persisted inventory workflows. Watch\n"
+        "mode uses its own process-local in-memory cache and does not\n"
+        "write inventory.cache.\n\n"
         "Cache location: ~/.uni-plan/cache/<repo-hash>/inventory.cache\n"
         "Each repository gets its own entry keyed by a hash of the repo\n"
         "path.\n\n",
@@ -2623,8 +2621,10 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "watch",
         "Usage: uni-plan watch [--repo-root <path>]\n\n",
         "Launch the FTXUI terminal dashboard (watch mode). Live view of\n"
-        "active topics, phase timeline, blockers, and design-chars. Press\n"
-        "q to quit.\n\n"
+        "active topics, phase timeline, blockers, and phase metrics. Watch\n"
+        "keeps an in-memory snapshot cache while it runs; no .Plan.json\n"
+        "schema fields or persisted cache files are changed. Press q to\n"
+        "quit.\n\n"
         "Built only when uni-plan is compiled with -DUPLAN_WATCH=1\n"
         "(default on).\n\n",
         nullptr, // required

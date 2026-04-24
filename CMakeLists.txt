@@ -38,6 +38,7 @@ add_library(uni-plan-lib OBJECT
     Source/UniPlanOutputHuman.cpp
     Source/UniPlanOptionParsing.cpp
     Source/UniPlanJSONIO.cpp
+    Source/UniPlanBundleIndex.cpp
     Source/UniPlanBundleWriteGuard.cpp
     Source/UniPlanSchemaValidation.cpp
     Source/UniPlanCommandBundle.cpp
@@ -124,6 +125,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestHelp.cpp
         Test/UniPlanTestPhaseKind.cpp
         Test/UniPlanTestPhaseMetrics.cpp
+        Test/UniPlanTestWatchPerformance.cpp
         Test/UniPlanTestGraph.cpp
         Test/UniPlanTestBundleWriteGuard.cpp
         Test/UniPlanTestEndToEnd.cpp

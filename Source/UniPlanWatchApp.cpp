@@ -190,7 +190,8 @@ int DocWatchApp::Run()
             // ── Status bar ────────────────────────────────────────
             auto bar = PanelStatusBar.Render(
                 kCliVersion, mSnapshot.mSnapshotAtUTC, mTickCount,
-                mSnapshot.mPollDurationMs, mSnapshot.mInventory);
+                mSnapshot.mPollDurationMs, mSnapshot.mInventory,
+                mSnapshot.mPerformance);
 
             // ── Title ─────────────────────────────────────────────
             const std::string Title =
@@ -575,31 +576,14 @@ int DocWatchApp::Run()
                 const bool bForceRefresh =
                     mbForceRefresh.exchange(false, std::memory_order_relaxed);
 
-                // Signature-based change detection (skip first tick)
-                if (!bForceRefresh && !bFirstTick)
-                {
-                    uint64_t NewSignature = 0;
-                    std::string SignatureError;
-                    const fs::path RepoRoot = NormalizeRepoRootPath(mRepoRoot);
-                    TryComputeMarkdownCorpusSignature(RepoRoot, NewSignature,
-                                                      SignatureError);
-                    if (NewSignature == mLastSignature)
-                    {
-                        if (!WaitForNextPoll())
-                        {
-                            break;
-                        }
-                        continue;
-                    }
-                    mLastSignature = NewSignature;
-                }
-
                 // Full snapshot rebuild
                 FDocWatchSnapshot Fresh;
                 try
                 {
-                    Fresh = BuildWatchSnapshot(mRepoRoot, mbUseCache,
-                                               mConfig.mCacheDir, false);
+                    Fresh = BuildWatchSnapshotCached(
+                        mRepoRoot, mbUseCache, mConfig.mCacheDir,
+                        mConfig.mbCacheVerbose, mSnapshotCache,
+                        bForceRefresh || bFirstTick);
                 }
                 catch (const std::exception &Ex)
                 {
@@ -616,17 +600,7 @@ int DocWatchApp::Run()
                 {
                     break;
                 }
-
-                // Initialize signature after first build
-                if (bFirstTick)
-                {
-                    uint64_t Sig = 0;
-                    std::string Err;
-                    const fs::path Root = NormalizeRepoRootPath(mRepoRoot);
-                    TryComputeMarkdownCorpusSignature(Root, Sig, Err);
-                    mLastSignature = Sig;
-                    bFirstTick = false;
-                }
+                bFirstTick = false;
 
                 // Post the fresh snapshot back to the UI thread.
                 //

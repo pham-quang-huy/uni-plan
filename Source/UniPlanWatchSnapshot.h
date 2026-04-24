@@ -1,8 +1,10 @@
 #pragma once
 
+#include "UniPlanBundleIndex.h"
 #include "UniPlanTaxonomyTypes.h"
 #include "UniPlanTypes.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -125,11 +127,51 @@ struct FDocWatchSnapshot
     std::string mSnapshotAtUTC;
     std::string mRepoRoot;
     int mPollDurationMs = 0;
+    std::vector<std::string> mWarnings;
+
+    struct FPerformance
+    {
+        int mDiscoveryDurationMs = 0;
+        int mValidationDurationMs = 0;
+        int mLintDurationMs = 0;
+        int mBundleReloadCount = 0;
+        int mBundleReuseCount = 0;
+        int mMetricRecomputeCount = 0;
+        bool mbBundleSignatureChanged = false;
+        bool mbMarkdownSignatureChanged = false;
+        bool mbValidationRan = false;
+        bool mbLintRan = false;
+        bool mbForceRefresh = false;
+    } mPerformance;
+};
+
+struct FWatchCachedBundle
+{
+    FFileFingerprint mFingerprint;
+    FTopicBundle mBundle;
+    FWatchPlanSummary mSummary;
+};
+
+struct FWatchSnapshotCache
+{
+    std::map<std::string, FWatchCachedBundle> mBundlesByPath;
+    uint64_t mBundleSignature = 0;
+    uint64_t mMarkdownSignature = 0;
+    bool mbBundleSignatureValid = false;
+    bool mbMarkdownSignatureValid = false;
+    bool mbValidationValid = false;
+    bool mbLintValid = false;
+    FWatchValidationSummary mValidation{};
+    FWatchLintSummary mLint{};
 };
 
 FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
                                      bool InUseCache,
                                      const std::string &InCacheDir,
                                      bool InCacheVerbose);
+FDocWatchSnapshot
+BuildWatchSnapshotCached(const std::string &InRepoRoot, bool InUseCache,
+                         const std::string &InCacheDir, bool InCacheVerbose,
+                         FWatchSnapshotCache &InOutCache, bool InForceRefresh);
 
 } // namespace UniPlan

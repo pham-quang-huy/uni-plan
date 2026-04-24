@@ -1,13 +1,18 @@
 #include "UniPlanWatchSnapshot.h"
+#include "UniPlanBundleWriteGuard.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
+#include "UniPlanJSONIO.h"
 #include "UniPlanPhaseMetrics.h"
 #include "UniPlanTopicTypes.h" // ComputePhaseDesignChars
 #include "UniPlanTypes.h"
 
+#include <algorithm>
 #include <chrono>
+#include <iostream>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -126,73 +131,276 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
     return Summary;
 }
 
-FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
-                                     const bool InUseCache,
-                                     const std::string &InCacheDir,
-                                     const bool InCacheVerbose)
+static FWatchValidationSummary
+BuildWatchValidationSummary(const std::vector<FTopicBundle> &InBundles,
+                            const fs::path &InRepoRoot)
 {
-    const auto StartTime = std::chrono::steady_clock::now();
-
-    FDocWatchSnapshot Snapshot;
-    Snapshot.mRepoRoot = InRepoRoot;
-    Snapshot.mSnapshotAtUTC = GetUtcNow();
-
-    const fs::path RepoRoot = NormalizeRepoRootPath(InRepoRoot);
-
-    // 1. Load all V4 bundles directly
-    std::vector<std::string> BundleWarnings;
-    const std::vector<FTopicBundle> Bundles =
-        LoadAllBundles(RepoRoot, BundleWarnings);
-
-    Snapshot.mInventory.mPlanCount = static_cast<int>(Bundles.size());
-
-    // 2. Build plan summaries from bundles
-    for (const FTopicBundle &Bundle : Bundles)
-    {
-        FWatchPlanSummary Summary = BuildPlanSummaryFromBundle(Bundle);
-
-        if (Bundle.mStatus == ETopicStatus::InProgress)
-            Snapshot.mActivePlans.push_back(std::move(Summary));
-        else
-            Snapshot.mNonActivePlans.push_back(std::move(Summary));
-    }
-
-    Snapshot.mInventory.mActivePlanCount =
-        static_cast<int>(Snapshot.mActivePlans.size());
-    Snapshot.mInventory.mNonActivePlanCount =
-        static_cast<int>(Snapshot.mNonActivePlans.size());
-
-    // 3. Bundle validation (no .md reads)
-    const std::vector<ValidateCheck> Checks = ValidateAllBundles(Bundles);
+    FWatchValidationSummary Validation;
+    const std::vector<ValidateCheck> Checks =
+        ValidateAllBundles(InBundles, InRepoRoot);
 
     for (const ValidateCheck &Check : Checks)
     {
         if (Check.mbOk)
         {
-            Snapshot.mValidation.mPassedChecks++;
+            Validation.mPassedChecks++;
         }
         else
         {
-            Snapshot.mValidation.mFailedChecks++;
+            Validation.mFailedChecks++;
             if (Check.mSeverity == EValidationSeverity::ErrorMajor)
-                Snapshot.mValidation.mErrorMajorCount++;
+            {
+                Validation.mErrorMajorCount++;
+            }
             else if (Check.mSeverity == EValidationSeverity::ErrorMinor)
-                Snapshot.mValidation.mErrorMinorCount++;
+            {
+                Validation.mErrorMinorCount++;
+            }
             else
-                Snapshot.mValidation.mWarningCount++;
-            Snapshot.mValidation.mFailedCheckDetails.push_back(Check);
+            {
+                Validation.mWarningCount++;
+            }
+            Validation.mFailedCheckDetails.push_back(Check);
         }
     }
-    Snapshot.mValidation.mTotalChecks = static_cast<int>(Checks.size());
-    Snapshot.mValidation.mbOk = (Snapshot.mValidation.mErrorMajorCount == 0);
+    Validation.mTotalChecks = static_cast<int>(Checks.size());
+    Validation.mbOk = (Validation.mErrorMajorCount == 0);
+    return Validation;
+}
 
-    // 4. Lint
+static FWatchLintSummary BuildWatchLintSummary(const std::string &InRepoRoot)
+{
+    FWatchLintSummary Summary;
     const LintResult Lint = BuildLintResult(InRepoRoot, /*InQuiet=*/true);
-    Snapshot.mLint.mWarningCount = Lint.mWarningCount;
-    Snapshot.mLint.mNamePatternWarnings = Lint.mNamePatternWarningCount;
-    Snapshot.mLint.mMissingH1Warnings = Lint.mMissingH1WarningCount;
+    Summary.mWarningCount = Lint.mWarningCount;
+    Summary.mNamePatternWarnings = Lint.mNamePatternWarningCount;
+    Summary.mMissingH1Warnings = Lint.mMissingH1WarningCount;
+    return Summary;
+}
 
-    // 6. Aggregate all blockers
+static bool TryLoadIndexedBundle(const FBundleFileIndexEntry &InEntry,
+                                 FTopicBundle &OutBundle,
+                                 std::string &OutWarning)
+{
+    std::string Error;
+    if (!TryReadTopicBundle(fs::path(InEntry.mFingerprint.mPath), OutBundle,
+                            Error))
+    {
+        OutWarning = "Failed to read " + InEntry.mFingerprint.mRelativePath +
+                     ": " + Error;
+        return false;
+    }
+
+    OutBundle.mBundlePath = InEntry.mFingerprint.mPath;
+    std::string SessionError;
+    if (!CaptureReadSession(fs::path(InEntry.mFingerprint.mPath),
+                            OutBundle.mReadSession, SessionError))
+    {
+        OutWarning = "Bundle read-session capture failed for " +
+                     InEntry.mFingerprint.mRelativePath + ": " + SessionError;
+        return false;
+    }
+    return true;
+}
+
+static bool IsBundleCached(const FWatchSnapshotCache &InCache,
+                           const FBundleFileIndexEntry &InEntry)
+{
+    const auto It = InCache.mBundlesByPath.find(InEntry.mFingerprint.mPath);
+    return It != InCache.mBundlesByPath.end() &&
+           It->second.mFingerprint == InEntry.mFingerprint;
+}
+
+static void RemoveDeletedBundlesFromCache(
+    FWatchSnapshotCache &InOutCache,
+    const std::vector<FBundleFileIndexEntry> &InCurrentBundles)
+{
+    std::set<std::string> CurrentPaths;
+    for (const FBundleFileIndexEntry &Entry : InCurrentBundles)
+    {
+        CurrentPaths.insert(Entry.mFingerprint.mPath);
+    }
+
+    for (auto It = InOutCache.mBundlesByPath.begin();
+         It != InOutCache.mBundlesByPath.end();)
+    {
+        if (CurrentPaths.count(It->first) == 0)
+        {
+            It = InOutCache.mBundlesByPath.erase(It);
+        }
+        else
+        {
+            ++It;
+        }
+    }
+}
+
+static void AddPlanSummaryToSnapshot(FDocWatchSnapshot &InOutSnapshot,
+                                     const FWatchPlanSummary &InSummary)
+{
+    if (InSummary.mPlanStatus == ToString(ETopicStatus::InProgress))
+    {
+        InOutSnapshot.mActivePlans.push_back(InSummary);
+    }
+    else
+    {
+        InOutSnapshot.mNonActivePlans.push_back(InSummary);
+    }
+}
+
+FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
+                                           const bool InUseCache,
+                                           const std::string &InCacheDir,
+                                           const bool InCacheVerbose,
+                                           FWatchSnapshotCache &InOutCache,
+                                           const bool InForceRefresh)
+{
+    (void)InCacheDir;
+    const auto StartTime = std::chrono::steady_clock::now();
+
+    FDocWatchSnapshot Snapshot;
+    Snapshot.mRepoRoot = InRepoRoot;
+    Snapshot.mSnapshotAtUTC = GetUtcNow();
+    Snapshot.mPerformance.mbForceRefresh = InForceRefresh;
+
+    const fs::path RepoRoot = NormalizeRepoRootPath(InRepoRoot);
+
+    const auto DiscoveryStart = std::chrono::steady_clock::now();
+    FBundleFileIndexResult BundleIndex;
+    std::string BundleIndexError;
+    if (!TryBuildBundleFileIndex(RepoRoot, BundleIndex, BundleIndexError))
+    {
+        throw std::runtime_error(BundleIndexError);
+    }
+    Snapshot.mWarnings.insert(Snapshot.mWarnings.end(),
+                              BundleIndex.mWarnings.begin(),
+                              BundleIndex.mWarnings.end());
+
+    FMarkdownFileIndexResult MarkdownIndex;
+    std::string MarkdownIndexError;
+    if (!TryBuildMarkdownFileIndex(RepoRoot, MarkdownIndex, MarkdownIndexError))
+    {
+        throw std::runtime_error(MarkdownIndexError);
+    }
+    Snapshot.mWarnings.insert(Snapshot.mWarnings.end(),
+                              MarkdownIndex.mWarnings.begin(),
+                              MarkdownIndex.mWarnings.end());
+    const auto DiscoveryEnd = std::chrono::steady_clock::now();
+    Snapshot.mPerformance.mDiscoveryDurationMs =
+        static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                             DiscoveryEnd - DiscoveryStart)
+                             .count());
+
+    const bool bBundleSignatureChanged =
+        InForceRefresh || !InUseCache || !InOutCache.mbBundleSignatureValid ||
+        InOutCache.mBundleSignature != BundleIndex.mSignature;
+    const bool bMarkdownSignatureChanged =
+        InForceRefresh || !InUseCache || !InOutCache.mbMarkdownSignatureValid ||
+        InOutCache.mMarkdownSignature != MarkdownIndex.mSignature;
+    Snapshot.mPerformance.mbBundleSignatureChanged = bBundleSignatureChanged;
+    Snapshot.mPerformance.mbMarkdownSignatureChanged =
+        bMarkdownSignatureChanged;
+
+    if (!InUseCache)
+    {
+        InOutCache = FWatchSnapshotCache{};
+    }
+    else if (bBundleSignatureChanged)
+    {
+        RemoveDeletedBundlesFromCache(InOutCache, BundleIndex.mBundles);
+    }
+
+    std::vector<FTopicBundle> Bundles;
+    Bundles.reserve(BundleIndex.mBundles.size());
+
+    for (const FBundleFileIndexEntry &IndexedBundle : BundleIndex.mBundles)
+    {
+        if (InUseCache && !InForceRefresh &&
+            IsBundleCached(InOutCache, IndexedBundle))
+        {
+            const FWatchCachedBundle &Cached =
+                InOutCache.mBundlesByPath[IndexedBundle.mFingerprint.mPath];
+            Bundles.push_back(Cached.mBundle);
+            AddPlanSummaryToSnapshot(Snapshot, Cached.mSummary);
+            Snapshot.mPerformance.mBundleReuseCount++;
+            continue;
+        }
+
+        FTopicBundle Bundle;
+        std::string Warning;
+        if (!TryLoadIndexedBundle(IndexedBundle, Bundle, Warning))
+        {
+            Snapshot.mWarnings.push_back(Warning);
+            continue;
+        }
+
+        FWatchPlanSummary Summary = BuildPlanSummaryFromBundle(Bundle);
+        Snapshot.mPerformance.mBundleReloadCount++;
+        Snapshot.mPerformance.mMetricRecomputeCount +=
+            static_cast<int>(Bundle.mPhases.size());
+        Bundles.push_back(Bundle);
+        AddPlanSummaryToSnapshot(Snapshot, Summary);
+
+        if (InUseCache)
+        {
+            FWatchCachedBundle Cached;
+            Cached.mFingerprint = IndexedBundle.mFingerprint;
+            Cached.mBundle = std::move(Bundle);
+            Cached.mSummary = std::move(Summary);
+            InOutCache.mBundlesByPath[IndexedBundle.mFingerprint.mPath] =
+                std::move(Cached);
+        }
+    }
+
+    Snapshot.mInventory.mPlanCount = static_cast<int>(Bundles.size());
+    Snapshot.mInventory.mActivePlanCount =
+        static_cast<int>(Snapshot.mActivePlans.size());
+    Snapshot.mInventory.mNonActivePlanCount =
+        static_cast<int>(Snapshot.mNonActivePlans.size());
+
+    if (InUseCache && !bBundleSignatureChanged && InOutCache.mbValidationValid)
+    {
+        Snapshot.mValidation = InOutCache.mValidation;
+    }
+    else
+    {
+        const auto ValidationStart = std::chrono::steady_clock::now();
+        Snapshot.mValidation = BuildWatchValidationSummary(Bundles, RepoRoot);
+        const auto ValidationEnd = std::chrono::steady_clock::now();
+        Snapshot.mPerformance.mbValidationRan = true;
+        Snapshot.mPerformance.mValidationDurationMs = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                ValidationEnd - ValidationStart)
+                .count());
+        if (InUseCache)
+        {
+            InOutCache.mValidation = Snapshot.mValidation;
+            InOutCache.mbValidationValid = true;
+        }
+    }
+
+    if (InUseCache && !bMarkdownSignatureChanged && InOutCache.mbLintValid)
+    {
+        Snapshot.mLint = InOutCache.mLint;
+    }
+    else
+    {
+        const auto LintStart = std::chrono::steady_clock::now();
+        Snapshot.mLint = BuildWatchLintSummary(InRepoRoot);
+        const auto LintEnd = std::chrono::steady_clock::now();
+        Snapshot.mPerformance.mbLintRan = true;
+        Snapshot.mPerformance.mLintDurationMs = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(LintEnd -
+                                                                  LintStart)
+                .count());
+        if (InUseCache)
+        {
+            InOutCache.mLint = Snapshot.mLint;
+            InOutCache.mbLintValid = true;
+        }
+    }
+
+    // Aggregate all blockers
     for (const FWatchPlanSummary &Plan : Snapshot.mActivePlans)
     {
         Snapshot.mAllBlockers.insert(Snapshot.mAllBlockers.end(),
@@ -200,7 +408,27 @@ FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
                                      Plan.mBlockers.end());
     }
 
-    // 7. Measure poll duration
+    if (InUseCache)
+    {
+        InOutCache.mBundleSignature = BundleIndex.mSignature;
+        InOutCache.mMarkdownSignature = MarkdownIndex.mSignature;
+        InOutCache.mbBundleSignatureValid = true;
+        InOutCache.mbMarkdownSignatureValid = true;
+    }
+
+    if (InCacheVerbose)
+    {
+        std::cerr << "[watch-cache] reload="
+                  << Snapshot.mPerformance.mBundleReloadCount
+                  << " reuse=" << Snapshot.mPerformance.mBundleReuseCount
+                  << " metrics=" << Snapshot.mPerformance.mMetricRecomputeCount
+                  << " validation="
+                  << (Snapshot.mPerformance.mbValidationRan ? "run" : "reuse")
+                  << " lint="
+                  << (Snapshot.mPerformance.mbLintRan ? "run" : "reuse")
+                  << "\n";
+    }
+
     const auto EndTime = std::chrono::steady_clock::now();
     Snapshot.mPollDurationMs =
         static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -208,6 +436,17 @@ FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
                              .count());
 
     return Snapshot;
+}
+
+FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
+                                     const bool InUseCache,
+                                     const std::string &InCacheDir,
+                                     const bool InCacheVerbose)
+{
+    FWatchSnapshotCache Cache;
+    return BuildWatchSnapshotCached(InRepoRoot, InUseCache, InCacheDir,
+                                    InCacheVerbose, Cache,
+                                    /*InForceRefresh=*/true);
 }
 
 } // namespace UniPlan

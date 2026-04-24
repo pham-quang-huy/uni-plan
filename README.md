@@ -28,7 +28,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.97.0`) |
+| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.104.0`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |
@@ -237,6 +237,19 @@ Cross-reference the per-phase V3↔V4 parity bucket via `uni-plan legacy-gap [--
 The watch PHASE DETAIL panel uses the same metric engine. Press `d` to toggle the metrics view; each metric renders as an FTXUI gauge bar: `Design`, `SOLID`, `Words`, `Fields`, `Work`, `Tests`, `Files`, and `Evidence`.
 
 Use `phase metric` when an AI agent needs to audit whether a phase is detailed enough for a junior developer or follow-up agent to execute without reading the bundle JSON directly. `SOLID` is a deterministic keyword/phrase signal, not a proof of correctness.
+
+### watch_performance
+
+`uni-plan watch` uses an in-memory snapshot cache while the TUI process is
+running. It fingerprints `.Plan.json` bundles separately from lint-relevant
+`.md` files, reloads only changed bundles, reuses unchanged phase summaries and
+runtime metrics, and reruns markdown lint only when markdown files change.
+
+The footer reports operation-count telemetry: bundle reload/reuse counts,
+metric recompute count, validation run/reuse, and lint run/reuse. These counts
+are the primary performance signal; tests assert operation counts instead of
+fragile wall-clock timing. This cache is not persisted and does not alter
+`.Plan.json` schema or command JSON output.
 
 ## primary_use_cases
 
@@ -558,7 +571,7 @@ uni-plan/
 │   └── UniPlan*Helpers.h      # Domain helpers (String, File, JSON, Inventory, Markdown, Status, Output)
 ├── Schemas/                   # 10 canonical V3 schema files (used only by `uni-plan lint`)
 ├── Docs/                      # Plan corpus — active .Plan.json bundles live in Docs/Plans/
-├── Test/                      # GoogleTest suite (187 tests as of v0.72.0)
+├── Test/                      # GoogleTest suite (467 tests as of v0.104.0)
 ├── ThirdParty/                # FTXUI
 ├── Build/                     # CMake output (ignored)
 ├── .claude/                   # Rules, hooks, skills, agents
