@@ -94,6 +94,25 @@ All scripts under `.claude/` must use the `upl-` or `upl_` prefix.
 
 **Source-of-truth hierarchy**: `NAMING.md` > `CODING.md` > `CLAUDE.md` > rules > skills
 
+### 11. SKILL Length Hygiene (per `~/.claude/rules/skill-length-discipline.md`)
+
+Entry-point `SKILL.md` files should stay ≤ 300 lines; detail belongs in `references/*.md` per the rule. Scan:
+
+```bash
+find .claude/skills .agents/skills -name SKILL.md -not -path "*/references/*" 2>/dev/null | \
+  xargs -I {} bash -c 'lines=$(wc -l < "{}"); if [ "$lines" -gt 300 ]; then echo "$lines {}"; fi'
+```
+
+Each over-budget SKILL is a LOW finding (budget exceedance) or MEDIUM finding (if the bloat is `--help`-duplicating content — a second signal worth flagging). Check for `--help`-duplicating patterns inside each bloated SKILL:
+
+```bash
+# Markdown tables with Required / Options / Exit codes columns, or
+# `Usage: <cli> <cmd>` code blocks that reproduce --help output.
+grep -c -E "Usage:|Required:|Options:|Exit codes:" <skill>
+```
+
+Remediation: split into `references/command-map.md` (command reference) + `references/repair-recipes.md` (scenarios, workflows) + trimmed entry-point SKILL. The PreToolUse hook (`~/.claude/hooks/guard-skill-length.py`) prevents net growth of over-budget SKILLs going forward — compaction passes are always allowed, so incremental refactor works without disabling the guard.
+
 ## Severity Levels
 
 | Severity | Meaning | Example |
