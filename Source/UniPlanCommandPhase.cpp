@@ -480,9 +480,31 @@ static int RunBundlePhaseGetBatchJson(const fs::path &InRepoRoot,
 static int RunBundlePhaseGetJson(const fs::path &InRepoRoot,
                                  const FPhaseGetOptions &InOptions)
 {
-    // Batch mode (`--phases 1,3,5`) dispatches to its own renderer with
-    // the v2 wrapped-array schema. Single-phase mode keeps emitting the
-    // v1 flat schema for backward compatibility with pre-v0.84.0 callers.
+    // Batch mode (`--phases 1,3,5` or v0.105.0+ `--all-phases`) dispatches
+    // to the wrapped batch renderer. `--all-phases` is sugar for "every
+    // phase index": expand to mPhaseIndices once the bundle is loaded so
+    // the existing batch emitter path handles the iteration unchanged.
+    if (InOptions.mbAllPhases)
+    {
+        FTopicBundle BundleForCount;
+        std::string BundleErr;
+        if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, BundleForCount,
+                                  BundleErr))
+        {
+            std::cerr << BundleErr << "\n";
+            return 1;
+        }
+        FPhaseGetOptions Expanded = InOptions;
+        Expanded.mPhaseIndices.clear();
+        for (size_t I = 0; I < BundleForCount.mPhases.size(); ++I)
+        {
+            Expanded.mPhaseIndices.push_back(static_cast<int>(I));
+        }
+        // Empty-phase bundles emit an empty phases[] array via the batch
+        // renderer — that is the correct behavior for --all-phases on a
+        // newly-created bundle with no phases yet.
+        return RunBundlePhaseGetBatchJson(InRepoRoot, Expanded);
+    }
     if (!InOptions.mPhaseIndices.empty())
         return RunBundlePhaseGetBatchJson(InRepoRoot, InOptions);
 
@@ -947,11 +969,27 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
         return 1;
     }
 
-    if (!InOptions.mPhaseIndices.empty())
+    // --all-phases (v0.105.0+): expand to mPhaseIndices so the existing
+    // batch-render loop below handles every phase uniformly. Empty-phase
+    // bundles fall through as an empty batch — the loop renders nothing
+    // and exits 0.
+    std::vector<int> AllIndices;
+    const std::vector<int> *EffectiveIndices = &InOptions.mPhaseIndices;
+    if (InOptions.mbAllPhases)
+    {
+        AllIndices.reserve(Bundle.mPhases.size());
+        for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+        {
+            AllIndices.push_back(static_cast<int>(I));
+        }
+        EffectiveIndices = &AllIndices;
+    }
+
+    if (!EffectiveIndices->empty())
     {
         // Batch mode: bounds-check all indices up front before emitting
         // any output, then render each with a visible separator.
-        for (const int Idx : InOptions.mPhaseIndices)
+        for (const int Idx : *EffectiveIndices)
         {
             if (Idx < 0 || static_cast<size_t>(Idx) >= Bundle.mPhases.size())
             {
@@ -960,14 +998,13 @@ static int RunBundlePhaseGetHuman(const fs::path &InRepoRoot,
                 return 1;
             }
         }
-        for (size_t N = 0; N < InOptions.mPhaseIndices.size(); ++N)
+        for (size_t N = 0; N < EffectiveIndices->size(); ++N)
         {
             if (N > 0)
                 std::cout << kColorDim << "--------------------------------\n\n"
                           << kColorReset;
-            EmitPhaseGetHuman(Bundle,
-                              static_cast<size_t>(InOptions.mPhaseIndices[N]),
-                              InOptions);
+            EmitPhaseGetHuman(
+                Bundle, static_cast<size_t>((*EffectiveIndices)[N]), InOptions);
         }
         return 0;
     }

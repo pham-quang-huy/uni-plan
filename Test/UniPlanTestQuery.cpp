@@ -1786,3 +1786,119 @@ TEST_F(FBundleTestFixture, ChangelogHumanEmitsFullChange)
               std::string::npos)
         << "changelog --human must emit the full change byte-identical";
 }
+
+// ===================================================================
+// v0.105.0 phases[1] — --all-phases batch sweep on phase readiness
+// ===================================================================
+
+// The wrapped schema carries every phase's gate evaluation in one
+// JSON array — zero process forks for the caller, stable per-phase
+// shape so consumers that parsed the v1 single-phase envelope can
+// parse each phases[] element unchanged.
+TEST_F(FBundleTestFixture, PhaseReadinessAllPhasesEmitsBatchSchema)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunPhaseReadinessCommand(
+        {"--topic", "SampleTopic", "--all-phases", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"].get<std::string>(),
+              "uni-plan-phase-readiness-batch-v1");
+    EXPECT_TRUE(Json["ok"].get<bool>());
+    EXPECT_EQ(Json["topic"].get<std::string>(), "SampleTopic");
+    ASSERT_TRUE(Json.contains("phases"));
+    ASSERT_TRUE(Json["phases"].is_array());
+    ASSERT_GT(Json["phases"].size(), 0u);
+
+    // Every element carries the v1 per-phase payload shape.
+    const auto &First = Json["phases"][0];
+    EXPECT_TRUE(First.contains("topic"));
+    EXPECT_TRUE(First.contains("phase_index"));
+    EXPECT_TRUE(First.contains("ready"));
+    EXPECT_TRUE(First.contains("gates"));
+    EXPECT_TRUE(First["gates"].is_array());
+}
+
+// phase_index values are 0..N-1 with no gaps — --all-phases is the
+// full universe, not a filter.
+TEST_F(FBundleTestFixture, PhaseReadinessAllPhasesCoversEveryIndex)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunPhaseReadinessCommand(
+        {"--topic", "SampleTopic", "--all-phases", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+    const auto &Phases = Json["phases"];
+    for (size_t I = 0; I < Phases.size(); ++I)
+    {
+        EXPECT_EQ(Phases[I]["phase_index"].get<int>(), static_cast<int>(I));
+    }
+}
+
+// --phase and --all-phases are mutually exclusive at parse time.
+// UsageError (exit 2 by convention; gtest expects throw).
+TEST_F(FBundleTestFixture, PhaseReadinessAllPhasesConflictsWithPhase)
+{
+    CopyFixture("SampleTopic");
+    EXPECT_THROW(UniPlan::RunPhaseReadinessCommand(
+                     {"--topic", "SampleTopic", "--all-phases", "--phase", "0",
+                      "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+}
+
+// phase wave-status shares the FPhaseQueryOptions parser but rejects
+// --all-phases at handler time (wave tables are per-phase). Guard
+// against accidental acceptance by regression.
+TEST_F(FBundleTestFixture, PhaseWaveStatusRejectsAllPhases)
+{
+    CopyFixture("SampleTopic");
+    EXPECT_THROW(UniPlan::RunPhaseWaveStatusCommand(
+                     {"--topic", "SampleTopic", "--all-phases", "--repo-root",
+                      mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+}
+
+// phase get --all-phases expands to the v0.84.0 batch schema
+// (uni-plan-phase-get-v2) so existing batch consumers parse the
+// same shape whether indices came from --phases or --all-phases.
+TEST_F(FBundleTestFixture, PhaseGetAllPhasesEmitsBatchSchema)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunBundlePhaseCommand(
+        {"get", "--topic", "SampleTopic", "--all-phases", "--brief",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"].get<std::string>(), "uni-plan-phase-get-v2");
+    ASSERT_TRUE(Json.contains("phases"));
+    ASSERT_TRUE(Json["phases"].is_array());
+    ASSERT_GT(Json["phases"].size(), 0u);
+}
+
+// --all-phases and --phases must be mutually exclusive on phase get
+// the same way --all-phases and --phase are.
+TEST_F(FBundleTestFixture, PhaseGetAllPhasesConflictsWithPhases)
+{
+    CopyFixture("SampleTopic");
+    EXPECT_THROW(UniPlan::RunBundlePhaseCommand(
+                     {"get", "--topic", "SampleTopic", "--all-phases",
+                      "--phases", "0,1", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+}

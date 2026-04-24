@@ -15,23 +15,40 @@ void EmitMutationJson(
     const std::string &InTopic, const std::string &InTarget,
     const std::vector<
         std::pair<std::string, std::pair<std::string, std::string>>> &InChanges,
-    bool InAutoChangelog)
+    bool InAutoChangelog, bool InAckOnly)
 {
-    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    // v0.105.0 --ack-only path: compact envelope, changed_fields only.
+    // Bundle persistence is already done by the caller; this only
+    // affects the stdout response shape.
+    const char *Schema = InAckOnly ? kMutationAckSchema : kMutationSchema;
+    std::cout << "{\"schema\":" << JSONQuote(Schema) << ",";
     EmitJsonFieldBool("ok", true);
     EmitJsonField("topic", InTopic);
     EmitJsonField("target", InTarget);
-    std::cout << "\"changes\":[";
-    for (size_t I = 0; I < InChanges.size(); ++I)
+    if (InAckOnly)
     {
-        PrintJsonSep(I);
-        std::cout << "{";
-        EmitJsonField("field", InChanges[I].first);
-        EmitJsonField("old", InChanges[I].second.first);
-        EmitJsonField("new", InChanges[I].second.second, false);
-        std::cout << "}";
+        std::cout << "\"changed_fields\":[";
+        for (size_t I = 0; I < InChanges.size(); ++I)
+        {
+            PrintJsonSep(I);
+            std::cout << JSONQuote(InChanges[I].first);
+        }
+        std::cout << "],";
     }
-    std::cout << "],";
+    else
+    {
+        std::cout << "\"changes\":[";
+        for (size_t I = 0; I < InChanges.size(); ++I)
+        {
+            PrintJsonSep(I);
+            std::cout << "{";
+            EmitJsonField("field", InChanges[I].first);
+            EmitJsonField("old", InChanges[I].second.first);
+            EmitJsonField("new", InChanges[I].second.second, false);
+            std::cout << "}";
+        }
+        std::cout << "],";
+    }
     EmitJsonFieldBool("auto_changelog", InAutoChangelog, false);
     std::cout << "}\n";
 }

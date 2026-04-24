@@ -54,6 +54,16 @@ ConsumeCommonOptions(const std::vector<std::string> &InTokens,
             OutOptions.mbJson = false;
             continue;
         }
+        if (Token == "--ack-only")
+        {
+            // v0.105.0+: opt-in compact mutation response shape. Only
+            // affects default-JSON output on mutation commands; query
+            // commands ignore the flag. The flag value is consumed here
+            // so every parser that delegates to ConsumeCommonOptions
+            // picks it up without bespoke handling.
+            OutOptions.mbAckOnly = true;
+            continue;
+        }
         if (InAllowPositionalRoot && !HasExplicitRoot && !IsOptionToken(Token))
         {
             OutOptions.mRepoRoot = Token;
@@ -120,6 +130,53 @@ TryConsumeStringOrFileOption(const std::vector<std::string> &InTokens,
         return true;
     }
     return false;
+}
+
+// TryConsumeStringOrFileOrAppendFileOption — v0.105.0+ superset of
+// TryConsumeStringOrFileOption that also recognizes
+// `--<field>-append-file <path>`. When the append-file flag matches,
+// the file bytes are stored in OutValue (same as --<field>-file) AND
+// the field name is inserted into OutAppendFields so the mutation
+// handler can switch to concat-with-seam semantics via the
+// ComputeAppendOrReplace helper.
+//
+// Put the append-file branch BEFORE the file branch: both start with
+// `--<field>`, so `--<field>-file` and `--<field>-append-file` share a
+// prefix. The longer flag must be matched first to avoid the shorter
+// flag accidentally consuming the append-file token.
+//
+// Mutual exclusion between --<field>, --<field>-file, and
+// --<field>-append-file is the caller parser's responsibility: after
+// this helper returns true once for a given field, a second match for
+// the same field in the same invocation surfaces as a duplicate-flag
+// UsageError through the per-command parser's existing flow. Most
+// parsers achieve this implicitly because the per-field parse block
+// `continue`s after one match; agents authoring tests should never
+// supply two flags for the same field in one invocation.
+inline bool TryConsumeStringOrFileOrAppendFileOption(
+    const std::vector<std::string> &InTokens, size_t &InOutIndex,
+    const char *InStringFlag, const char *InFileFlag,
+    const char *InAppendFileFlag, const char *InFieldName,
+    std::string &OutValue, std::set<std::string> &OutAppendFields)
+{
+    const std::string &Token = InTokens[InOutIndex];
+    if (Token == InAppendFileFlag)
+    {
+        const std::string Path =
+            ConsumeValuedOption(InTokens, InOutIndex, InAppendFileFlag);
+        std::string Error;
+        if (!TryReadFileToString(fs::path(Path), OutValue, Error))
+        {
+            throw UsageError(std::string(InAppendFileFlag) + " '" + Path +
+                             "': " + Error);
+        }
+        OutAppendFields.insert(InFieldName);
+        return true;
+    }
+    // Delegate the --<field> / --<field>-file cases to the existing
+    // helper for a single source of truth on the non-append paths.
+    return TryConsumeStringOrFileOption(InTokens, InOutIndex, InStringFlag,
+                                        InFileFlag, OutValue);
 }
 
 // ConsumeValidationCommandsProse — handler for `--validation-commands <text>`
@@ -790,20 +847,30 @@ FPhaseGetOptions ParsePhaseGetOptions(const std::vector<std::string> &InTokens)
             Options.mbDesign = true;
             continue;
         }
+        if (Token == "--all-phases")
+        {
+            // v0.105.0+ sugar: expand to every index at handler-dispatch
+            // time once the bundle is loaded. Three-way mutual exclusion
+            // with --phase and --phases is enforced after the loop.
+            Options.mbAllPhases = true;
+            continue;
+        }
         throw UsageError("Unknown option for phase get: " + Token);
     }
     if (Options.mTopic.empty())
         throw UsageError("phase get requires --topic <topic>");
     // Enforce mutual exclusion and presence: exactly one of --phase /
-    // --phases must be provided.
+    // --phases / --all-phases must be provided.
     const bool bSingle = (Options.mPhaseIndex >= 0);
     const bool bBatch = !Options.mPhaseIndices.empty();
-    if (bSingle && bBatch)
-        throw UsageError("phase get: --phase and --phases are mutually "
-                         "exclusive; pick one");
-    if (!bSingle && !bBatch)
-        throw UsageError("phase get requires --phase <index> or "
-                         "--phases <csv>");
+    const bool bAll = Options.mbAllPhases;
+    const int ModeCount = (bSingle ? 1 : 0) + (bBatch ? 1 : 0) + (bAll ? 1 : 0);
+    if (ModeCount > 1)
+        throw UsageError("phase get: --phase, --phases, and --all-phases "
+                         "are mutually exclusive; pick one");
+    if (ModeCount == 0)
+        throw UsageError("phase get requires --phase <index>, "
+                         "--phases <csv>, or --all-phases");
     return Options;
 }
 
@@ -875,16 +942,26 @@ ParsePhaseMetricOptions(const std::vector<std::string> &InTokens)
             Options.mStatus = Raw;
             continue;
         }
+        if (Token == "--all-phases")
+        {
+            // v0.105.0+ sugar — expanded at handler dispatch.
+            Options.mbAllPhases = true;
+            continue;
+        }
         throw UsageError("Unknown option for phase metric: " + Token);
     }
     if (Options.mTopic.empty())
     {
         throw UsageError("phase metric requires --topic <topic>");
     }
-    if (Options.mPhaseIndex >= 0 && !Options.mPhaseIndices.empty())
+    const bool bSingle = Options.mPhaseIndex >= 0;
+    const bool bBatch = !Options.mPhaseIndices.empty();
+    const bool bAll = Options.mbAllPhases;
+    const int ModeCount = (bSingle ? 1 : 0) + (bBatch ? 1 : 0) + (bAll ? 1 : 0);
+    if (ModeCount > 1)
     {
-        throw UsageError("phase metric: --phase and --phases are mutually "
-                         "exclusive; pick one");
+        throw UsageError("phase metric: --phase, --phases, and --all-phases "
+                         "are mutually exclusive; pick one");
     }
     return Options;
 }
@@ -1488,32 +1565,46 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens)
         if (TryConsumeStringOrFileOption(Remaining, Index, "--output",
                                          "--output-file", Options.mOutput))
             continue;
-        if (TryConsumeStringOrFileOption(Remaining, Index, "--investigation",
-                                         "--investigation-file",
-                                         Options.mInvestigation))
+        // v0.105.0+: the 7 phase-set design-prose fields gain
+        // --<field>-append-file siblings via the three-flag parser
+        // helper. Field name literals must match the keys used by the
+        // handler's ComputeAppendOrReplace lookup.
+        if (TryConsumeStringOrFileOrAppendFileOption(
+                Remaining, Index, "--investigation", "--investigation-file",
+                "--investigation-append-file", "investigation",
+                Options.mInvestigation, Options.mAppendFields))
             continue;
-        if (TryConsumeStringOrFileOption(
+        if (TryConsumeStringOrFileOrAppendFileOption(
                 Remaining, Index, "--code-entity-contract",
-                "--code-entity-contract-file", Options.mCodeEntityContract))
+                "--code-entity-contract-file",
+                "--code-entity-contract-append-file", "code_entity_contract",
+                Options.mCodeEntityContract, Options.mAppendFields))
             continue;
-        if (TryConsumeStringOrFileOption(Remaining, Index, "--code-snippets",
-                                         "--code-snippets-file",
-                                         Options.mCodeSnippets))
+        if (TryConsumeStringOrFileOrAppendFileOption(
+                Remaining, Index, "--code-snippets", "--code-snippets-file",
+                "--code-snippets-append-file", "code_snippets",
+                Options.mCodeSnippets, Options.mAppendFields))
             continue;
-        if (TryConsumeStringOrFileOption(Remaining, Index, "--best-practices",
-                                         "--best-practices-file",
-                                         Options.mBestPractices))
+        if (TryConsumeStringOrFileOrAppendFileOption(
+                Remaining, Index, "--best-practices", "--best-practices-file",
+                "--best-practices-append-file", "best_practices",
+                Options.mBestPractices, Options.mAppendFields))
             continue;
-        if (TryConsumeStringOrFileOption(
+        if (TryConsumeStringOrFileOrAppendFileOption(
                 Remaining, Index, "--multi-platforming",
-                "--multi-platforming-file", Options.mMultiPlatforming))
+                "--multi-platforming-file", "--multi-platforming-append-file",
+                "multi_platforming", Options.mMultiPlatforming,
+                Options.mAppendFields))
             continue;
-        if (TryConsumeStringOrFileOption(Remaining, Index, "--readiness-gate",
-                                         "--readiness-gate-file",
-                                         Options.mReadinessGate))
+        if (TryConsumeStringOrFileOrAppendFileOption(
+                Remaining, Index, "--readiness-gate", "--readiness-gate-file",
+                "--readiness-gate-append-file", "readiness_gate",
+                Options.mReadinessGate, Options.mAppendFields))
             continue;
-        if (TryConsumeStringOrFileOption(Remaining, Index, "--handoff",
-                                         "--handoff-file", Options.mHandoff))
+        if (TryConsumeStringOrFileOrAppendFileOption(
+                Remaining, Index, "--handoff", "--handoff-file",
+                "--handoff-append-file", "handoff", Options.mHandoff,
+                Options.mAppendFields))
             continue;
         if (TryConsumeValidationCommandsProse(Remaining, Index,
                                               Options.mbValidationClear,
@@ -1758,6 +1849,26 @@ FTaskSetOptions ParseTaskSetOptions(const std::vector<std::string> &InTokens)
             continue;
         if (TryConsumeStringOrFileOption(Remaining, Index, "--notes",
                                          "--notes-file", Options.mNotes))
+            continue;
+        // v0.105.0+: --description / --description-file close the
+        // asymmetry where task add --description was supported but
+        // task set --description was not. Together with --force /
+        // --reason the mutation is gated at handler time against
+        // destroying audit history on non-NotStarted tasks.
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--description",
+                                         "--description-file",
+                                         Options.mDescription))
+        {
+            Options.mbDescriptionSet = true;
+            continue;
+        }
+        if (Token == "--force")
+        {
+            Options.mbForce = true;
+            continue;
+        }
+        if (TryConsumeStringOrFileOption(Remaining, Index, "--reason",
+                                         "--reason-file", Options.mReason))
             continue;
         throw UsageError("Unknown option for task set: " + Token);
     }
@@ -2262,12 +2373,25 @@ ParsePhaseQueryOptions(const std::vector<std::string> &InTokens)
             ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
             continue;
         }
+        if (Token == "--all-phases")
+        {
+            // v0.105.0+: sugar for batch sweep on `phase readiness`.
+            // `phase wave-status` consumes the same parser and enforces
+            // its own "phase required" semantic at handler time by
+            // rejecting mbAllPhases. Parse-time mutual exclusion with
+            // --phase is checked below.
+            Options.mbAllPhases = true;
+            continue;
+        }
         throw UsageError("Unknown option: " + Token);
     }
     if (Options.mTopic.empty())
         throw UsageError("Requires --topic");
-    if (Options.mPhaseIndex < 0)
-        throw UsageError("Requires --phase");
+    if (Options.mbAllPhases && Options.mPhaseIndex >= 0)
+        throw UsageError("--phase and --all-phases are mutually exclusive; "
+                         "pick one");
+    if (!Options.mbAllPhases && Options.mPhaseIndex < 0)
+        throw UsageError("Requires --phase <index> or --all-phases");
     return Options;
 }
 

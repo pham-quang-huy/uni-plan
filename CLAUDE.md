@@ -485,6 +485,277 @@ watch metric display semantics only; no command/schema/persisted-state change.
 `phase metric` threshold values are recalibrated under the existing output
 schema.
 
+### v0.105.0 behavior note — `--ack-only` compact mutation response
+
+Closes the largest observed token-waste surface on AI-agent dense-plan
+authoring sessions. Every mutation command that emits the generic
+`uni-plan-mutation-v1` envelope (`topic set` / `phase set` / `lane add` /
+`job add` / `task add` / `changelog add` / `verification add` /
+`manifest add` / `risk add` / `next-action add` /
+`acceptance-criterion add` / `priority-grouping add` / `runbook add` /
+`residual-risk add` and every `*set` / `*remove` sibling plus the
+lifecycle transitions in `UniPlanCommandLifecycle.cpp`: `phase start`,
+`phase complete`, `phase block`, `phase unblock`, `phase cancel`,
+`lane complete`, `topic start`, `topic complete`, `topic block`) now
+accepts an opt-in `--ack-only` flag.
+
+**Not affected**: `phase sync-execution` emits its own
+`uni-plan-sync-execution-v1` schema (per-entity `changes[]` + summary
+counts), not the generic mutation envelope. Its response is already
+compact by schema design; `--ack-only` is silently ignored on that
+command. Query commands (`validate`, `topic get`, `phase get`, `phase
+metric`, `phase readiness`, etc.) also ignore the flag — their own
+schemas stay unchanged.
+
+Under `--ack-only`:
+
+- The response schema is [`kMutationAckSchema`](Source/UniPlanCliConstants.h) =
+  `"uni-plan-mutation-ack-v1"` (new constant), not the default
+  `"uni-plan-mutation-v1"`.
+- The `"changes":[{"field":"…","old":"…","new":"…"}]` array is replaced
+  with a flat `"changed_fields":["…","…"]` list of field names. No
+  prior/new value echo.
+- Every other envelope field (`ok`, `topic`, `target`, `auto_changelog`)
+  is unchanged.
+
+Without `--ack-only` the response shape is byte-identical to v0.104.1.
+The on-disk bundle, the auto-changelog stamp, the `GuardedWriteBundle`
+v0.99.0+ lock-and-stale-check flow, the exit codes, and the validator
+surface are all **independent of the flag**. The flag only controls the
+stdout response envelope.
+
+**Implementation shape**:
+
+- [`BaseOptions`](Source/UniPlanOptionTypes.h) gains `bool mbAckOnly =
+  false`. Every Options struct inherits through `BaseOptions`, so the
+  flag is parsed once in `ConsumeCommonOptions`
+  ([Source/UniPlanOptionParsing.cpp](Source/UniPlanOptionParsing.cpp))
+  and threaded through to every handler.
+- [`EmitMutationJson`](Source/UniPlanCommandMutationCommon.cpp) grows a
+  5th `bool InAckOnly` parameter (header default `false` for migration
+  safety; every one of the 20 existing call sites in
+  `UniPlanCommandMutation.cpp` and `UniPlanCommandLifecycle.cpp`
+  explicitly passes `Options.mbAckOnly`).
+- Every mutation command's `--help` gains a `--ack-only` line under
+  `Common options` via
+  [`PrintSubcommandBlock`](Source/UniPlanCommandHelp.cpp) — gated by the
+  `uni-plan-mutation-` schema prefix so query-only commands do not
+  advertise the flag.
+
+**Tests** (`Test/UniPlanTestMutation.cpp`): 4 new fixtures covering
+`AckOnlyEmitsChangedFieldsNotOldNew`,
+`DefaultEnvelopeUnchangedWithoutAckOnly`,
+`AckOnlyDoesNotChangeDiskBytes`
+(the load-bearing byte-identical-bundle invariant), and
+`AckOnlyAutoChangelogStillStamped`. Suite size 469 → 473 passing.
+
+**kCliVersion**: lands at `0.105.0` at the phases[3] close-out of the
+[CliAgentErgonomics](Docs/Plans/CliAgentErgonomics.Plan.json) topic
+alongside the other v0.105.0 additions (`--all-phases` batch sugar,
+`task set --description` with gate, `--<field>-append-file`). Until
+that final phase completes, kCliVersion stays at `0.104.1`; the
+`--ack-only` surface is observable in the shipped binary after
+phases[0] builds green.
+
+### v0.105.0 behavior note — `--all-phases` batch sweep on query commands
+
+Closes the per-phase fork cost when an AI agent wants readiness /
+metric / get across every phase of a topic. Prior to v0.105.0,
+`uni-plan phase readiness` was single-phase only and callers had to
+loop:
+
+```bash
+for N in 0 1 2 3 4 5 6 7 8 9 10; do
+  uni-plan phase readiness --topic MegaScan --phase $N
+done
+```
+
+Each iteration forked a process (~30-50ms cold), totaling hundreds of
+ms per sweep. `phase get` and `phase metric` already accepted
+`--phases 0,1,...,N-1` but that required the caller to count phases
+first.
+
+**New surface**:
+
+- `uni-plan phase readiness --topic <T> --all-phases` — sweeps every
+  phase and emits a wrapped envelope with schema
+  [`kPhaseReadinessBatchSchema`](Source/UniPlanCliConstants.h) =
+  `"uni-plan-phase-readiness-batch-v1"`. Each element of `phases[]`
+  carries the same payload shape as the single-phase v1 emission, so
+  consumers that parsed v1 can parse each batch element unchanged.
+- `uni-plan phase get --topic <T> --all-phases` — sugar for the
+  existing v0.84.0 `--phases 0,1,...,N-1` path. Response schema is
+  the existing `uni-plan-phase-get-v2` batch envelope.
+- `uni-plan phase metric --topic <T> --all-phases` — explicit form of
+  the existing "no index selector = every phase" default. Mutual
+  exclusion with `--phase` / `--phases` is now enforced at parse time.
+
+**Mutual exclusion** (all three commands, parse-time
+[`UsageError`](Source/UniPlanOptionTypes.h) exit 2):
+
+- `--phase <N>` + `--phases <csv>` — mutually exclusive (pre-existing).
+- `--phase <N>` + `--all-phases` — mutually exclusive (new).
+- `--phases <csv>` + `--all-phases` — mutually exclusive (new).
+
+**Handler implementation**: `RunPhaseReadinessCommand`
+([Source/UniPlanCommandSemanticQuery.cpp](Source/UniPlanCommandSemanticQuery.cpp))
+extracts per-phase payload rendering into lambdas
+(`EvaluateGates`, `EmitPerPhaseJsonBody`, `EmitPerPhaseHuman`) so the
+batch path and the single-phase path share identical content. `phase
+get` and `phase metric` detect `mbAllPhases` on their options struct
+and expand to `mPhaseIndices` (populated with `0..N-1`) after the
+bundle loads, reusing the existing batch emitters. `phase wave-status`
+shares the `FPhaseQueryOptions` parser but explicitly rejects
+`--all-phases` at handler time — wave tables are per-phase by design.
+
+**Empty-phase topics**: `--all-phases` on a freshly-created topic with
+zero phases emits an empty `phases[]` array and exits 0. Callers that
+want to treat empty as error must check the array length themselves.
+
+**Tests** (`Test/UniPlanTestQuery.cpp`): 6 new fixtures covering the
+batch schema, full-index coverage, parse-time mutual exclusion on
+`phase readiness` and `phase get`, the wave-status rejection, and the
+`phase get --all-phases` → v2 batch envelope equivalence. Suite size
+473 → 479 passing.
+
+**kCliVersion**: still `0.104.1` until phases[3] closes the topic.
+The `--all-phases` surface is observable in the shipped binary after
+phases[1] builds green.
+
+### v0.105.0 behavior note — `task set --description` with safety gate
+
+Closes a documented CLI asymmetry from
+`square-bot/.claude/rules/square-bot-cli-gap-discipline.md`: `task add`
+accepted `--description` but `task set` did not, forcing authors who
+wanted to correct a typo in a task description to `task remove` +
+`task add` and destroy the task's audit history (`evidence`, `notes`,
+status transitions in the changelog).
+
+**New surface**:
+
+- `uni-plan task set --description <text>` and the paired
+  `--description-file <path>` (v0.76.0 shell-safety helper).
+- Safety gate: a description change is allowed freely when the task
+  is in status `not_started`. On any other status the mutation is
+  refused (parse-handler
+  [`UsageError`](Source/UniPlanOptionTypes.h) exit 2) unless the
+  caller supplies BOTH `--force` and a non-empty `--reason <text>`.
+  An all-whitespace reason is equivalent to no reason.
+- The forced path embeds the before/after description text and the
+  trimmed reason in the auto-changelog entry's `change` field, so
+  the reason for the overwrite is captured in the audit trail.
+
+**Implementation**:
+
+- [`FTaskSetOptions`](Source/UniPlanOptionTypes.h) gains
+  `mDescription`, `mbDescriptionSet`, `mbForce`, and `mReason`.
+  `mbDescriptionSet` distinguishes the "caller passed the flag" state
+  from the "caller omitted it" state, because `""` is a valid
+  description value (a legitimate clear-the-description request).
+- [`ParseTaskSetOptions`](Source/UniPlanOptionParsing.cpp) consumes
+  `--description` / `--description-file` (via the shared
+  `TryConsumeStringOrFileOption` helper), `--force`, and `--reason`
+  / `--reason-file`.
+- [`RunTaskSetCommand`](Source/UniPlanCommandMutation.cpp) runs the
+  gate before the auto-changelog stamp, and — on the forced path —
+  extends the `AppendAutoChangelog` change text with
+  `description forced-update: "<old>" -> "<new>" (reason: <trimmed>)`.
+- `task set --help` grows four new lines under `Options` documenting
+  `--description` / `--description-file` / `--force` / `--reason`
+  and the gate semantic.
+
+**Tests** (`Test/UniPlanTestMutation.cpp`): 5 new fixtures —
+`TaskSetDescriptionAllowedOnNotStartedTask`,
+`TaskSetDescriptionRefusedOnInProgressWithoutForce`,
+`TaskSetDescriptionAllowedWithForceAndReason` (asserts the change
+text contains both the new description and the reason),
+`TaskSetDescriptionForceAloneStillRefuses` (covers empty-reason and
+whitespace-only-reason variants),
+`TaskSetDescriptionFilePreservesShellHostileContent`. Suite size
+479 → 484 passing.
+
+**kCliVersion**: still `0.104.1` until phases[3] closes the topic.
+The `task set --description` surface is observable in the shipped
+binary after phases[2] builds green.
+
+### v0.105.0 behavior note — `--<field>-append-file` and topic seal
+
+Final phase of the [CliAgentErgonomics](Docs/Plans/CliAgentErgonomics.Plan.json)
+topic. Seals the v0.105.0 MINOR bump and closes the last accepted
+proposal surface (P5 `--<field>-append-file`, append-only variant).
+
+**New surface** (phase set only in this initial wave):
+
+Every one of the 7 phase-design prose fields gains a
+`--<field>-append-file <path>` sibling next to the existing
+`--<field> <text>` and `--<field>-file <path>` replace flags:
+
+- `--investigation-append-file`
+- `--code-entity-contract-append-file`
+- `--code-snippets-append-file`
+- `--best-practices-append-file`
+- `--multi-platforming-append-file`
+- `--readiness-gate-append-file`
+- `--handoff-append-file`
+
+**Semantics** (shared helper
+[`ComputeAppendOrReplace`](Source/UniPlanStringHelpers.h)):
+
+- When the existing stored value is empty: append is equivalent to
+  replace — no leading `\n\n` seam.
+- When the existing value is non-empty: result is
+  `<existing> + "\n\n" + <file content>`. The seam is exactly one
+  blank line (double-newline) regardless of trailing whitespace on
+  the existing value or leading whitespace on the file content.
+- Closes the pull-concat-push round-trip pattern authors used to hit
+  to grow a prose field by a small delta (e.g. 1k addition onto a
+  9k investigation no longer requires 9k pulled + 10k pushed — just
+  the delta pushed).
+
+**Infrastructure**:
+
+- [`BaseOptions`](Source/UniPlanOptionTypes.h) gains
+  `std::set<std::string> mAppendFields`. Every Options struct
+  inherits it.
+- [`TryConsumeStringOrFileOrAppendFileOption`](Source/UniPlanOptionParsing.cpp)
+  is a new parser helper that extends the v0.76.0
+  `TryConsumeStringOrFileOption` with a third companion flag
+  `--<field>-append-file <path>`. When the append branch matches, the
+  file bytes land in `OutValue` AND the field key is inserted into
+  `OutAppendFields`. The append-file branch is checked BEFORE the
+  file branch because the two flags share a `--<field>` prefix; the
+  longer match must win.
+- [`ComputeAppendOrReplace`](Source/UniPlanStringHelpers.h) is a pure
+  inline helper: `InAppend` selects between pass-through (replace)
+  and seam-concat semantics.
+- `RunPhaseSetCommand`'s `ApplyPhase` lambda routes through
+  `ComputeAppendOrReplace` with `Options.mAppendFields.count(<key>) > 0`
+  as the append toggle. Every one of the 7 design fields uses the
+  same key string that matches what the parser wrote.
+
+**Rollout scope**: phases[3] wires append-file into `phase set`'s 7
+design-prose fields only. The infrastructure (`BaseOptions.mAppendFields`,
+the parser helper, `ComputeAppendOrReplace`) is ready for future
+waves to extend append-file to `topic set` / `phase log` /
+`verification add/set` / `testing add/set` / `lane set` / `manifest
+set` / typed-array groups. Each future wave is a separate MINOR bump
+with its own tests.
+
+**Tests** (`Test/UniPlanTestMutation.cpp`): 4 new fixtures —
+`PhaseSetInvestigationAppendFileConcatsWithSeam`,
+`PhaseSetAppendFileOnEmptyFieldActsAsReplace`,
+`PhaseSetAppendFilePreservesShellHostileBytes`,
+`PhaseSetAppendFileCrossFieldIndependence`. Suite size 484 → 488
+passing.
+
+**kCliVersion bump**: `0.104.1` → `0.105.0`
+([Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h)). MINOR
+per pre-1.0 SemVer — the topic adds 4 new observable surfaces
+(`--ack-only`, `--all-phases`, `task set --description` with gate,
+`--<field>-append-file`), zero deprecations, no bundle format change,
+no evaluator-surface change, no concurrency-model change. Consumers
+that don't use any new flag see identical behavior to v0.104.1.
+
 ## documentation_rules
 
 ### V4 bundle model

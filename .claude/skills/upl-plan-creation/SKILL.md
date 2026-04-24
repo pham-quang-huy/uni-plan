@@ -117,6 +117,62 @@ handler args, raw `new F<Name>` without a smart-pointer factory, and
 prefixed with `// BAD:` are skipped. See
 `.claude/rules/upl-plan-snippet-discipline.md`.
 
+### Authoring ergonomics (v0.105.0+)
+
+Four flag families added in v0.105.0 tighten the CLI loop for AI-agent
+dense-plan authoring. Each is purely opt-in; default behavior matches
+v0.104.1 exactly for callers that do not set a flag.
+
+1. **`--ack-only` on every mutation command.** Switches the response
+   envelope to the compact `uni-plan-mutation-ack-v1` schema — a flat
+   `"changed_fields":["f1","f2"]` list instead of the full
+   `"changes":[{field,old,new}]` payload. Use this on every
+   programmatic mutation; save the default shape for
+   human-debugging. Bundle persistence, auto-changelog, and exit
+   codes are unaffected. Example:
+
+   ```bash
+   uni-plan phase set --topic T --phase 0 --investigation-file x.md --ack-only
+   ```
+
+2. **`--<field>-append-file <path>` on phase set's 7 design-prose
+   fields.** Reads the file's bytes and concatenates onto the existing
+   stored value with a single blank-line seam (`\n\n`). Empty existing
+   field ⇒ append is equivalent to replace. Eliminates the pull-
+   concat-push cycle when extending a phase's `investigation`,
+   `code_entity_contract`, `code_snippets`, `best_practices`,
+   `multi_platforming`, `readiness_gate`, or `handoff`:
+
+   ```bash
+   uni-plan phase set --topic T --phase 0 \
+       --investigation-append-file additional-findings.md --ack-only
+   ```
+
+   Mutually exclusive with `--<field>` and `--<field>-file` for the
+   same field on the same invocation.
+
+3. **`task set --description <text>` (or `--description-file`).** Closes
+   the long-standing CLI asymmetry where `task add` accepted
+   `--description` but `task set` did not, forcing `task remove` +
+   `task add` (which destroys audit history). Safety gate: allowed
+   freely when the task is `not_started`; otherwise requires
+   `--force` and a non-empty `--reason <text>`, which is embedded in
+   the auto-changelog for the audit trail.
+
+4. **`--all-phases` on `phase readiness` / `phase get` / `phase metric`.**
+   Sugar for "every phase index 0..N-1". `phase readiness` emits the
+   new `uni-plan-phase-readiness-batch-v1` wrapper; each element of
+   `phases[]` carries the same shape as the single-phase v1
+   emission. `phase get` expands to the existing v0.84.0
+   `uni-plan-phase-get-v2` batch envelope. Mutually exclusive with
+   `--phase` and `--phases` at parse time. Useful during plan-
+   creation to sweep readiness across every phase you just
+   authored:
+
+   ```bash
+   uni-plan phase readiness --topic <new-topic> --all-phases --human
+   ```
+
 ### Optional: Normalize Smart Characters
 
 If design material was pasted from documents (word processors, web pages, chat), em-dashes, curly quotes, and NBSP may sneak in. Sweep a phase before validating:

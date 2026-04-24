@@ -12,6 +12,42 @@
 namespace UniPlan
 {
 
+// v0.105.0+ helper shared by every mutation command that supports the
+// --<field>-append-file flag family. Given the existing stored value
+// for a prose field, the new value the caller supplied, and whether
+// the caller asked for append semantics (via the field name being
+// present in the caller's mAppendFields set), return the value that
+// should be written to the bundle.
+//
+// Append semantics:
+//   - If the existing value is empty, append is equivalent to replace
+//     (no leading "\n\n" seam). This matches the intuition "append to
+//     nothing = just set".
+//   - Otherwise, the result is existing + "\n\n" + new. The seam is
+//     always exactly one blank line (double-newline), regardless of
+//     trailing whitespace on the existing value or leading whitespace
+//     on the new value. Authors who want a different seam use
+//     pull + local-edit + --<field>-file replace.
+//
+// When InAppend is false the helper is a pure passthrough of InNew —
+// the replace path. Handler call sites thus become one uniform line:
+//     NewValue = ComputeAppendOrReplace(Existing, Options.mX,
+//                   Options.mBase.mAppendFields.count("x") > 0);
+inline std::string ComputeAppendOrReplace(const std::string &InExisting,
+                                          const std::string &InNew,
+                                          bool InAppend)
+{
+    if (!InAppend)
+    {
+        return InNew;
+    }
+    if (InExisting.empty())
+    {
+        return InNew;
+    }
+    return InExisting + "\n\n" + InNew;
+}
+
 // Replace common Unicode format artifacts with their ASCII equivalents so
 // prose round-trips cleanly through `no_smart_quotes`. Targets: em/en/figure
 // dash + horizontal bar -> "-"; smart single/double quotes -> straight

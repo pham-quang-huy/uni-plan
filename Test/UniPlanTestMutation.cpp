@@ -1711,10 +1711,10 @@ TEST_F(FBundleTestFixture, RunbookRemoveDropsEntry)
     CopyFixture("SampleTopic");
     for (const char *Name : {"A", "B"})
     {
-        UniPlan::RunRunbookAddCommand(
-            {"--topic", "SampleTopic", "--name", Name, "--trigger", "t",
-             "--command", "c", "--repo-root", mRepoRoot.string()},
-            mRepoRoot.string());
+        UniPlan::RunRunbookAddCommand({"--topic", "SampleTopic", "--name", Name,
+                                       "--trigger", "t", "--command", "c",
+                                       "--repo-root", mRepoRoot.string()},
+                                      mRepoRoot.string());
     }
 
     StartCapture();
@@ -1734,10 +1734,10 @@ TEST_F(FBundleTestFixture, RunbookRemoveDropsEntry)
 TEST_F(FBundleTestFixture, RunbookListEmitsEntries)
 {
     CopyFixture("SampleTopic");
-    UniPlan::RunRunbookAddCommand(
-        {"--topic", "SampleTopic", "--name", "N", "--trigger", "t", "--command",
-         "c", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
+    UniPlan::RunRunbookAddCommand({"--topic", "SampleTopic", "--name", "N",
+                                   "--trigger", "t", "--command", "c",
+                                   "--repo-root", mRepoRoot.string()},
+                                  mRepoRoot.string());
 
     StartCapture();
     const int Code = UniPlan::RunRunbookListCommand(
@@ -1778,10 +1778,10 @@ TEST_F(FBundleTestFixture, ResidualRiskAddWritesAllFields)
 TEST_F(FBundleTestFixture, ResidualRiskSetFillsClosureSha)
 {
     CopyFixture("SampleTopic");
-    UniPlan::RunResidualRiskAddCommand(
-        {"--topic", "SampleTopic", "--area", "A", "--observation", "O",
-         "--why-deferred", "W", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
+    UniPlan::RunResidualRiskAddCommand({"--topic", "SampleTopic", "--area", "A",
+                                        "--observation", "O", "--why-deferred",
+                                        "W", "--repo-root", mRepoRoot.string()},
+                                       mRepoRoot.string());
 
     StartCapture();
     const int Code = UniPlan::RunResidualRiskSetCommand(
@@ -1827,10 +1827,10 @@ TEST_F(FBundleTestFixture, ResidualRiskRemoveShiftsIndices)
 TEST_F(FBundleTestFixture, ResidualRiskListEmitsEntries)
 {
     CopyFixture("SampleTopic");
-    UniPlan::RunResidualRiskAddCommand(
-        {"--topic", "SampleTopic", "--area", "A", "--observation", "O",
-         "--why-deferred", "W", "--repo-root", mRepoRoot.string()},
-        mRepoRoot.string());
+    UniPlan::RunResidualRiskAddCommand({"--topic", "SampleTopic", "--area", "A",
+                                        "--observation", "O", "--why-deferred",
+                                        "W", "--repo-root", mRepoRoot.string()},
+                                       mRepoRoot.string());
 
     StartCapture();
     const int Code = UniPlan::RunResidualRiskListCommand(
@@ -1841,4 +1841,418 @@ TEST_F(FBundleTestFixture, ResidualRiskListEmitsEntries)
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["count"].get<int>(), 1);
     EXPECT_EQ(Json["residual_risks"][0]["area"].get<std::string>(), "A");
+}
+
+// ===================================================================
+// v0.105.0 phases[0] — --ack-only compact mutation response
+// ===================================================================
+
+// With --ack-only, the response envelope switches schema to
+// uni-plan-mutation-ack-v1, replaces "changes":[{field,old,new}] with a flat
+// "changed_fields":[<names>] array, and keeps "ok", "topic", "target",
+// "auto_changelog" untouched. Bundle persistence and auto-changelog land
+// identically under both shapes (covered by AckOnlyDoesNotChangeDiskBytes).
+TEST_F(FBundleTestFixture, AckOnlyEmitsChangedFieldsNotOldNew)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--done", "ack-only smoke",
+         "--ack-only", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"].get<std::string>(), "uni-plan-mutation-ack-v1");
+    EXPECT_TRUE(Json["ok"].get<bool>());
+    EXPECT_EQ(Json["topic"].get<std::string>(), "SampleTopic");
+    EXPECT_EQ(Json["target"].get<std::string>(), "phases[1]");
+    EXPECT_TRUE(Json.contains("changed_fields"));
+    EXPECT_FALSE(Json.contains("changes"));
+    ASSERT_TRUE(Json["changed_fields"].is_array());
+    const auto &Fields = Json["changed_fields"];
+    EXPECT_EQ(Fields.size(), 1u);
+    EXPECT_EQ(Fields[0].get<std::string>(), "done");
+    EXPECT_TRUE(Json["auto_changelog"].get<bool>());
+}
+
+// Without --ack-only, the response envelope keeps the v0.104.1 shape:
+// schema=uni-plan-mutation-v1, changes:[{field,old,new}]. Guards against
+// accidentally making --ack-only the default.
+TEST_F(FBundleTestFixture, DefaultEnvelopeUnchangedWithoutAckOnly)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--done", "default smoke",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"].get<std::string>(), "uni-plan-mutation-v1");
+    EXPECT_TRUE(Json.contains("changes"));
+    EXPECT_FALSE(Json.contains("changed_fields"));
+    ASSERT_TRUE(Json["changes"].is_array());
+    ASSERT_FALSE(Json["changes"].empty());
+    // Each changes[] entry keeps the full {field, old, new} triple.
+    EXPECT_TRUE(Json["changes"][0].contains("field"));
+    EXPECT_TRUE(Json["changes"][0].contains("old"));
+    EXPECT_TRUE(Json["changes"][0].contains("new"));
+}
+
+// Load-bearing invariant: the --ack-only flag MUST NOT affect what lands on
+// disk. The bundle bytes produced by an ack-only mutation must be
+// byte-identical to the bundle bytes produced by the same mutation without
+// --ack-only (given identical initial state).
+TEST_F(FBundleTestFixture, AckOnlyDoesNotChangeDiskBytes)
+{
+    // Baseline path: run mutation without --ack-only against a fresh copy.
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int BaselineCode = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--done",
+         "byte-identical probe", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(BaselineCode, 0);
+    UniPlan::FTopicBundle BaselineBundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", BaselineBundle));
+    const auto &BaselineDone = BaselineBundle.mPhases[1].mLifecycle.mDone;
+    const size_t BaselineChangelogs = BaselineBundle.mChangeLogs.size();
+
+    // Ack-only path: reset the fixture so both runs see the same starting
+    // bundle, then run the same mutation with --ack-only.
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int AckCode = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--done",
+         "byte-identical probe", "--ack-only", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(AckCode, 0);
+    UniPlan::FTopicBundle AckBundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", AckBundle));
+
+    // Load-bearing assertions: the on-disk semantic state is identical.
+    EXPECT_EQ(AckBundle.mPhases[1].mLifecycle.mDone, BaselineDone);
+    EXPECT_EQ(AckBundle.mChangeLogs.size(), BaselineChangelogs);
+    ASSERT_FALSE(AckBundle.mChangeLogs.empty());
+    EXPECT_EQ(AckBundle.mChangeLogs.back().mAffected, "phases[1]");
+}
+
+// --ack-only reports auto_changelog=true identically to the default path.
+// Regression guard: the auto-changelog stamping is unaffected by the
+// response-shape flag.
+TEST_F(FBundleTestFixture, AckOnlyAutoChangelogStillStamped)
+{
+    CopyFixture("SampleTopic");
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const size_t ChangelogsBefore = Before.mChangeLogs.size();
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--done", "ack changelog",
+         "--ack-only", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_TRUE(Json["auto_changelog"].get<bool>());
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mChangeLogs.size(), ChangelogsBefore + 1);
+    EXPECT_EQ(After.mChangeLogs.back().mAffected, "phases[1]");
+}
+
+// ===================================================================
+// v0.105.0 phases[2] — task set --description + safety gate
+// ===================================================================
+
+// Happy path: task is NotStarted, --description lands freely.
+TEST_F(FBundleTestFixture, TaskSetDescriptionAllowedOnNotStartedTask)
+{
+    // SampleTopic fixture: phases[1].jobs[2].tasks[0] is NotStarted.
+    // phase[0].jobs[0] tasks are already Completed in the fixture.
+    CopyFixture("SampleTopic");
+    StartCapture();
+    const int Code = UniPlan::RunTaskSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "2", "--task", "0",
+         "--description", "fresh new description", "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[1].mJobs[2].mTasks[0].mDescription,
+              "fresh new description");
+}
+
+// Refusal path: task is in_progress, plain --description is refused.
+TEST_F(FBundleTestFixture, TaskSetDescriptionRefusedOnInProgressWithoutForce)
+{
+    CopyFixture("SampleTopic");
+    // Flip the task to in_progress via the existing --status path.
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTaskSetCommand({"--topic", "SampleTopic", "--phase",
+                                          "0", "--job", "0", "--task", "0",
+                                          "--status", "in_progress",
+                                          "--repo-root", mRepoRoot.string()},
+                                         mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    const std::string DescBefore =
+        Before.mPhases[0].mJobs[0].mTasks[0].mDescription;
+
+    EXPECT_THROW(UniPlan::RunTaskSetCommand(
+                     {"--topic", "SampleTopic", "--phase", "0", "--job", "0",
+                      "--task", "0", "--description", "attempt", "--repo-root",
+                      mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", After));
+    EXPECT_EQ(After.mPhases[0].mJobs[0].mTasks[0].mDescription, DescBefore);
+}
+
+// Force path with a non-empty reason: allowed, and the reason is captured
+// in the auto-changelog entry's change text.
+TEST_F(FBundleTestFixture, TaskSetDescriptionAllowedWithForceAndReason)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTaskSetCommand({"--topic", "SampleTopic", "--phase",
+                                          "0", "--job", "0", "--task", "0",
+                                          "--status", "in_progress",
+                                          "--repo-root", mRepoRoot.string()},
+                                         mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    StartCapture();
+    const int Code = UniPlan::RunTaskSetCommand(
+        {"--topic", "SampleTopic", "--phase", "0", "--job", "0", "--task", "0",
+         "--description", "authorized rewrite", "--force", "--reason",
+         "audit-approved typo correction", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[0].mJobs[0].mTasks[0].mDescription,
+              "authorized rewrite");
+
+    // Changelog entry embeds the reason verbatim.
+    ASSERT_FALSE(Bundle.mChangeLogs.empty());
+    const std::string LastChange = Bundle.mChangeLogs.back().mChange;
+    EXPECT_NE(LastChange.find("authorized rewrite"), std::string::npos);
+    EXPECT_NE(LastChange.find("audit-approved typo correction"),
+              std::string::npos);
+    EXPECT_NE(LastChange.find("forced-update"), std::string::npos);
+}
+
+// --force alone (without --reason, or with whitespace-only reason) still
+// refuses. The reason text is load-bearing for the audit trail.
+TEST_F(FBundleTestFixture, TaskSetDescriptionForceAloneStillRefuses)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunTaskSetCommand({"--topic", "SampleTopic", "--phase",
+                                          "0", "--job", "0", "--task", "0",
+                                          "--status", "in_progress",
+                                          "--repo-root", mRepoRoot.string()},
+                                         mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    EXPECT_THROW(UniPlan::RunTaskSetCommand(
+                     {"--topic", "SampleTopic", "--phase", "0", "--job", "0",
+                      "--task", "0", "--description", "attempt", "--force",
+                      "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+
+    EXPECT_THROW(UniPlan::RunTaskSetCommand(
+                     {"--topic", "SampleTopic", "--phase", "0", "--job", "0",
+                      "--task", "0", "--description", "attempt", "--force",
+                      "--reason", "   ", "--repo-root", mRepoRoot.string()},
+                     mRepoRoot.string()),
+                 UniPlan::UsageError);
+}
+
+// --description-file reads raw bytes and preserves shell-hostile content
+// byte-identically through to the persisted task description.
+TEST_F(FBundleTestFixture, TaskSetDescriptionFilePreservesShellHostileContent)
+{
+    // Use NotStarted task (phases[1].jobs[2].tasks[0]) so the happy path
+    // lands without the gate. --description-file reads bytes raw.
+    CopyFixture("SampleTopic");
+    const std::string Hostile =
+        "line with $VAR, backticks ``, quotes \"\", and newline:\nsecond line";
+    const fs::path DescPath = mRepoRoot / "desc.txt";
+    std::ofstream(DescPath) << Hostile;
+
+    StartCapture();
+    const int Code = UniPlan::RunTaskSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1", "--job", "2", "--task", "0",
+         "--description-file", DescPath.string(), "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[1].mJobs[2].mTasks[0].mDescription, Hostile);
+}
+
+// ===================================================================
+// v0.105.0 phases[3] — --<field>-append-file on phase set design fields
+// ===================================================================
+
+// Happy path: non-empty existing investigation receives a blank-line
+// seam + the file's bytes.
+TEST_F(FBundleTestFixture, PhaseSetInvestigationAppendFileConcatsWithSeam)
+{
+    CopyFixture("SampleTopic");
+    // Establish a baseline investigation first via replace semantics.
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--investigation",
+                   "first paragraph", "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    const fs::path AppendPath = mRepoRoot / "append.txt";
+    std::ofstream(AppendPath) << "second paragraph";
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1",
+         "--investigation-append-file", AppendPath.string(), "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[1].mDesign.mInvestigation,
+              "first paragraph\n\nsecond paragraph");
+}
+
+// Empty-existing case: append acts like replace; no leading seam.
+TEST_F(FBundleTestFixture, PhaseSetAppendFileOnEmptyFieldActsAsReplace)
+{
+    CopyFixture("SampleTopic");
+    // phases[2] has an empty investigation in the fixture; verify and
+    // then exercise the empty-target append path.
+    UniPlan::FTopicBundle Before;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Before));
+    ASSERT_EQ(Before.mPhases[2].mDesign.mInvestigation, "");
+
+    const fs::path AppendPath = mRepoRoot / "append.txt";
+    std::ofstream(AppendPath) << "only paragraph";
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "2",
+         "--investigation-append-file", AppendPath.string(), "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[2].mDesign.mInvestigation, "only paragraph");
+    EXPECT_EQ(Bundle.mPhases[2].mDesign.mInvestigation.find("\n\n"),
+              std::string::npos);
+}
+
+// Shell-hostile content round-trips byte-identically through the
+// append-file path (same guarantee as v0.76.0 --<field>-file).
+TEST_F(FBundleTestFixture, PhaseSetAppendFilePreservesShellHostileBytes)
+{
+    CopyFixture("SampleTopic");
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand({"--topic", "SampleTopic", "--phase",
+                                           "1", "--investigation", "baseline",
+                                           "--repo-root", mRepoRoot.string()},
+                                          mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    const std::string Hostile = "additional $VAR content\n"
+                                "| pipeline | here\n"
+                                "backticks `cat` and \"quotes\"";
+    const fs::path AppendPath = mRepoRoot / "append.txt";
+    std::ofstream(AppendPath) << Hostile;
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1",
+         "--investigation-append-file", AppendPath.string(), "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[1].mDesign.mInvestigation,
+              std::string("baseline\n\n") + Hostile);
+}
+
+// Cross-field: two --<field>-append-file flags for different fields in
+// one invocation both land correctly; they do not interfere.
+TEST_F(FBundleTestFixture, PhaseSetAppendFileCrossFieldIndependence)
+{
+    CopyFixture("SampleTopic");
+    // Baseline: establish both investigation and handoff via replace.
+    StartCapture();
+    ASSERT_EQ(UniPlan::RunPhaseSetCommand(
+                  {"--topic", "SampleTopic", "--phase", "1", "--investigation",
+                   "inv baseline", "--handoff", "handoff baseline",
+                   "--repo-root", mRepoRoot.string()},
+                  mRepoRoot.string()),
+              0);
+    StopCapture();
+
+    const fs::path InvPath = mRepoRoot / "inv.txt";
+    const fs::path HandoffPath = mRepoRoot / "handoff.txt";
+    std::ofstream(InvPath) << "inv extension";
+    std::ofstream(HandoffPath) << "handoff extension";
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "SampleTopic", "--phase", "1",
+         "--investigation-append-file", InvPath.string(),
+         "--handoff-append-file", HandoffPath.string(), "--repo-root",
+         mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 0);
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("SampleTopic", Bundle));
+    EXPECT_EQ(Bundle.mPhases[1].mDesign.mInvestigation,
+              "inv baseline\n\ninv extension");
+    EXPECT_EQ(Bundle.mPhases[1].mDesign.mHandoff,
+              "handoff baseline\n\nhandoff extension");
 }

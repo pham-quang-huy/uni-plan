@@ -4,6 +4,7 @@
 #include "UniPlanTaxonomyTypes.h"
 
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -29,6 +30,23 @@ struct BaseOptions
     std::string mRepoRoot;
     bool mbJson = true;
     bool mbHuman = false;
+    // --ack-only (v0.105.0+): when set on a mutation command, the
+    // response envelope switches to the compact kMutationAckSchema shape
+    // ("changed_fields":[<names>]) instead of the full kMutationSchema
+    // ("changes":[{field,old,new}]). Bundle persistence, auto-changelog,
+    // and exit codes are unaffected. Opt-in; default false preserves
+    // v0.104.1 behavior for every existing caller.
+    bool mbAckOnly = false;
+    // mAppendFields (v0.105.0+): set of field names whose mutation
+    // should use append-concat semantics instead of replace. Populated
+    // by TryConsumeStringOrFileOrAppendFileOption when the caller passes
+    // --<field>-append-file <path>. The mutation handler queries this
+    // set per-field via ComputeAppendOrReplace (see UniPlanHelpers.h) to
+    // decide whether to concat-with-seam or replace the stored value.
+    // Empty in the default case — every existing replace-only flag
+    // keeps its v0.104.1 behavior. See also: --<field>-append-file row
+    // on any phase set field.
+    std::set<std::string> mAppendFields;
 };
 
 struct CacheInfoOptions : BaseOptions
@@ -82,7 +100,12 @@ struct FPhaseGetOptions : BaseOptions
     int mPhaseIndex = -1;
     std::vector<int> mPhaseIndices; // --phases <csv>: batch mode (v0.84.0)
                                     // mutually exclusive with --phase <N>
-    bool mbBrief = false;           // --brief: compact view for session resume
+    // --all-phases (v0.105.0+): sugar meaning "every phase index 0..N-1".
+    // Mutually exclusive with --phase and --phases at parse time; the
+    // handler expands mbAllPhases to a full mPhaseIndices set after the
+    // bundle is loaded so downstream batch-emission code is unchanged.
+    bool mbAllPhases = false;
+    bool mbBrief = false;     // --brief: compact view for session resume
     bool mbExecution = false; // --execution: jobs/tasks/lanes + structural
                               //              dependencies / validation_commands
     bool mbDesign = false;    // --design: only the fields that feed
@@ -98,6 +121,9 @@ struct FPhaseMetricOptions : BaseOptions
     std::string mTopic;
     int mPhaseIndex = -1;
     std::vector<int> mPhaseIndices;
+    // --all-phases (v0.105.0+): sugar for every index; mutually exclusive
+    // with --phase and --phases. Same semantics as FPhaseGetOptions.
+    bool mbAllPhases = false;
     std::string mStatus = "all";
 };
 
@@ -286,6 +312,17 @@ struct FTaskSetOptions : BaseOptions
     std::optional<EExecutionStatus> opStatus;
     std::string mEvidence;
     std::string mNotes;
+    // --description / --description-file (v0.105.0+): mutate the task's
+    // description text. mbDescriptionSet distinguishes "caller passed the
+    // flag" from "caller did not" because "" is a valid description (a
+    // legitimate 'clear the description' request). The handler gates the
+    // mutation: if Task.mStatus != NotStarted, it refuses unless mbForce
+    // is set AND mReason is non-empty-after-trim, and records before/
+    // after text + reason in the auto-changelog entry.
+    std::string mDescription;
+    bool mbDescriptionSet = false;
+    bool mbForce = false;
+    std::string mReason;
 };
 
 struct FChangelogAddOptions : BaseOptions
@@ -383,6 +420,12 @@ struct FPhaseQueryOptions : BaseOptions
 {
     std::string mTopic;
     int mPhaseIndex = -1;
+    // --all-phases (v0.105.0+) on `phase readiness`: sugar for a batch
+    // sweep over every phase. Mutually exclusive with --phase at parse
+    // time. `phase wave-status` shares this struct but does not accept
+    // --all-phases (current semantics require a specific phase); the
+    // parser rejects it there with a UsageError.
+    bool mbAllPhases = false;
 };
 
 // ---------------------------------------------------------------------------

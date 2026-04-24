@@ -45,6 +45,7 @@ uni-plan phase list --topic <topic> --human
 # Runtime-only phase depth/intensity metrics
 uni-plan phase metric --topic <topic> --human
 uni-plan phase metric --topic <topic> --phase <N>
+uni-plan phase metric --topic <topic> --all-phases --human   # v0.105.0+
 
 # Specific phase detail (jobs, lanes, design material)
 uni-plan phase get --topic <topic> --phase <N> --human
@@ -128,8 +129,28 @@ uni-plan blockers --human
 ## Verdict
 
 - **PASS**: No critical or major findings
-- **NEEDS REMEDIATION**: Major findings — fix before proceeding
-- **BLOCKED**: Critical findings — must fix immediately
+- **NEEDS REMEDIATION**: Major findings - fix before proceeding
+- **BLOCKED**: Critical findings - must fix immediately
+
+## Audit ergonomics (v0.105.0+)
+
+During heavy audit sessions, prefer these opt-in shapes:
+
+- `uni-plan phase readiness --topic <T> --all-phases` - one fork,
+  one JSON envelope (`uni-plan-phase-readiness-batch-v1`) with every
+  phase's gate evaluation inline. Replaces the shell `for`-loop
+  pattern that forked one process per phase. `phase get` and
+  `phase metric` also accept `--all-phases` as sugar for the v0.84.0
+  batch path.
+- `--ack-only` on every mutation command you touch during an
+  audit-driven repair (e.g. `phase set --no-file-manifest=true` +
+  reason, or a `phase cancel` on a superseded phase). Keeps the
+  repair-session transcript lean without changing disk state or the
+  audit trail.
+
+These are read-path and response-shape improvements only - no
+evaluator surface change. The 28+ evaluators emit the same findings
+whether you sweep with `--all-phases` or iterate per-phase.
 
 ## Rules
 

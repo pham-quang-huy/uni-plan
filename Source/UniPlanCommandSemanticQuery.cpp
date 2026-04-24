@@ -187,9 +187,8 @@ int RunPhaseDriftCommand(const std::vector<std::string> &InArgs,
 
     if (Options.mbHuman)
     {
-        std::cout << kColorBold
-                  << "Phase drift — " << TopicsScanned << " topic(s) scanned, "
-                  << Rows.size() << " entry/entries\n"
+        std::cout << kColorBold << "Phase drift — " << TopicsScanned
+                  << " topic(s) scanned, " << Rows.size() << " entry/entries\n"
                   << kColorReset;
         if (Rows.empty())
         {
@@ -206,8 +205,8 @@ int RunPhaseDriftCommand(const std::vector<std::string> &InArgs,
             for (size_t I = R.mTopic.size(); I < 21; ++I)
                 std::cout << ' ';
             std::cout << R.mPhaseIndex;
-            for (int I = 0; I < 6 - static_cast<int>(
-                                        std::to_string(R.mPhaseIndex).size());
+            for (int I = 0;
+                 I < 6 - static_cast<int>(std::to_string(R.mPhaseIndex).size());
                  ++I)
                 std::cout << ' ';
             std::cout << ' ' << R.mPhaseStatus;
@@ -276,70 +275,119 @@ int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,
         return 1;
     }
 
+    // --all-phases sweep (v0.105.0+): iterate every phase and emit a
+    // wrapped batch envelope. The per-phase payload is computed by the
+    // same gate registry used in single-phase mode, so the two paths
+    // cannot drift. Empty-phase bundles emit "phases":[] and exit 0.
+    const std::vector<FPhaseReadinessGate> &Gates = GetPhaseReadinessGates();
+
+    auto EvaluateGates = [&Gates](const FPhaseRecord &InPhase)
+        -> std::vector<EReadinessGateStatus>
+    {
+        std::vector<EReadinessGateStatus> Out;
+        Out.reserve(Gates.size());
+        for (const FPhaseReadinessGate &Gate : Gates)
+        {
+            Out.push_back(Gate.Evaluate(InPhase));
+        }
+        return Out;
+    };
+
+    // Render the per-phase JSON body (without the outer {"schema"...}
+    // wrapping) so both single-phase and batch modes share identical
+    // per-phase content.
+    auto EmitPerPhaseJsonBody = [&](int InPhaseIndex)
+    {
+        const FPhaseRecord &P =
+            Bundle.mPhases[static_cast<size_t>(InPhaseIndex)];
+        const auto Statuses = EvaluateGates(P);
+        const bool AllPass = AllReadinessGatesSatisfied(P);
+        EmitJsonField("topic", Options.mTopic);
+        EmitJsonFieldInt("phase_index", InPhaseIndex);
+        EmitJsonFieldBool("ready", AllPass);
+        std::cout << "\"gates\":[";
+        for (size_t I = 0; I < Gates.size(); ++I)
+        {
+            PrintJsonSep(I);
+            std::cout << "{";
+            EmitJsonField("name", Gates[I].mName);
+            EmitJsonField("status", ToString(Statuses[I]), false);
+            std::cout << "}";
+        }
+        std::cout << "]";
+    };
+
+    auto EmitPerPhaseHuman = [&](int InPhaseIndex)
+    {
+        const FPhaseRecord &P =
+            Bundle.mPhases[static_cast<size_t>(InPhaseIndex)];
+        const auto Statuses = EvaluateGates(P);
+        const bool AllPass = AllReadinessGatesSatisfied(P);
+        std::cout << kColorBold << "Phase " << InPhaseIndex << " readiness"
+                  << kColorReset << "\n";
+        std::cout << "Scope: " << P.mScope << "\n";
+        std::cout << "Ready: "
+                  << (AllPass ? (std::string(kColorGreen) + "yes")
+                              : (std::string(kColorRed) + "no"))
+                  << kColorReset << "\n\n";
+        HumanTable Table;
+        Table.mHeaders = {"Gate", "Status"};
+        for (size_t I = 0; I < Gates.size(); ++I)
+        {
+            Table.AddRow(
+                {Gates[I].mName, ColorizeStatus(ToString(Statuses[I]))});
+        }
+        Table.Print();
+    };
+
+    if (Options.mbAllPhases)
+    {
+        if (Options.mbHuman)
+        {
+            for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+            {
+                EmitPerPhaseHuman(static_cast<int>(I));
+                if (I + 1 < Bundle.mPhases.size())
+                {
+                    std::cout << "\n";
+                }
+            }
+            return 0;
+        }
+        // Batch JSON envelope — new in v0.105.0.
+        std::cout << "{\"schema\":" << JSONQuote(kPhaseReadinessBatchSchema)
+                  << ",";
+        EmitJsonFieldBool("ok", true);
+        EmitJsonField("topic", Options.mTopic);
+        std::cout << "\"phases\":[";
+        for (size_t I = 0; I < Bundle.mPhases.size(); ++I)
+        {
+            PrintJsonSep(I);
+            std::cout << "{";
+            EmitPerPhaseJsonBody(static_cast<int>(I));
+            std::cout << "}";
+        }
+        std::cout << "]}\n";
+        return 0;
+    }
+
+    // Single-phase path (existing v0.104.1 behavior, unchanged envelope).
     if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
     {
         std::cerr << "Phase index out of range\n";
         return 1;
     }
 
-    const FPhaseRecord &Phase =
-        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
-
-    // Iterate the canonical readiness-gate registry so this command
-    // reports the same gate set as `phase next` and validator code
-    // paths. Each gate reports one of three statuses:
-    //   pass            — gate applies + phase satisfies it
-    //   fail            — gate applies + phase does not satisfy it
-    //   not_applicable  — gate does not apply to this phase kind
-    //                     (e.g. code_entity_contract on a governance
-    //                      phase opted out via no_file_manifest=true)
-    // The `ready` aggregate is true only when every gate is Pass or
-    // NotApplicable — NotApplicable gates do not block readiness.
-    const std::vector<FPhaseReadinessGate> &Gates = GetPhaseReadinessGates();
-    std::vector<EReadinessGateStatus> GateStatuses;
-    GateStatuses.reserve(Gates.size());
-    for (const FPhaseReadinessGate &Gate : Gates)
-    {
-        GateStatuses.push_back(Gate.Evaluate(Phase));
-    }
-    const bool AllPass = AllReadinessGatesSatisfied(Phase);
-
     if (Options.mbHuman)
     {
-        std::cout << kColorBold << "Phase " << Options.mPhaseIndex
-                  << " readiness" << kColorReset << "\n";
-        std::cout << "Scope: " << Phase.mScope << "\n";
-        std::cout << "Ready: "
-                  << (AllPass ? (std::string(kColorGreen) + "yes")
-                              : (std::string(kColorRed) + "no"))
-                  << kColorReset << "\n\n";
-
-        HumanTable Table;
-        Table.mHeaders = {"Gate", "Status"};
-        for (size_t I = 0; I < Gates.size(); ++I)
-        {
-            Table.AddRow(
-                {Gates[I].mName, ColorizeStatus(ToString(GateStatuses[I]))});
-        }
-        Table.Print();
+        EmitPerPhaseHuman(Options.mPhaseIndex);
         return 0;
     }
 
     std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
     EmitJsonFieldBool("ok", true);
-    EmitJsonField("topic", Options.mTopic);
-    EmitJsonFieldInt("phase_index", Options.mPhaseIndex);
-    EmitJsonFieldBool("ready", AllPass);
-    std::cout << "\"gates\":[";
-    for (size_t I = 0; I < Gates.size(); ++I)
-    {
-        PrintJsonSep(I);
-        std::cout << "{";
-        EmitJsonField("name", Gates[I].mName);
-        EmitJsonField("status", ToString(GateStatuses[I]), false);
-        std::cout << "}";
-    }
-    std::cout << "]}\n";
+    EmitPerPhaseJsonBody(Options.mPhaseIndex);
+    std::cout << "}\n";
     return 0;
 }
 
@@ -528,6 +576,16 @@ int RunPhaseWaveStatusCommand(const std::vector<std::string> &InArgs,
                               const std::string &InRepoRoot)
 {
     const FPhaseQueryOptions Options = ParsePhaseQueryOptions(InArgs);
+    // phase wave-status requires a specific phase. The shared
+    // ParsePhaseQueryOptions accepts --all-phases for `phase readiness`;
+    // this command's semantic only makes sense for a single phase (wave
+    // tables would collide across phases), so reject here with a clear
+    // UsageError rather than silently emitting an unexpected shape.
+    if (Options.mbAllPhases)
+    {
+        throw UsageError("phase wave-status does not support --all-phases; "
+                         "specify --phase <index>");
+    }
     const fs::path RepoRoot = NormalizeRepoRootPath(
         Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
 

@@ -19,12 +19,16 @@ namespace fs = std::filesystem;
 // auto-changelog contract without each file redeclaring its own static copy.
 
 // Emit the canonical "{schema, ok, topic, target, changes[], auto_changelog}"
-// JSON response for a successful mutation.
+// JSON response for a successful mutation. When InAckOnly is true, the
+// compact kMutationAckSchema shape is emitted instead: changes[] is replaced
+// by changed_fields[] (a flat list of field names, no old/new values), and
+// the schema string changes accordingly. The on-disk bundle write is
+// unaffected by this flag — it only controls the stdout response envelope.
 void EmitMutationJson(
     const std::string &InTopic, const std::string &InTarget,
     const std::vector<
         std::pair<std::string, std::pair<std::string, std::string>>> &InChanges,
-    bool InAutoChangelog);
+    bool InAutoChangelog, bool InAckOnly = false);
 
 // Append an FChangeLogEntry describing the mutation to the bundle's
 // mChangeLogs. Extracts the phase index from "phases[N]..." targets; leaves

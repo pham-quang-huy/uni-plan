@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.104.1";
+static constexpr const char *kCliVersion = "0.105.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -120,6 +120,26 @@ static constexpr const char *kChangelogSchemaV2 = "uni-plan-changelog-v2";
 static constexpr const char *kVerificationSchemaV2 = "uni-plan-verification-v2";
 
 static constexpr const char *kMutationSchema = "uni-plan-mutation-v1";
+
+// Compact mutation response schema (v0.105.0+). Emitted when a mutation
+// command is invoked with --ack-only. Replaces the full
+// uni-plan-mutation-v1 envelope's "changes":[{field,old,new}] array with
+// a flat "changed_fields":[<names>] list — no prior/new value echo. The
+// on-disk bundle write is identical under both shapes; only the stdout
+// response shape differs. Consumers that care about the old/new payload
+// must either omit --ack-only or fetch prior content via `phase get` /
+// `topic get` before the mutation.
+static constexpr const char *kMutationAckSchema = "uni-plan-mutation-ack-v1";
+
+// Batch phase readiness response schema (v0.105.0+). Emitted by
+// `uni-plan phase readiness --all-phases`. Wraps N per-phase readiness
+// payloads (each carrying the same shape as the single-phase v1 emission)
+// inside a `phases[]` array. Single-phase readiness (`--phase <N>`)
+// continues to emit the existing flat shape — the batch schema is only
+// used when the caller asks for multi-phase output, matching the
+// phase-get-v2 pattern introduced in v0.84.0.
+static constexpr const char *kPhaseReadinessBatchSchema =
+    "uni-plan-phase-readiness-batch-v1";
 
 // Legacy-gap command schema (stateless V3 <-> V4 parity audit, 0.75.0+).
 // Always register a new output schema here rather than emitting the string

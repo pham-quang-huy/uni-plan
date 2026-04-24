@@ -93,7 +93,8 @@ int RunTopicAddCommand(const std::vector<std::string> &InArgs,
     std::vector<Change> Changes;
     Changes.push_back({"topic", {"(new)", Options.mTopic}});
     Changes.push_back({"title", {"(new)", Options.mTitle}});
-    EmitMutationJson(Options.mTopic, kTargetTopic, Changes, true);
+    EmitMutationJson(Options.mTopic, kTargetTopic, Changes, true,
+                     Options.mbAckOnly);
     return 0;
 }
 
@@ -205,7 +206,7 @@ int RunTopicSetCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, "plan", Changes, true);
+    EmitMutationJson(Options.mTopic, "plan", Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -379,21 +380,34 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
     }
 
     // Phase-level fields
+    // v0.105.0+: ApplyPhase consults Options.mBase.mAppendFields (populated
+    // by --<field>-append-file via TryConsumeStringOrFileOrAppendFileOption)
+    // and routes the new value through ComputeAppendOrReplace when the
+    // field's key is present in the set. Replace semantics (the default)
+    // are preserved for every flag that did not opt into append.
     auto ApplyPhase = [&](const std::string &InFlag, std::string &InOutField,
                           const std::string &InNewValue)
     {
         if (!InNewValue.empty())
         {
-            Changes.push_back({InFlag, {InOutField, InNewValue}});
-            InOutField = InNewValue;
+            const bool InAppend = Options.mAppendFields.count(InFlag) > 0;
+            const std::string Next =
+                ComputeAppendOrReplace(InOutField, InNewValue, InAppend);
+            Changes.push_back({InFlag, {InOutField, Next}});
+            InOutField = Next;
             if (Desc.empty())
-                Desc = Target + " updated " + InFlag;
+            {
+                Desc =
+                    Target + (InAppend ? " appended " : " updated ") + InFlag;
+            }
         }
     };
     ApplyPhase("scope", Phase.mScope, Options.mScope);
     ApplyPhase("output", Phase.mOutput, Options.mOutput);
 
-    // Design material fields
+    // Design material fields — all 7 support --<field>-append-file in
+    // v0.105.0+ via the parser's TryConsumeStringOrFileOrAppendFileOption
+    // helper.
     ApplyPhase("investigation", Phase.mDesign.mInvestigation,
                Options.mInvestigation);
     ApplyPhase("code_entity_contract", Phase.mDesign.mCodeEntityContract,
@@ -528,7 +542,7 @@ int RunPhaseSetCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -630,7 +644,7 @@ int RunPhaseRemoveCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -701,7 +715,7 @@ int RunPhaseAddCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -832,7 +846,8 @@ int RunPhaseNormalizeCommand(const std::vector<std::string> &InArgs,
 
     if (Options.mbDryRun || TotalReplacements == 0)
     {
-        EmitMutationJson(Options.mTopic, Target, Changes, true);
+        EmitMutationJson(Options.mTopic, Target, Changes, true,
+                         Options.mbAckOnly);
         return 0;
     }
 
@@ -847,7 +862,7 @@ int RunPhaseNormalizeCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -977,7 +992,7 @@ int RunJobSetCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -1048,20 +1063,61 @@ int RunTaskSetCommand(const std::vector<std::string> &InArgs,
         Task.mNotes = Options.mNotes;
     }
 
+    // v0.105.0 --description gate: allow freely when the task is
+    // NotStarted; otherwise require --force and a non-empty --reason.
+    // On the forced path, embed the before/after description and reason
+    // in the auto-changelog entry so the audit trail captures what was
+    // overwritten and why.
+    std::string DescriptionChangelogExtra;
+    if (Options.mbDescriptionSet)
+    {
+        if (Task.mStatus != EExecutionStatus::NotStarted)
+        {
+            std::string Trimmed = Options.mReason;
+            while (!Trimmed.empty() &&
+                   std::isspace(static_cast<unsigned char>(Trimmed.front())))
+            {
+                Trimmed.erase(Trimmed.begin());
+            }
+            while (!Trimmed.empty() &&
+                   std::isspace(static_cast<unsigned char>(Trimmed.back())))
+            {
+                Trimmed.pop_back();
+            }
+            if (!Options.mbForce || Trimmed.empty())
+            {
+                throw UsageError(
+                    std::string(
+                        "task set --description on a non-not_started task "
+                        "requires --force and --reason <text>; current "
+                        "status is ") +
+                    ToString(Task.mStatus));
+            }
+            DescriptionChangelogExtra = " description forced-update: \"" +
+                                        Task.mDescription + "\" -> \"" +
+                                        Options.mDescription +
+                                        "\" (reason: " + Trimmed + ")";
+        }
+        Changes.push_back(
+            {"description", {Task.mDescription, Options.mDescription}});
+        Task.mDescription = Options.mDescription;
+    }
+
     if (Changes.empty())
     {
         std::cerr << "No fields to update\n";
         return 1;
     }
 
-    AppendAutoChangelog(Bundle, Target, Target + " updated");
+    AppendAutoChangelog(Bundle, Target,
+                        Target + " updated" + DescriptionChangelogExtra);
 
     if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
     {
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, false);
+    EmitMutationJson(Options.mTopic, Target, Changes, false, Options.mbAckOnly);
     return 0;
 }
 

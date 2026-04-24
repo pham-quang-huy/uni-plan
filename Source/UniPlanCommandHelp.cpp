@@ -298,7 +298,8 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
     },
     {
         "get",
-        "Usage: uni-plan phase get --topic <T> [--phase <N> | --phases <csv>]\n"
+        "Usage: uni-plan phase get --topic <T> "
+        "[--phase <N> | --phases <csv> | --all-phases]\n"
         "                          [--brief | --design | --execution]\n"
         "                          [--human]\n\n",
         "Retrieve one or more phases.\n\n"
@@ -308,13 +309,17 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "                          non-negative indices (e.g. 0,2,4). Emits\n"
         "                          wrapped v2 schema with phase objects\n"
         "                          under a `phases` array. Sort+dedup is\n"
-        "                          applied server-side.\n\n"
+        "                          applied server-side.\n"
+        "  --all-phases            Sugar (v0.105.0+): equivalent to "
+        "`--phases 0,1,...,N-1`.\n"
+        "                          Mutually exclusive with --phase and "
+        "--phases.\n\n"
         "Pick at most one output-shape mode (all four shapes carry the\n"
         "common header: schema, topic, phase_index, status, design_chars,\n"
         "scope).\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n"
-        "  (one of) --phase <N>  |  --phases <csv>\n\n",
+        "  (one of) --phase <N>  |  --phases <csv>  |  --all-phases\n\n",
         nullptr, // mSpecificOptions — all the real options live in Modes
         "  --brief                 Compact view for session resume ~500 tok:\n"
         "                          done/remaining/blockers/agent_context +\n"
@@ -343,7 +348,8 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
     {
         "metric",
         "Usage: uni-plan phase metric --topic <T>\n"
-        "                             [--phase <N> | --phases <csv>]\n"
+        "                             [--phase <N> | --phases <csv> | "
+        "--all-phases]\n"
         "                             [--status <filter>] [--human]\n\n",
         "Compute runtime-only phase depth metrics for AI audits and the\n"
         "watch PHASE DETAIL metrics view. This command never writes metrics\n"
@@ -352,6 +358,10 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  --topic <T>             Topic key\n\n",
         "  --phase <N>             Optional single-phase selector\n"
         "  --phases <csv>          Optional comma-separated phase selector\n"
+        "  --all-phases            (v0.105.0+) Explicit sugar for every\n"
+        "                          phase; mutually exclusive with --phase\n"
+        "                          and --phases. Defaults to the same\n"
+        "                          behavior when no index selector is set.\n"
         "  --status <filter>       Filter by status: not_started|in_progress|\n"
         "                          completed|blocked|canceled|all\n",
         nullptr,
@@ -372,7 +382,15 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "Transitioning to --status completed requires both timestamps: the\n"
         "normal path (phase start → phase complete) stamps them. If\n"
         "skipping straight from not_started to completed, --started-at\n"
-        "MUST be supplied (Data Fix Gate, v0.73.1).\n\n",
+        "MUST be supplied (Data Fix Gate, v0.73.1).\n\n"
+        "v0.105.0+ design-prose append: each of the 7 design fields\n"
+        "(investigation / code_entity_contract / code_snippets /\n"
+        "best_practices / multi_platforming / readiness_gate / handoff)\n"
+        "accepts a `--<field>-append-file <path>` flag in addition to the\n"
+        "existing `--<field>` and `--<field>-file` replace flags. The\n"
+        "append variant reads the file's bytes and concatenates them onto\n"
+        "the existing stored value with a blank-line seam (\\n\\n). Empty\n"
+        "existing field ⇒ append is equivalent to replace.\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n"
         "  --phase <N>             Phase index\n\n",
@@ -708,7 +726,8 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
     },
     {
         "readiness",
-        "Usage: uni-plan phase readiness --topic <T> --phase <N> [--human]\n\n",
+        "Usage: uni-plan phase readiness --topic <T> "
+        "[--phase <N> | --all-phases] [--human]\n\n",
         "Report gate-by-gate readiness for a phase. Each gate returns one\n"
         "of three statuses (v0.96.0+):\n"
         "  pass            — gate applies and the phase satisfies it\n"
@@ -724,10 +743,14 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  code_snippets (code-bearing only; N/A on governance)\n"
         "  best_practices (applies to all phases)\n"
         "  multi_platforming (code-bearing only; N/A on governance)\n"
-        "  testing (applies to all phases)\n\n",
+        "  testing (applies to all phases)\n\n"
+        "v0.105.0+ adds --all-phases for a batch sweep. The wrapped JSON\n"
+        "envelope uses schema uni-plan-phase-readiness-batch-v1; each\n"
+        "element of `phases[]` carries the same shape as the single-phase\n"
+        "v1 emission. --phase and --all-phases are mutually exclusive.\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n"
-        "  --phase <N>             Phase index\n\n",
+        "  (one of) --phase <N>  |  --all-phases\n\n",
         nullptr,
         nullptr,
         "uni-plan-phase-get-v1",
@@ -930,7 +953,13 @@ static const FSubcommandHelpEntry kTaskSubs[] = {
         "set",
         "Usage: uni-plan task set --topic <T> --phase <N> --job <J>\n"
         "                         --task <K> [options]\n\n",
-        "Update task status and evidence within a job.\n\n",
+        "Update task status, evidence, notes, or description within a job.\n\n"
+        "v0.105.0+ adds --description / --description-file (previously only\n"
+        "`task add` set the description). To protect the audit trail, a\n"
+        "--description mutation is only allowed freely on a `not_started`\n"
+        "task; on any other status it requires --force AND a non-empty\n"
+        "--reason <text>, and the reason is embedded in the "
+        "auto-changelog.\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n"
         "  --phase <N>             Phase index\n"
@@ -939,12 +968,24 @@ static const FSubcommandHelpEntry kTaskSubs[] = {
         "  --status <s>            not_started|in_progress|completed|blocked|\n"
         "                          canceled\n"
         "  --evidence <text>       Completion proof (commit SHA, URL, log)\n"
-        "  --notes <text>          Agent working notes\n",
+        "  --notes <text>          Agent working notes\n"
+        "  --description <text>    (v0.105.0+) Rewrite the task description.\n"
+        "                          Refused on non-not_started tasks unless\n"
+        "                          --force --reason <text> is supplied.\n"
+        "  --force                 (v0.105.0+) Authorize a --description\n"
+        "                          change on a non-not_started task. Must\n"
+        "                          be paired with --reason <text>.\n"
+        "  --reason <text>         (v0.105.0+) Non-empty audit reason for\n"
+        "                          a forced --description change. Embedded\n"
+        "                          in the auto-changelog entry's text.\n",
         nullptr,
         "uni-plan-mutation-v1",
         "Examples:\n"
         "  uni-plan task set --topic X --phase 2 --job 0 --task 1 \\\n"
-        "                    --status completed --evidence 'commit abc123'\n",
+        "                    --status completed --evidence 'commit abc123'\n"
+        "  uni-plan task set --topic X --phase 2 --job 0 --task 1 \\\n"
+        "                    --description 'corrected typo in description' \\\n"
+        "                    --force --reason 'audit-approved typo fix'\n",
         true,
         false,
     },
@@ -2746,7 +2787,24 @@ static void PrintSubcommandBlock(std::ostream &Out,
     {
         Out << kHumanTable;
     }
-    Out << "  --repo-root <path>      Override repository root\n\n";
+    Out << "  --repo-root <path>      Override repository root\n";
+    // v0.105.0+: document --ack-only for mutation commands only. Query
+    // commands emit their own schema names (uni-plan-topic-get-v1 etc.)
+    // and ignore the flag. We gate by matching the mutation schema prefix
+    // so every current and future mutation (uni-plan-mutation-v1 +
+    // uni-plan-mutation-ack-v1) advertises the flag consistently.
+    if (InSub.mOutputSchema != nullptr)
+    {
+        const std::string_view Schema = InSub.mOutputSchema;
+        if (Schema.rfind("uni-plan-mutation-", 0) == 0)
+        {
+            Out << "  --ack-only              Emit compact response "
+                   "(uni-plan-mutation-ack-v1 schema;\n"
+                   "                          changed_fields[] instead of "
+                   "changes[{field,old,new}])\n";
+        }
+    }
+    Out << "\n";
     if (InSub.mOutputSchema != nullptr)
     {
         Out << "Output (JSON):\n"

@@ -171,6 +171,47 @@ For code-bearing phases, always verify:
 ./build.sh
 ```
 
+## Execution ergonomics (v0.105.0+)
+
+On mutation-heavy phases, prefer these opt-in flags:
+
+- `--ack-only` on every mutation emitting `uni-plan-mutation-v1`
+  (topic set / phase set / task set / lane add / job add / changelog
+  add / verification add / manifest add / phase complete / lane
+  complete / phase cancel / every other mutation command). Switches
+  the response envelope to `uni-plan-mutation-ack-v1` (flat
+  `changed_fields[]` list), no `old`/`new` echo. On a dense phase
+  execution the session transcript stays ~30-40% smaller vs. the
+  default shape. Disk state, auto-changelog, and exit codes are
+  unaffected. Not affected: `phase sync-execution` emits its own
+  `uni-plan-sync-execution-v1` schema and silently ignores `--ack-only`.
+
+- `--<field>-append-file <path>` on `phase set`'s 7 design-prose
+  fields (`investigation`, `code_entity_contract`, `code_snippets`,
+  `best_practices`, `multi_platforming`, `readiness_gate`, `handoff`).
+  Appends to the existing stored value with a `\n\n` seam instead of
+  replacing. Useful when extending design material during execution
+  (e.g. appending a new finding to `investigation`) without pulling
+  and concatenating locally.
+
+- `task set --description` (with `--force --reason <text>` gate on
+  non-NotStarted tasks). Use this - not `task remove` + `task add` -
+  when a task description needs correction mid-execution. The forced
+  path embeds the reason in the auto-changelog for audit.
+
+- `uni-plan phase readiness --all-phases` replaces the old shell
+  `for`-loop that forked one `uni-plan` process per phase. Single
+  invocation emits the `uni-plan-phase-readiness-batch-v1` envelope
+  with every phase's gate evaluation. Use it before the post-phase
+  re-audit when you want a topic-wide readiness sweep in one call.
+
+Dogfood pattern from the CliAgentErgonomics execution session: every
+`task set --status completed` and `phase complete` invocation used
+`--ack-only`, keeping the phase-close-out transcript roughly 40%
+lighter than v0.104.1. (`phase sync-execution` was in the same chain
+but emits its own compact `uni-plan-sync-execution-v1` schema, so
+the flag is a no-op there.)
+
 ## Rules
 
 - Never skip the post-phase re-audit

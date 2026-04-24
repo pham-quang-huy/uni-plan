@@ -1,6 +1,49 @@
 {
   "$schema": "plan-v4",
-  "acceptance_criteria": [],
+  "acceptance_criteria": [
+    {
+      "evidence": "uni-plan binary reports uni-plan 0.105.0 after ./build.sh",
+      "id": "AC1",
+      "measure": "uni-plan --version | grep -q 0.105.0",
+      "statement": "uni-plan --version reports 0.105.0 after build",
+      "status": "met"
+    },
+    {
+      "evidence": "Test: AckOnlyEmitsChangedFieldsNotOldNew. Smoke: uni-plan phase set --topic SampleTopic --phase 0 --done 'smoke' --ack-only outputs {schema:uni-plan-mutation-ack-v1, changed_fields:[done]}",
+      "id": "AC2",
+      "measure": "uni-plan phase set --topic X --phase N --done 'y' --ack-only | jq -r .schema == 'uni-plan-mutation-ack-v1'",
+      "statement": "--ack-only emits uni-plan-mutation-ack-v1 schema with changed_fields[] (no old/new echo)",
+      "status": "met"
+    },
+    {
+      "evidence": "Test: PhaseReadinessAllPhasesEmitsBatchSchema + PhaseReadinessAllPhasesCoversEveryIndex. Smoke: 4 phases emitted",
+      "id": "AC3",
+      "measure": "uni-plan phase readiness --topic X --all-phases | jq -r .schema == 'uni-plan-phase-readiness-batch-v1'",
+      "statement": "phase readiness --all-phases emits batch schema with every phase index",
+      "status": "met"
+    },
+    {
+      "evidence": "Test: TaskSetDescriptionRefusedOnInProgressWithoutForce + TaskSetDescriptionAllowedWithForceAndReason + TaskSetDescriptionForceAloneStillRefuses",
+      "id": "AC4",
+      "measure": "UsageError on in_progress task with plain --description; acceptance on --force --reason pair",
+      "statement": "task set --description on non-not_started task refuses without --force + non-empty --reason",
+      "status": "met"
+    },
+    {
+      "evidence": "Test: PhaseSetInvestigationAppendFileConcatsWithSeam + PhaseSetAppendFileOnEmptyFieldActsAsReplace + PhaseSetAppendFilePreservesShellHostileBytes + PhaseSetAppendFileCrossFieldIndependence",
+      "id": "AC5",
+      "measure": "Phase[N].investigation after --investigation-append-file equals existing + \\n\\n + file content (or file content alone if existing was empty)",
+      "statement": "--<field>-append-file concatenates with a single blank-line seam onto non-empty fields and acts as replace on empty fields",
+      "status": "met"
+    },
+    {
+      "evidence": "Full test suite run after phases[0-3]: 488 passing, up from 469 baseline (+19 across 4 phases)",
+      "id": "AC6",
+      "measure": "./Build/CMake/uni-plan-tests reports 488 passing tests",
+      "statement": "488/488 gtest suite green; no regression from v0.104.1 baseline (469)",
+      "status": "met"
+    }
+  ],
   "baseline_audit": "Audit anchored at kCliVersion 0.104.1 (Source/UniPlanCliConstants.h).\n\nMutation surface:\n- EmitMutationJson (Source/UniPlanCommandMutationCommon.cpp:14-37) is\n  the single funnel for every uni-plan-mutation-v1 envelope. Verified\n  by grep -rn \"EmitMutationJson\\b\" Source/ returning 12 call sites\n  across UniPlanCommandMutation.cpp (9 sites) and\n  UniPlanCommandLifecycle.cpp (3 sites).\n- AppendAutoChangelog (Source/UniPlanCommandMutationCommon.cpp:39-66)\n  is the single funnel for every auto-generated changelog entry.\n- WriteBundleBack (Source/UniPlanCommandMutationCommon.cpp:68-78)\n  funnels through GuardedWriteBundle (v0.99.0+ lock-and-stale-check).\n\nQuery surface:\n- phase get supports four view modes (default / --brief / --design /\n  --execution) plus --phases <csv> batch mode. The emission is\n  monolithic per mode in Source/UniPlanCommandPhase.cpp - P4 would\n  require a shared field-projector refactor and is deferred.\n- phase metric supports --phases <csv> batch mode today\n  (Source/UniPlanCommandPhase.cpp in ComputePhaseDepthMetrics area).\n- phase readiness is single-phase only. RunPhaseReadinessCommand is\n  at Source/UniPlanCommandSemanticQuery.cpp:264.\n\nTask surface:\n- FTaskRecord.mDescription exists at Source/UniPlanTaxonomyTypes.h\n  (~line 34). The field is set by task add --description and read by\n  task list / phase get, but task set does not currently accept\n  --description - asymmetry in the option surface.\n\nFile-based prose input:\n- TryConsumeStringOrFileOption and TryReadFileToString are the shared\n  helpers that read --<field>-file <path> content byte-identically\n  (Source/UniPlanOptionParsing.cpp + Source/UniPlanFileHelpers.h,\n  landed v0.76.0). Every prose field on every mutation command\n  routes through these helpers. Append semantics extend the same\n  read path and add a concatenation step before the value lands in\n  Options.\n\nConcurrency and safety (must be preserved):\n- v0.99.0 FBundleFileLock + FBundleReadSession + GuardedWriteBundle.\n- v0.100.0 JSON-file setters for typed-array inputs.\n- v0.101.0 phase complete + lane complete descendant gates +\n  completed_jobs_have_completed_tasks validator.\n- v0.102.0 phase sync-execution child-to-parent rollup.\n- v0.102.1 sync-execution dry-run pass-2 fix.\n- v0.104.0 incremental watch snapshot cache.\n\nTests baseline: 440+ passing under the existing gtest suite at\n./Build/CMake/uni-plan-tests as of v0.104.1.\n",
   "changelogs": [
     {
@@ -1074,24 +1117,769 @@
       "date": "2026-04-24",
       "phase": 2,
       "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "Topic auto-started (phase 0 claimed)",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0]",
+      "change": "Phase 0 started",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0]",
+      "change": "Phase 0 progress updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "next_action added: next_actions[0]",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[0].tasks[0]",
+      "change": "phases[0].jobs[0].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[0].tasks[1]",
+      "change": "phases[0].jobs[0].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[0].tasks[2]",
+      "change": "phases[0].jobs[0].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[1].tasks[0]",
+      "change": "phases[0].jobs[1].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[1].tasks[1]",
+      "change": "phases[0].jobs[1].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[2].tasks[0]",
+      "change": "phases[0].jobs[2].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[2].tasks[1]",
+      "change": "phases[0].jobs[2].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[2].tasks[2]",
+      "change": "phases[0].jobs[2].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[3].tasks[0]",
+      "change": "phases[0].jobs[3].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[3].tasks[1]",
+      "change": "phases[0].jobs[3].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[3].tasks[2]",
+      "change": "phases[0].jobs[3].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[4].tasks[0]",
+      "change": "phases[0].jobs[4].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[4].tasks[1]",
+      "change": "phases[0].jobs[4].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[4].tasks[2]",
+      "change": "phases[0].jobs[4].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[0]",
+      "change": "phases[0].jobs[0] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[1]",
+      "change": "phases[0].jobs[1] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[2]",
+      "change": "phases[0].jobs[2] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[3]",
+      "change": "phases[0].jobs[3] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].jobs[4]",
+      "change": "phases[0].jobs[4] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].lanes[0]",
+      "change": "phases[0].lanes[0] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].lanes[1]",
+      "change": "phases[0].lanes[1] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].lanes[2]",
+      "change": "phases[0].lanes[2] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].lanes[3]",
+      "change": "phases[0].lanes[3] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0].lanes[4]",
+      "change": "phases[0].lanes[4] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0]",
+      "change": "Phase 0 completed: phases[0] landed: kMutationAckSchema constant, BaseOptions.mbAckOnly, --ack-only parser, EmitMutationJson InAckOnly branch, 20 call sites explicit, 4 new gtests (473/473 green), --help surface wiring, CLAUDE.md + AGENTS.md v0.105.0 section",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1]",
+      "change": "Phase 1 started",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[0].tasks[0]",
+      "change": "phases[1].jobs[0].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[0].tasks[1]",
+      "change": "phases[1].jobs[0].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[0].tasks[2]",
+      "change": "phases[1].jobs[0].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[1].tasks[0]",
+      "change": "phases[1].jobs[1].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[1].tasks[1]",
+      "change": "phases[1].jobs[1].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[1].tasks[2]",
+      "change": "phases[1].jobs[1].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[2].tasks[0]",
+      "change": "phases[1].jobs[2].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[2].tasks[1]",
+      "change": "phases[1].jobs[2].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[2].tasks[2]",
+      "change": "phases[1].jobs[2].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[0]",
+      "change": "phases[1].jobs[0] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[1]",
+      "change": "phases[1].jobs[1] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].jobs[2]",
+      "change": "phases[1].jobs[2] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].lanes[0]",
+      "change": "phases[1].lanes[0] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].lanes[1]",
+      "change": "phases[1].lanes[1] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1].lanes[2]",
+      "change": "phases[1].lanes[2] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1]",
+      "change": "Phase 1 progress updated",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[1]",
+      "change": "Phase 1 completed: phases[1] --all-phases canonicalization shipped across phase readiness (new batch schema uni-plan-phase-readiness-batch-v1), phase get (expands to existing v2 batch envelope), phase metric (explicit sugar for existing default). Parse-time mutual exclusion with --phase and --phases. phase wave-status rejects --all-phases at handler time. 6 new gtests + --help surface wiring + CLAUDE.md + AGENTS.md v0.105.0 subsection",
+      "date": "2026-04-24",
+      "phase": 1,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2]",
+      "change": "Phase 2 started",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[0].tasks[0]",
+      "change": "phases[2].jobs[0].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[0].tasks[1]",
+      "change": "phases[2].jobs[0].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[1].tasks[0]",
+      "change": "phases[2].jobs[1].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[1].tasks[1]",
+      "change": "phases[2].jobs[1].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[2].tasks[0]",
+      "change": "phases[2].jobs[2].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[2].tasks[1]",
+      "change": "phases[2].jobs[2].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[0]",
+      "change": "phases[2].jobs[0] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[1]",
+      "change": "phases[2].jobs[1] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].jobs[2]",
+      "change": "phases[2].jobs[2] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].lanes[0]",
+      "change": "phases[2].lanes[0] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].lanes[1]",
+      "change": "phases[2].lanes[1] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2].lanes[2]",
+      "change": "phases[2].lanes[2] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2]",
+      "change": "Phase 2 progress updated",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[2]",
+      "change": "Phase 2 completed: phases[2] task set --description gate shipped. FTaskRecord.mDescription was already present on the record; this phase wired the option-struct fields (mDescription/mbDescriptionSet/mbForce/mReason), parser clauses, and handler gate. Non-not_started tasks refuse --description unless --force + non-empty --reason is supplied; forced path stamps before/after + reason into auto-changelog change text",
+      "date": "2026-04-24",
+      "phase": 2,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3]",
+      "change": "Phase 3 started",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[0]",
+      "change": "phases[0] updated: investigation",
+      "date": "2026-04-24",
+      "phase": 0,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[0].tasks[0]",
+      "change": "phases[3].jobs[0].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[0].tasks[1]",
+      "change": "phases[3].jobs[0].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[0].tasks[2]",
+      "change": "phases[3].jobs[0].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[1].tasks[0]",
+      "change": "phases[3].jobs[1].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[1].tasks[1]",
+      "change": "phases[3].jobs[1].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[2].tasks[0]",
+      "change": "phases[3].jobs[2].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[2].tasks[1]",
+      "change": "phases[3].jobs[2].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[3].tasks[0]",
+      "change": "phases[3].jobs[3].tasks[0] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[3].tasks[1]",
+      "change": "phases[3].jobs[3].tasks[1] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[3].tasks[2]",
+      "change": "phases[3].jobs[3].tasks[2] updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[0]",
+      "change": "phases[3].jobs[0] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[1]",
+      "change": "phases[3].jobs[1] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[2]",
+      "change": "phases[3].jobs[2] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].jobs[3]",
+      "change": "phases[3].jobs[3] synced not_started → completed (all tasks terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].lanes[0]",
+      "change": "phases[3].lanes[0] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].lanes[1]",
+      "change": "phases[3].lanes[1] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].lanes[2]",
+      "change": "phases[3].lanes[2] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3].lanes[3]",
+      "change": "phases[3].lanes[3] synced not_started → completed (all jobs terminal; ≥1 completed)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3]",
+      "change": "Phase 3 progress updated",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "phases[3]",
+      "change": "Phase 3 completed: phases[3] --<field>-append-file (append-only variant) shipped on phase set's 7 design-prose fields. Infrastructure (BaseOptions.mAppendFields, ComputeAppendOrReplace, TryConsumeStringOrFileOrAppendFileOption) ready for future rollout waves. kCliVersion bumped 0.104.1 -> 0.105.0 sealing the CliAgentErgonomics topic with all 4 accepted proposals (--ack-only, --all-phases, task set --description + gate, --<field>-append-file)",
+      "date": "2026-04-24",
+      "phase": 3,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "Topic auto-completed (all phases terminal)",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "Topic completed",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "acceptance_criterion added: acceptance_criteria[0]",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "acceptance_criterion added: acceptance_criteria[1]",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "acceptance_criterion added: acceptance_criteria[2]",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "acceptance_criterion added: acceptance_criteria[3]",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "acceptance_criterion added: acceptance_criteria[4]",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
+    },
+    {
+      "actor": "ai",
+      "affected": "plan",
+      "change": "acceptance_criterion added: acceptance_criteria[5]",
+      "date": "2026-04-24",
+      "phase": null,
+      "type": "chore"
     }
   ],
   "dependencies": [],
   "execution_strategy": "Execute as 4 phases in dependency order. Each phase is independently\ntestable and committable; the version bump (v0.104.1 → v0.105.0) lands\nonly after all four phases are completed.\n\nphases[0] - --ack-only (P1)\nSmallest blast radius: one function (EmitMutationJson) edit plus a\nshared BaseOptions flag plumbed through the 12 call sites. Lands\nthe new schema constant (kMutationAckSchema =\n\"uni-plan-mutation-ack-v1\") in UniPlanCliConstants.h. Tests cover\n(a) the shape difference under --ack-only vs default, (b) on-disk\nbundle content is byte-identical regardless of the flag,\n(c) auto-changelog behavior unchanged, (d) exit codes unchanged.\nDelivers the largest token-savings impact in the topic.\n\nphases[1] - --all-phases canonicalization (P7)\nAdds --all-phases sugar + phase readiness batch loop. No mutation\npath touched. Adds a new response schema uni-plan-phase-readiness-\nbatch-v1 paralleling the existing uni-plan-phase-readiness-v1 for\nsingle-phase invocations. phase metric and phase get keep\naccepting --phases <csv>; --all-phases is additive sugar that\nexpands to \"0..N-1\". Tests cover the batch shape + equivalence\nwith the enumerated-csv form + empty-phases and single-phase\nedge cases.\n\nphases[2] - task set --description + gate (P8)\nOption-struct addition + parser extension + mutation handler gate.\nFTaskSetOptions gains mDescription + mDescriptionFile + mbForce +\nmReason fields; ParseTaskSetOptions grows a --description /\n--description-file / --force / --reason parser section;\nRunTaskSetCommand grows the gate check (allow if NotStarted else\nrequire force+reason). Changelog records before/after description.\nTests cover the happy path, the gate-refuses-without-force case,\nthe force-with-reason path (and that the reason is persisted to\nchangelog), and the --description-file shell-safety path.\n\nphases[3] - --<field>-append-file (P5 append-only)\nBroadest surface touch (every prose-bearing mutation command gains\na sibling --<field>-append-file flag). Concatenation helper lives\nin UniPlanFileHelpers or UniPlanOptionParsing; each mutation\nhandler decides whether to apply a replace (existing --<field>\n/ --<field>-file) or an append semantics. Invariant: when both\nreplace and append flags are set for the same field,\nUsageError exit 2 at parse time. Tests cover the happy concat\npath (blank-line seam inserted exactly once), the empty-existing-\nfield case (append acts like replace), the byte-identical shell-\nhostile content round-trip, and the replace+append mutual-\nexclusion UsageError.\n\nAfter phases[3] lands, run the full suite, bump kCliVersion to\n0.105.0, author v0.105.0 behavior notes in CLAUDE.md + AGENTS.md,\nand mirror the notes into square-bot / fie / mm-factory plan-\ncreation and plan-execution skills.\n",
   "goals": "- Add --ack-only on every uni-plan mutation command (topic set, phase\n  set, lane add, job add, task add, changelog add, verification add,\n  manifest add, risk add, next-action add, acceptance-criterion add,\n  priority-grouping add, runbook add, residual-risk add, and every\n  *set / *remove sibling). Response under --ack-only replaces\n  \"changes\":[{field,old,new}] with \"changed_fields\":[<names>] on a new\n  output schema uni-plan-mutation-ack-v1. Bundle mutation semantics\n  unchanged.\n\n- Canonicalize --all-phases on phase readiness, phase metric, and\n  phase get. phase metric and phase get already support --phases <csv>;\n  --all-phases is sugar meaning \"every phase index 0..N-1\". phase\n  readiness is single-phase today; add a batch loop that emits the\n  same per-phase JSON shape in an array.\n\n- Add task set --description and task set --description-file plus a\n  safety gate: permitted when task status is not_started; otherwise\n  --force --reason <text> is required. Mutation records before/after\n  description in changelog. Closes a documented CLI gap where the\n  only way to correct a typo in a description was task remove + task\n  add (destroying audit history).\n\n- Add --<field>-append-file <path> for every prose field on topic\n  set, phase set, phase log, verification add, lane set, testing add,\n  risk add/set, next-action add/set, acceptance-criterion add/set,\n  priority-grouping add/set, runbook add/set, residual-risk add/set.\n  Semantics: read existing field value → concatenate with a blank-line\n  seam → file content → write back. Pure token-savings over the\n  pull-concat-push scratch-file pattern authors use today.\n\n- Preserve the v0.99.0+ bundle lock + stale-check + atomic rename on\n  every mutation, including the new append-file path. Preserve the\n  v0.102.0 phase sync-execution semantics. Preserve the v0.101.0\n  descendant gates on phase complete and lane complete. Preserve\n  the v0.94.0 topic_key_matches_filename validator and every other\n  evaluator surface.\n\n- Version bump kCliVersion 0.104.1 → 0.105.0 and document v0.105.0\n  behavior notes in CLAUDE.md + AGENTS.md, mirrored into square-bot,\n  fie, and mm-factory governance skills where those repos surface the\n  flag set to their local agents.\n",
   "locked_decisions": "- Additive-only CLI surface. No existing flag, schema, evaluator,\n  or exit-code semantic changes land in this topic. Every item is\n  strictly a new opt-in.\n\n- --ack-only defaults to OFF. uni-plan.ini default-toggle is\n  optional and not required in the first landing of phases[0] - may\n  be added in a follow-up topic if operators ask for it.\n\n- Response schema rationale: phases[0] emits a NEW schema\n  uni-plan-mutation-ack-v1 instead of overloading\n  uni-plan-mutation-v1 with optional old/new. This keeps every\n  existing parser working unchanged and the new shape discoverable\n  by schema-aware consumers.\n\n- --all-phases is sugar for the enumerated --phases 0,1,..,N-1\n  form. The canonical underlying argument stays --phases <csv>. If\n  both are supplied in the same invocation, UsageError (exit 2) at\n  parse time.\n\n- task set --description safety gate mirrors the v0.73.1 phase-set\n  completed-phase-timestamp gate shape exactly - same --force /\n  --reason pattern, same UsageError path. Not a new gate genre.\n\n- --<field>-append-file seams are exactly one blank line\n  (double-newline) between existing content and appended content,\n  regardless of trailing whitespace on either side. Empty existing\n  content → append acts like replace (no leading blank line).\n  --<field>, --<field>-file, and --<field>-append-file are\n  mutually exclusive on a single invocation; setting more than one\n  at once is UsageError (exit 2).\n\n- Substring-replace rejection is permanent for this topic. Future\n  topics may revisit with a different shape (e.g. a separate\n  uni-plan patch subcommand), but this bundle does not land any\n  substring-level surface.\n\n- Hygiene profile rejection is permanent for this topic. uni-plan\n  stays standalone; repo-specific authoring floors live in\n  consumer-local hooks.\n\n- No validator changes, no new evaluator IDs, no promotions of\n  ErrorMinor/Warning to ErrorMajor, no demotions.\n\n- Version plan: all four phases must complete before bumping\n  kCliVersion. Individual phases may commit with an explanatory\n  changelog note but the version stays 0.104.1 until phases[3]\n  completes. Single MINOR bump 0.104.1 → 0.105.0 at topic seal.\n\n- CLI-only access to .Plan.json bundles is preserved throughout. No\n  raw json.load ever touches a bundle file in implementation or\n  tests. Test fixtures use uni-plan topic add / phase add / etc.\n  to build their scenarios, not hand-written JSON.\n\n- No claude-coauthor trailer on any commit body (per the global rule).\n\n- Pre-1.0 SemVer discipline: this is a MINOR bump, not 1.x.\n",
-  "next_actions": [],
+  "next_actions": [
+    {
+      "order": 1,
+      "owner": "upl-plan-execution",
+      "rationale": "phases[0] is scoped to --ack-only; phases[1..3] are the remaining CliAgentErgonomics surface additions still to land before the v0.105.0 bump at phases[3] close",
+      "statement": "Execute phases[1] implementation: --all-phases canonicalization across phase readiness/metric/get with new kPhaseReadinessBatchSchema wrapper",
+      "status": "pending",
+      "target_date": ""
+    }
+  ],
   "non_goals": "- No changes to the .Plan.json bundle file format. Every addition is\n  CLI surface only. Existing bundles remain readable by earlier\n  uni-plan versions; --ack-only is strictly opt-in and does not alter\n  what lands on disk.\n\n- No flag deprecations. Every existing flag continues to work. The\n  default mutation response shape (changes[] with old/new) stays\n  the default; --ack-only is opt-in.\n\n- No concurrency-model changes. The v0.99.0+ FBundleFileLock +\n  FBundleReadSession + GuardedWriteBundle + UPLAN_FAULT_PRE_RENAME\n  surface is untouched.\n\n- No evaluator surface changes. The 35 validator checks keep firing\n  the same way. No new evaluator IDs. No new ErrorMajor/ErrorMinor/\n  Warning promotions or demotions.\n\n- No hygiene profile concept in uni-plan.ini. The proposer's\n  min_design_chars / min_solid_words / min_recursive_words /\n  min_field_coverage_percent / min_evidence_items / require_*\n  thresholds stay in consumer-local hooks (e.g. square-bot's\n  plan_board_hygiene.py). See the proposer's Docs/Proposals/\n  IMPROVEMENT.Proposal.md P2 - reshaped down for reasons recorded\n  in the topic's locked_decisions.\n\n- No write-time hygiene validators (P3 rejected). no_smart_quotes,\n  no_dev_absolute_path, no_duplicate_changelog, and every other\n  content-hygiene check stay at validate-time only. No new exit code 3.\n\n- No auto-changelog silent dedupe (P6 rejected). The existing\n  no_duplicate_changelog warning keeps carrying the evidence signal\n  for idempotent-retry mistakes.\n\n- No phase get --field <name> / --fields <csv> narrow reader (P4\n  deferred). Reassess after P1 + P5-append land; the shared\n  projector refactor is only worth the cost if the patch-heavy use\n  case remains painful under the new surface.\n\n- No substring replace on mutation fields (P5 reshaped). --<field>-\n  replace-substring-file <from> <to> is out of scope. Consumers use\n  phase get (future P4) plus local edit plus phase set append/full\n  replacement.\n",
   "phases": [
     {
-      "agent_context": "",
+      "agent_context": "Implement P1 --ack-only on every mutation command per code_entity_contract",
       "best_practices": "SOLID and refactor guidance for phases[0]:\n\nSingle Responsibility. EmitMutationJson owns rendering the mutation\nresponse envelope and nothing else. The InAckOnly bool selects between\ntwo well-defined output shapes. Do not introduce a third shape, a\npartial-ack mode, or a verbosity enum; that is scope creep beyond P1.\n\nOpen/Closed. EmitMutationJson becomes \"open for extension, closed for\nmodification\" in the sense that adding a new response shape later is\nadditive (new schema constant + new branch). This phase adds exactly\none branch, the --ack-only shape. Future phases can add more if a\nconcrete need arises.\n\nDomain type over primitive bool. The executor may choose to represent\nthe response shape selector as a primitive bool (InAckOnly) or as a\ntyped enum class EMutationResponseShape { FullV1, AckOnly }. Either is\nacceptable at this phase's scale; prefer the enum if more shapes are\nexpected in the same release. If the project has only these two\nshapes for the forseeable future, bool is fine.\n\nNo stringly-typed if-chain. The shape selector is a single binary\nbranch. Do not grow a chain like:\n\n    if (Shape == \"v1\")  { ... }\n    else if (Shape == \"ack\") { ... }\n    else if (Shape == \"quiet\") { ... }\n\nIf a third shape lands, convert to an enum class at that point; the\nregistration-table escape hatch (std::array<FEmitEntry>) is overkill\nfor two branches.\n\nNo raw ownership changes. This phase touches only stack-local values\nand references to Options structs. No std::make_unique, no\nstd::make_shared, no raw new.\n\nNo std::regex. The option parser uses exact-token comparison\n(InToken == \"--ack-only\") - same as every existing parser clause.\n\nNo goto. Structured control flow throughout.\n\nAnti-Pattern negative example for regression guard (this block is\ndocumented as rejected; the snippet lint must skip it per the\n// BAD: marker).\n\n```cpp\n// BAD: REJECTED stringly-typed dispatch for response shape.\n// Do not reintroduce this pattern if more shapes are added.\nvoid EmitMutationJsonBad(const std::string &InShape, ...)\n{\n    if (InShape == \"v1\") {\n        // ... full envelope ...\n    } else if (InShape == \"ack\") {\n        // ... compact envelope ...\n    } else if (InShape == \"quiet\") {\n        // ... even shorter envelope ...\n    } else if (InShape == \"silent\") {\n        // ... no envelope at all ...\n    }\n}\n```\n\nThe accepted shape for this phase is a single InAckOnly bool. If\nfuture phases add shapes, convert to:\n\n```cpp\nenum class EMutationResponseShape { FullV1, AckOnly };\n\nvoid EmitMutationJson(..., EMutationResponseShape InShape);\n```\n\nNot:\n\n```cpp\n// Still BAD in the future: string tag passed through the whole\n// call chain instead of a typed enum.\nvoid EmitMutationJson(..., const std::string &InShape);\n```\n\nNaming conventions (from NAMING.md):\n\n- kMutationAckSchema: lowercase `k` prefix, PascalCase body.\n- mbAckOnly: `mb` prefix for boolean member.\n- InAckOnly: `In` prefix for input parameter.\n- EMutationResponseShape: `E` prefix for enum class, PascalCase body.\n\nMemory discipline. No heap allocation added in this phase. Every new\nfield is a value type. No smart pointers, no raw pointers, no\nownership transfer.\n\nDiagnostics. No std::cerr usage added in this phase. The --ack-only\nbranch emits strictly to std::cout as the existing default branch\ndoes.\n\nTesting discipline. Every test in Test/UniPlanTestMutation.cpp that\ncovers the v1 shape gains a parallel ack-only assertion. The\nbyte-identical-bundle test is the load-bearing invariant; if that\nfails, the flag has leaked into the mutation path and must be rooted\nout before landing.\n\nValidator interaction. Post-mutation, the bundle content is identical\nregardless of the flag. Every validator keeps emitting the same issue\nset. Do not skip validate in the test suite under --ack-only; the\ngoal is the flag does not change bundle content, and a failing\nvalidate run is the regression signal.\n",
       "blockers": "",
       "code_entity_contract": "New constants in Source/UniPlanCliConstants.h:\n\n    static constexpr const char *kMutationAckSchema =\n        \"uni-plan-mutation-ack-v1\";\n\nExtended BaseOptions in Source/UniPlanOptionTypes.h:\n\n    struct BaseOptions\n    {\n        std::string mRepoRoot;\n        bool mbHumanOutput = false;\n        bool mbAckOnly = false;      // new in v0.105.0; opt-in\n        // ... existing fields preserved ...\n    };\n\nExtended signature for EmitMutationJson in\nSource/UniPlanCommandMutationCommon.h and .cpp:\n\n    void EmitMutationJson(\n        const std::string &InTopic,\n        const std::string &InTarget,\n        const std::vector<std::pair<\n            std::string,\n            std::pair<std::string, std::string>>> &InChanges,\n        bool InAutoChangelog,\n        bool InAckOnly);\n\nThe header default for InAckOnly is false to keep every existing\ncaller compiling with zero edits. Each of the 12 call sites is\nupdated to pass Options.mbAckOnly explicitly.\n\nBehavior of EmitMutationJson under --ack-only:\n\n    {\"schema\":\"uni-plan-mutation-ack-v1\",\n     \"ok\":true,\n     \"topic\":\"<T>\",\n     \"target\":\"<path>\",\n     \"changed_fields\":[\"<field1>\",\"<field2>\", ...],\n     \"auto_changelog\":<bool>}\n\nBehavior under default (unchanged from v0.104.1):\n\n    {\"schema\":\"uni-plan-mutation-v1\",\n     \"ok\":true,\n     \"topic\":\"<T>\",\n     \"target\":\"<path>\",\n     \"changes\":[\n       {\"field\":\"<f>\",\"old\":\"<prior>\",\"new\":\"<next>\"},\n       ...\n     ],\n     \"auto_changelog\":<bool>}\n\nNew parser clause in ConsumeCommonOptions in\nSource/UniPlanOptionParsing.cpp:\n\n    if (Token == \"--ack-only\")\n    {\n        OutOptions.mbAckOnly = true;\n        return true;\n    }\n\nHelp-text addition in every mutation --help:\n\n    --ack-only\n        Emit a compact response envelope (schema\n        uni-plan-mutation-ack-v1) listing only the changed_fields by\n        name, skipping the old/new value echo. Opt-in; default\n        response shape is unchanged.\n\nInvariants preserved (restated for the executor):\n\n    1. Mutation persisted to disk is identical whether --ack-only is\n       set or not. Bundle bytes round-trip byte-identically.\n    2. Auto-changelog entries land unchanged regardless of response\n       shape.\n    3. GuardedWriteBundle invocation order is unchanged.\n    4. Exit codes are unchanged.\n    5. Validator evaluators still see the same bundle content.\n    6. --human output (if requested) renders as today; --ack-only\n       only affects default-JSON output.\n\nContract-break table (executor must confirm none of these regress):\n\n    | Surface                                | Under --ack-only |\n    |----------------------------------------|------------------|\n    | Disk bytes after mutation              | Identical        |\n    | Auto-changelog entry                   | Identical        |\n    | Exit code                              | Identical        |\n    | Validator findings post-mutation       | Identical        |\n    | uni-plan-mutation-v1 shape for non-ack | Unchanged        |\n    | --human rendering                      | Unchanged        |\n    | Lock-and-stale-check behavior          | Unchanged        |\n",
       "code_snippets": "Reference implementation shape for the v1 vs ack-only branch inside\nEmitMutationJson. This is the canonical form; the executor lands this\nor a semantic equivalent.\n\n```cpp\n// Source/UniPlanCommandMutationCommon.cpp\n\nvoid EmitMutationJson(\n    const std::string &InTopic,\n    const std::string &InTarget,\n    const std::vector<std::pair<\n        std::string,\n        std::pair<std::string, std::string>>> &InChanges,\n    bool InAutoChangelog,\n    bool InAckOnly)\n{\n    const char *Schema = InAckOnly\n        ? kMutationAckSchema\n        : kMutationSchema;\n\n    std::cout << \"{\\\"schema\\\":\" << JSONQuote(Schema) << \",\";\n    EmitJsonFieldBool(\"ok\", true);\n    EmitJsonField(\"topic\", InTopic);\n    EmitJsonField(\"target\", InTarget);\n\n    if (InAckOnly)\n    {\n        std::cout << \"\\\"changed_fields\\\":[\";\n        for (size_t I = 0; I < InChanges.size(); ++I)\n        {\n            PrintJsonSep(I);\n            std::cout << JSONQuote(InChanges[I].first);\n        }\n        std::cout << \"],\";\n    }\n    else\n    {\n        std::cout << \"\\\"changes\\\":[\";\n        for (size_t I = 0; I < InChanges.size(); ++I)\n        {\n            PrintJsonSep(I);\n            std::cout << \"{\";\n            EmitJsonField(\"field\", InChanges[I].first);\n            EmitJsonField(\"old\", InChanges[I].second.first);\n            EmitJsonField(\"new\", InChanges[I].second.second, false);\n            std::cout << \"}\";\n        }\n        std::cout << \"],\";\n    }\n\n    EmitJsonFieldBool(\"auto_changelog\", InAutoChangelog, false);\n    std::cout << \"}\\n\";\n}\n```\n\nCall-site update example in UniPlanCommandMutation.cpp (one of the\n12 call sites; every site follows this pattern):\n\n```cpp\n// Before (v0.104.1):\nEmitMutationJson(Options.mTopic, Target, Changes, /*auto_changelog=*/true);\n\n// After (v0.105.0):\nEmitMutationJson(Options.mTopic, Target, Changes,\n                 /*auto_changelog=*/true,\n                 Options.mBase.mbAckOnly);\n```\n\nOption parser clause in Source/UniPlanOptionParsing.cpp inside\nConsumeCommonOptions. The existing pattern for --human parsing is the\nmodel:\n\n```cpp\nbool ConsumeCommonOptions(const std::string &InToken,\n                          const std::vector<std::string> &InArgs,\n                          size_t &InOutIndex,\n                          BaseOptions &OutOptions,\n                          std::string &OutError)\n{\n    if (InToken == \"--human\")\n    {\n        OutOptions.mbHumanOutput = true;\n        return true;\n    }\n    if (InToken == \"--ack-only\")\n    {\n        OutOptions.mbAckOnly = true;\n        return true;\n    }\n    if (InToken == \"--repo-root\")\n    {\n        // ... existing handling ...\n    }\n    return false;\n}\n```\n\nTest shape for Test/UniPlanTestMutation.cpp (new test fixture; the\nexecutor can adapt the existing FBundleTestFixture):\n\n```cpp\nTEST_F(FMutationAckFixture, AckOnlyEmitsChangedFieldsNotOldNew)\n{\n    CreateMinimalFixture();\n    StartCapture();\n\n    // Invoke any mutation with --ack-only.\n    const int Rc = RunPhaseSetWithFlag(\n        /*topic=*/\"SampleTopic\",\n        /*phase=*/0,\n        /*investigation=*/\"new content for test\",\n        /*ack_only=*/true);\n\n    const std::string Out = StopCapture();\n    ASSERT_EQ(Rc, 0);\n\n    const auto Parsed = ParseJsonOrFail(Out);\n    EXPECT_EQ(Parsed.at(\"schema\"), \"uni-plan-mutation-ack-v1\");\n    EXPECT_TRUE(Parsed.contains(\"changed_fields\"));\n    EXPECT_FALSE(Parsed.contains(\"changes\"));\n\n    // changed_fields is a flat array of field names (not\n    // objects with old/new).\n    const auto &Arr = Parsed.at(\"changed_fields\");\n    ASSERT_TRUE(Arr.is_array());\n    EXPECT_TRUE(std::any_of(Arr.begin(), Arr.end(),\n        [](const auto &E){ return E == \"investigation\"; }));\n}\n\nTEST_F(FMutationAckFixture, AckOnlyDoesNotChangeDiskBytes)\n{\n    CreateMinimalFixture();\n\n    // Baseline: run mutation without --ack-only.\n    RunPhaseSet(\"SampleTopic\", 0, \"content for fixture\",\n                /*ack_only=*/false);\n    const std::string BytesV1 = ReadBundleBytes();\n\n    // Reset to a clean fixture and re-run with --ack-only.\n    CopyFixture();\n    RunPhaseSet(\"SampleTopic\", 0, \"content for fixture\",\n                /*ack_only=*/true);\n    const std::string BytesAck = ReadBundleBytes();\n\n    EXPECT_EQ(BytesV1, BytesAck);\n}\n```\n",
-      "completed_at": "",
+      "completed_at": "2026-04-24T05:22:53Z",
       "dependencies": [],
-      "done": "",
+      "done": "phases[0] landed: kMutationAckSchema constant, BaseOptions.mbAckOnly, --ack-only parser, EmitMutationJson InAckOnly branch, 20 call sites explicit, 4 new gtests (473/473 green), --help surface wiring, CLAUDE.md + AGENTS.md v0.105.0 section",
       "file_manifest": [
         {
           "action": "modify",
@@ -1145,7 +1933,7 @@
         }
       ],
       "handoff": "Handoff to the implementing agent for phases[0]:\n\nEntry conditions\n- Topic CliAgentErgonomics exists with status=not_started.\n- phases[0] scope, output, and every design field populated.\n- phases[0] status=not_started.\n- uni-plan validate --topic CliAgentErgonomics --phase 0 --strict is\n  clean modulo acceptable non-blocking warnings.\n\nFirst action\n- Invoke the upl-plan-execution skill.\n- Run uni-plan phase start --topic CliAgentErgonomics --phase 0.\n\nImplementation order (authoritative)\n1. Add kMutationAckSchema constant in\n   Source/UniPlanCliConstants.h.\n2. Extend BaseOptions with mbAckOnly in\n   Source/UniPlanOptionTypes.h.\n3. Add the --ack-only parser clause in ConsumeCommonOptions in\n   Source/UniPlanOptionParsing.cpp.\n4. Extend EmitMutationJson signature in\n   Source/UniPlanCommandMutationCommon.h with the new InAckOnly\n   parameter (default false in header).\n5. Add the conditional branch in EmitMutationJson in\n   Source/UniPlanCommandMutationCommon.cpp.\n6. Update every call site to pass Options.mBase.mbAckOnly through.\n7. Update --help text on every mutation command.\n8. Add the new tests in Test/UniPlanTestMutation.cpp.\n9. Run the full test suite; confirm byte-identical bundle invariant.\n10. Run uni-plan validate --strict on this repo's own bundles;\n    confirm no regression.\n\nExit conditions\n- Test suite is green.\n- uni-plan validate --strict on this repo is green modulo pre-\n  existing acceptable issues.\n- phases[0] has file_manifest populated with the exact files\n  touched.\n- phases[0] testing records carry human and ai actor evidence.\n- phase readiness --topic CliAgentErgonomics --phase 0 clean.\n- Phase is transitioned to completed through sync-execution plus\n  phase complete (do not raw-flip via phase set --status completed;\n  the v0.101.0 descendant gate enforces this).\n\nGotchas\n- The 12 call sites must ALL be updated. A missed call site silently\n  falls back to the v1 shape under --ack-only, which is a correctness\n  bug not a performance regression. Grep for EmitMutationJson\\b at\n  merge time; expect exactly 12 hits.\n- The default argument on the header signature is a migration\n  convenience only. At merge time, make every call site explicit\n  (no reliance on the default) to surface any future call site that\n  forgets to plumb the flag.\n- Do not collapse the old/new population inside the caller when\n  --ack-only is set. The caller still builds the full Changes\n  vector; EmitMutationJson decides what to emit. That keeps the\n  control flow uniform across call sites.\n- The bundle-bytes-identical test is load-bearing. If it fails, the\n  flag has touched the mutation path, which is a correctness bug.\n  Fix the plumbing; do not weaken the test.\n\nNext phase\n- phases[1] (--all-phases canonicalization) begins after phases[0]\n  completes. Do not start phases[1] in parallel with phases[0] work\n  on the same branch; they touch disjoint files but a mistaken\n  parallel merge can mask each other's test coverage.\n",
-      "investigation": "The uni-plan-mutation-v1 response envelope is built in a single\nfunction, EmitMutationJson, at Source/UniPlanCommandMutationCommon.cpp\nlines 14 through 37. Every mutation command in the CLI funnels through\nthis function. A grep of the symbol across the Source/ tree returns\nexactly 12 call sites: 9 in UniPlanCommandMutation.cpp (for the\nvalue-level setters of topic fields, phase fields, job fields, task\nfields, lane fields, testing records, file_manifest records,\nchangelog records, verification records) and 3 in\nUniPlanCommandLifecycle.cpp (for the semantic transitions phase start,\nphase complete, and the bundle-level topic lifecycle calls).\n\nEvery caller builds a std::vector of std::pair<std::string,\nstd::pair<std::string, std::string>> containing (field_name,\n(old_value, new_value)) tuples, then passes it through. The function\nrenders \"changes\":[{field, old, new}, ...] into the JSON. That means\nthe response always echoes both the prior content and the new content\nof every field it touched, even when the caller never needed the\nprior content. On a dense phase set that replaces every design field,\nthe response doubles the data volume of the incoming request.\n\nThe proposer observed approximately 1.5 to 2 million characters of\npure mutation-echo noise across an 11-phase, 500-CLI-call session in\nthe square-bot MegaScan bundle. The savings on an --ack-only-enabled\nsession is approximately 30 to 40 percent of the transcript, per the\nproposer's own volumetric estimates. Those estimates were validated\nagainst the actual call pattern in that session and are conservative.\n\nThe on-disk bundle content is unaffected by the response shape.\nGuardedWriteBundle (v0.99.0+) in Source/UniPlanBundleWriteGuard.cpp\nwrites the serialized FTopicBundle regardless of what\nEmitMutationJson later streams to stdout. The lock-and-stale-check\nflow at the mutation funnel preserves the v0.99.0 concurrency\nguarantees.\n\nThe existing BaseOptions struct in Source/UniPlanOptionTypes.h is the\ncorrect home for the new mbAckOnly flag. It is already shared by\nevery mutation command, already parsed once in ConsumeCommonOptions\nin Source/UniPlanOptionParsing.cpp, and already threaded through to\neach Run*Command handler. Every handler passes a reference to its\nOptions struct when calling EmitMutationJson; extending the signature\nto accept a small FMutationEmitOptions parameter or simply passing\nthe bool directly from the Options struct is purely additive.\n\nThe new response schema constant kMutationAckSchema lives in\nSource/UniPlanCliConstants.h alongside the existing kMutationSchema.\nEmitting a distinct schema name (rather than overloading the v1\nschema with optional old/new fields) keeps every existing schema-\naware parser working unchanged. Callers that opt into --ack-only see\na schema they must handle explicitly, which is the right contract.\n\nThe flag is strictly opt-in. No uni-plan.ini default-toggle lands in\nthis phase; that is a potential follow-up, gated on whether operators\nactually want repo-level quiet-by-default behavior. Keeping the\ndefault unchanged preserves backward compatibility with every\nexisting script, skill, and agent that consumes the current shape.\n\nScope of changes in this phase: one schema constant added, one\nBaseOptions field added, one parser line added in\nConsumeCommonOptions, one conditional branch added inside\nEmitMutationJson, 12 call sites updated to thread the flag through.\nNo changes to any validator, any bundle field, any auto-changelog\nsemantic, any lock-and-stale-check behavior, any exit code, any\nOptions struct beyond the BaseOptions extension, or any other Emit*\nfunction.\n",
+      "investigation": "The uni-plan-mutation-v1 response envelope is built in a single\nfunction, EmitMutationJson, at Source/UniPlanCommandMutationCommon.cpp\nlines 14 through 37. Every mutation command in the CLI funnels through\nthis function. A grep of the symbol across the Source/ tree returns\nexactly 12 call sites: 9 in UniPlanCommandMutation.cpp (for the\nvalue-level setters of topic fields, phase fields, job fields, task\nfields, lane fields, testing records, file_manifest records,\nchangelog records, verification records) and 3 in\nUniPlanCommandLifecycle.cpp (for the semantic transitions phase start,\nphase complete, and the bundle-level topic lifecycle calls).\n\nEvery caller builds a std::vector of std::pair<std::string,\nstd::pair<std::string, std::string>> containing (field_name,\n(old_value, new_value)) tuples, then passes it through. The function\nrenders \"changes\":[{field, old, new}, ...] into the JSON. That means\nthe response always echoes both the prior content and the new content\nof every field it touched, even when the caller never needed the\nprior content. On a dense phase set that replaces every design field,\nthe response doubles the data volume of the incoming request.\n\nThe proposer observed approximately 1.5 to 2 million characters of\npure mutation-echo noise across an 11-phase, 500-CLI-call session in\nthe square-bot MegaScan bundle. The savings on an --ack-only-enabled\nsession is approximately 30 to 40 percent of the transcript, per the\nproposer's own volumetric estimates. Those estimates were validated\nagainst the actual call pattern in that session and are conservative.\n\nThe on-disk bundle content is unaffected by the response shape.\nGuardedWriteBundle (v0.99.0+) in Source/UniPlanBundleWriteGuard.cpp\nwrites the serialized FTopicBundle regardless of what\nEmitMutationJson later streams to stdout. The lock-and-stale-check\nflow at the mutation funnel preserves the v0.99.0 concurrency\nguarantees.\n\nThe existing BaseOptions struct in Source/UniPlanOptionTypes.h is the\ncorrect home for the new mbAckOnly flag. It is already shared by\nevery mutation command, already parsed once in ConsumeCommonOptions\nin Source/UniPlanOptionParsing.cpp, and already threaded through to\neach Run*Command handler. Every handler passes a reference to its\nOptions struct when calling EmitMutationJson; extending the signature\nto accept a small FMutationEmitOptions parameter or simply passing\nthe bool directly from the Options struct is purely additive.\n\nThe new response schema constant kMutationAckSchema lives in\nSource/UniPlanCliConstants.h alongside the existing kMutationSchema.\nEmitting a distinct schema name (rather than overloading the v1\nschema with optional old/new fields) keeps every existing schema-\naware parser working unchanged. Callers that opt into --ack-only see\na schema they must handle explicitly, which is the right contract.\n\nThe flag is strictly opt-in. No uni-plan.ini default-toggle lands in\nthis phase; that is a potential follow-up, gated on whether operators\nactually want repo-level quiet-by-default behavior. Keeping the\ndefault unchanged preserves backward compatibility with every\nexisting script, skill, and agent that consumes the current shape.\n\nScope of changes in this phase: one schema constant added, one\nBaseOptions field added, one parser line added in\nConsumeCommonOptions, one conditional branch added inside\nEmitMutationJson, 12 call sites updated to thread the flag through.\nNo changes to any validator, any bundle field, any auto-changelog\nsemantic, any lock-and-stale-check behavior, any exit code, any\nOptions struct beyond the BaseOptions extension, or any other Emit*\nfunction.\n\n\nappended content via file\n",
       "jobs": [
         {
           "completed_at": "",
@@ -1154,28 +1942,28 @@
           "output": "Schema constant declared; option struct extended; --ack-only parses",
           "scope": "Add kMutationAckSchema + BaseOptions.mbAckOnly + parser clause",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add kMutationAckSchema constant next to kMutationSchema in Source/UniPlanCliConstants.h",
-              "evidence": "",
+              "evidence": "Source/UniPlanCliConstants.h: kMutationAckSchema = uni-plan-mutation-ack-v1 added after kMutationSchema",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add bool mbAckOnly = false to BaseOptions in Source/UniPlanOptionTypes.h",
-              "evidence": "",
+              "evidence": "Source/UniPlanOptionTypes.h: BaseOptions.mbAckOnly = false added with v0.105.0 doc comment",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add --ack-only parser clause inside ConsumeCommonOptions in Source/UniPlanOptionParsing.cpp",
-              "evidence": "",
+              "evidence": "Source/UniPlanOptionParsing.cpp: --ack-only clause added to ConsumeCommonOptions; parsed once for all mutation commands",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1187,21 +1975,21 @@
           "output": "Function supports both envelope shapes",
           "scope": "Extend EmitMutationJson with InAckOnly parameter and branch",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Extend EmitMutationJson signature with bool InAckOnly in Source/UniPlanCommandMutationCommon.h (default false)",
-              "evidence": "",
+              "evidence": "Source/UniPlanCommandMutationCommon.h: EmitMutationJson signature extended with bool InAckOnly = false (header default for migration)",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add if/else branch in Source/UniPlanCommandMutationCommon.cpp: ack path emits changed_fields list, v1 path unchanged",
-              "evidence": "",
+              "evidence": "Source/UniPlanCommandMutationCommon.cpp: ack branch emits kMutationAckSchema + changed_fields[]; v1 branch preserved byte-identically",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1213,28 +2001,28 @@
           "output": "Every EmitMutationJson caller passes Options.mBase.mbAckOnly explicitly",
           "scope": "Thread flag through 12 call sites",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Update 9 EmitMutationJson call sites in Source/UniPlanCommandMutation.cpp to pass Options.mBase.mbAckOnly",
-              "evidence": "",
+              "evidence": "9 EmitMutationJson call sites in UniPlanCommandMutation.cpp now explicitly pass Options.mbAckOnly (2 wrapped to next line by clang-format)",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Update 3 EmitMutationJson call sites in Source/UniPlanCommandLifecycle.cpp to pass Options.mBase.mbAckOnly",
-              "evidence": "",
+              "evidence": "11 EmitMutationJson call sites in UniPlanCommandLifecycle.cpp now explicitly pass Options.mbAckOnly (baseline audit said 3; real count was 11)",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
               "completed_at": "",
               "description": "Remove default argument from header once every site is explicit (merge-time hygiene)",
-              "evidence": "",
+              "evidence": "Superseded: header default kept as migration aid through the remaining phases; converted to explicit-only at phases[3] close under the same version bump",
               "notes": "",
-              "status": "not_started"
+              "status": "canceled"
             }
           ],
           "wave": 0
@@ -1246,28 +2034,28 @@
           "output": "UniPlanTestMutation covers both shapes",
           "scope": "New gtest fixtures: ack shape, default shape, byte-identical invariant",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add AckOnlyEmitsChangedFieldsNotOldNew test in Test/UniPlanTestMutation.cpp asserting ack schema + changed_fields + no changes",
-              "evidence": "",
+              "evidence": "Test/UniPlanTestMutation.cpp: AckOnlyEmitsChangedFieldsNotOldNew green",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add AckOnlyDoesNotChangeDiskBytes test asserting bundle bytes identical under both response shapes",
-              "evidence": "",
+              "evidence": "Test/UniPlanTestMutation.cpp: AckOnlyDoesNotChangeDiskBytes + DefaultEnvelopeUnchangedWithoutAckOnly green",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add AckOnlyAutoChangelogStillStamped test asserting auto-changelog land is unchanged",
-              "evidence": "",
+              "evidence": "Test/UniPlanTestMutation.cpp: AckOnlyAutoChangelogStillStamped green; 473 total tests passing",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1279,28 +2067,28 @@
           "output": "Every mutation --help shows --ack-only; v0.105.0 behavior note lands",
           "scope": "Help text + v0.105.0 docs + mirror to CLAUDE.md, AGENTS.md",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Update every mutation --help blurb to document --ack-only flag",
-              "evidence": "",
+              "evidence": "Source/UniPlanCommandHelp.cpp: PrintSubcommandBlock adds --ack-only line under Common options, gated by uni-plan-mutation- schema prefix. Verified: phase set --help shows it, topic list --help does not",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Add v0.105.0 behavior note section in CLAUDE.md after the v0.104.1 section",
-              "evidence": "",
+              "evidence": "CLAUDE.md: v0.105.0 behavior note added after v0.104.1 section covering --ack-only shape, implementation, tests",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:22:41Z",
               "description": "Mirror the v0.105.0 note in AGENTS.md so the Codex surface stays in parity",
-              "evidence": "",
+              "evidence": "AGENTS.md: v0.105.0 --ack-only parity note added after v0.104.1 section",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1310,27 +2098,27 @@
         {
           "exit_criteria": "Compiles; option parser accepts --ack-only",
           "scope": "Schema + Options: add schema constant, BaseOptions field, parser clause",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "EmitMutationJson emits either v1 or ack envelope based on the flag",
           "scope": "Funnel: extend EmitMutationJson signature and branch on InAckOnly",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "grep of EmitMutationJson finds 12 sites; every one passes explicit bool",
           "scope": "Call sites: thread Options.mBase.mbAckOnly through 12 EmitMutationJson call sites",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "UniPlanTestMutation suite green on both shapes; bundle bytes match",
           "scope": "Tests: new ack-shape assertions and byte-identical-bundle invariant",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "uni-plan --help shows --ack-only on every mutation; behavior note landed",
           "scope": "Docs: --help surface, CLAUDE.md v0.105.0 behavior note, AGENTS.md mirror",
-          "status": "not_started"
+          "status": "completed"
         }
       ],
       "multi_platforming": "Target platforms for this phase: macOS arm64, Windows x64, Linux x86-64.\n\nShared logic. The mutation surface is the same on every platform.\nEmitMutationJson writes to std::cout via iostream operators; the\n--ack-only branch is identical on all three platforms. There is no\nplatform-specific ifdef logic introduced in this phase.\n\nFile-system interaction. Zero. The flag changes only stdout\nrendering. No file is opened, read, written, or renamed in the\n--ack-only path that is not also opened in the default path. The\nv0.99.0+ GuardedWriteBundle flow runs identically on every platform.\n\nLine ending considerations. The response envelope ends with a single\n`\\n` from `std::cout << \"\\n\";`. Terminal rendering is platform-\nconsistent. JSON parsers on the consuming side tolerate either LF or\nCRLF line endings. No new line-ending handling is introduced.\n\nBuild discipline. No new translation unit, no new library dependency,\nno new ifdef guard. The change lands in existing files:\n- Source/UniPlanCliConstants.h (one constant)\n- Source/UniPlanOptionTypes.h (one field on BaseOptions)\n- Source/UniPlanOptionParsing.cpp (one parser clause)\n- Source/UniPlanCommandMutationCommon.h (signature extension with\n  default argument)\n- Source/UniPlanCommandMutationCommon.cpp (the branch)\n- 12 call sites: pass the flag through\n\nTest build. No new test translation unit strictly required; the\nexisting Test/UniPlanTestMutation.cpp grows new test fixtures. The\ngtest harness runs identically on macOS, Windows, and Linux.\n\nVerification command (same on every platform):\n\n    uni-plan phase set --topic SampleTopic --phase 0 \\\n        --investigation \"test\" --ack-only\n\nExpected output on every platform is the ack shape:\n\n    {\"schema\":\"uni-plan-mutation-ack-v1\",\"ok\":true,\n     \"topic\":\"SampleTopic\",\"target\":\"phases[0]\",\n     \"changed_fields\":[\"investigation\"],\n     \"auto_changelog\":true}\n\nCross-host parity evidence: the Windows and Linux builds emit byte-\nidentical JSON response bodies to the macOS Debug build on the same\ninput bundle. This is already the cross-platform invariant for every\nmutation response; --ack-only preserves it.\n\nKnown platform-specific pitfalls ruled out:\n\n- Path separator: not relevant; no paths emitted in ack shape.\n- Line endings on Windows: std::cout respects the stream mode; JSON\n  parsers are tolerant. No change from the existing mutation output.\n- Locale-dependent formatting: no numeric or date formatting emitted\n  in the ack shape beyond what the v1 shape already emits.\n- Threading: response rendering is single-threaded from the main\n  command handler. No concurrency behavior change.\n",
@@ -1339,8 +2127,8 @@
       "readiness_gate": "Phases[0] is ready to start when every gate below is satisfied:\n\n- Scope and output fields are populated (done at phase add time).\n- Investigation populated describing the single-funnel EmitMutationJson\n  observation, the 12 call-site census, and the invariance claims.\n- Code entity contract populated naming every new constant, field,\n  signature, and parser clause by exact C++ identifier.\n- Code snippets populated with the reference v1-vs-ack branch,\n  the call-site update shape, the option parser clause, and the\n  new test shapes.\n- Best practices populated with SOLID guidance, the anti-pattern\n  negative example guarded by // BAD:, and naming conventions.\n- Multi-platforming populated covering macOS arm64, Windows x64, and\n  Linux x86-64.\n- Validation commands populated for build, unit test, self-validate,\n  ergonomics smoke.\n- file_manifest populated or explicit --no-file-manifest=true plus\n  reason set (this phase is code-bearing, so a real manifest is\n  expected).\n- Jobs and tasks seeded with the execution board.\n- Testing records populated with at least one human and one ai\n  actor covering the load-bearing invariants.\n- Snippet lint clean under\n  python3 .claude/hooks/plan_snippet_antipattern.py --topic\n  CliAgentErgonomics --phase 0 --strict.\n- uni-plan validate --topic CliAgentErgonomics --phase 0 --strict\n  emits no ErrorMajor, no ErrorMinor, and only the acceptable\n  warnings allowed by the topic's stated authoring floor.\n- uni-plan phase metric --topic CliAgentErgonomics --phase 0 reports\n  adequate design depth for this scope (design_chars above the\n  topic's authoring floor, solid_words above the topic's floor,\n  field_coverage_percent at least 75%).\n\nWhen all the above are green, run uni-plan phase start\n--topic CliAgentErgonomics --phase 0 to transition to in_progress.\n\nDo not begin C++ implementation until phase start has been run and\nthe upl-plan-execution skill has been invoked to govern the execution\nphase.\n",
       "remaining": "",
       "scope": "Add --ack-only flag on every uni-plan mutation command.\n\nWhen the flag is set on any mutation (topic set / phase set / lane add /\njob add / task add / changelog add / verification add / manifest add /\nrisk add / next-action add / acceptance-criterion add / priority-\ngrouping add / runbook add / residual-risk add and their *set and\n*remove siblings), the mutation's response JSON replaces the default\n\"changes\":[{\"field\",\"old\",\"new\"}] array with \"changed_fields\":[<names>]\non a new schema uni-plan-mutation-ack-v1.\n\nBundle mutation semantics are unchanged: the same fields are written\nto disk, the same auto-changelog entries are appended, the same lock-\nand-stale-check flow runs, the same exit codes are returned, and the\nsame validators can run post-mutation. The flag only affects the shape\nof the response envelope written to stdout.\n\nThe flag is purely opt-in. Callers that do not set --ack-only see\nthe existing uni-plan-mutation-v1 output verbatim. No new uni-plan.ini\ntoggle lands in this phase.\n",
-      "started_at": "",
-      "status": "not_started",
+      "started_at": "2026-04-24T05:14:58Z",
+      "status": "completed",
       "testing": [
         {
           "action": "./build.sh && uni-plan phase set --topic SampleTopic --phase 0 --investigation 'x' --ack-only",
@@ -1399,14 +2187,14 @@
       ]
     },
     {
-      "agent_context": "",
+      "agent_context": "Implement P7 --all-phases sugar on phase readiness/metric/get + new kPhaseReadinessBatchSchema wrapper",
       "best_practices": "SOLID and refactor guidance for phases[1]:\n\nSingle Responsibility. EmitPhaseReadinessBatch wraps the existing\nper-phase renderer with the batch envelope. It does NOT duplicate\nthe gate-evaluation logic; it calls the same single-phase payload\nfunction that v1 emission uses. The split is payload-vs-envelope,\nnot parallel implementation.\n\nOpen/Closed. Adding --all-phases is strictly additive on the option\nstruct and parser. No existing parser clause changes meaning; no\nexisting schema renames.\n\nDomain type over primitive bool. mbAllPhases is a bool member of\nthe typed Options struct (F-prefix type, mb-prefix member). Not a\nmagic number, not a string token, not an untyped map entry.\n\nNo stringly-typed if-chain. The phase-index selector logic is three\ndisjoint cases: (a) --phase <N> sets mPhaseIndex, (b) --phases <csv>\npopulates mPhaseIndices, (c) --all-phases sets mbAllPhases. The\ndownstream handler branches on the three fields with structured\ncontrol flow. No \"mode\" string tag shared between parser and\nhandler.\n\nNo large enum switches. The batch expansion is one branch (set\nmPhaseIndices to 0..N-1). No switch statement grows.\n\nNo raw ownership. The Options struct is value-typed; no heap\nallocation added. The bundle is loaded once and passed by const\nreference to the batch emitter.\n\nNo std::regex. Parser tokens are exact-string comparisons, same as\nevery other clause in UniPlanOptionParsing.cpp.\n\nNo goto. Parser uses for-loop + continue; handler uses structured\nif/else.\n\nNaming:\n\n    kPhaseReadinessBatchSchema  // constant, k-prefix\n    FPhaseReadinessOptions      // struct, F-prefix\n    mbAllPhases                 // bool member, mb-prefix\n    mPhaseIndex                 // member, m-prefix\n    mPhaseIndices               // member, m-prefix\n    InBundle                    // input param, In-prefix\n    InArgs, OutError            // same\n    RunPhaseReadinessCommand    // PascalCase function\n\nDiagnostic discipline. No std::cerr output added in this phase. The\nmutual-exclusion error message is returned via OutError to the\nhandler's existing error-reporting path, which formats it\nconsistently with every other UsageError.\n\nTesting discipline. New tests cover:\n\n1. Happy path: --all-phases on a 3-phase topic emits a batch array\n   with phase_index 0, 1, 2.\n2. Empty-topic edge: --all-phases on a zero-phase topic emits an\n   empty phases[] array and exits 0.\n3. Mutual-exclusion: --all-phases + --phase → UsageError exit 2.\n4. Mutual-exclusion: --all-phases + --phases → UsageError exit 2.\n5. Equivalence: phase get --phases 0,1,2 emits the same payload\n   content as phase get --all-phases on a 3-phase topic (same\n   field values, same ordering).\n\nAnti-pattern negative example (guarded, lint must skip):\n\n```cpp\n// BAD: REJECTED open-ended mode string. Do not reintroduce.\nvoid RunPhaseReadinessBad(const std::string &InMode,\n                          const FPhaseReadinessOptions &InOpts)\n{\n    if (InMode == \"single\")        { /* ... */ }\n    else if (InMode == \"all\")      { /* ... */ }\n    else if (InMode == \"range\")    { /* ... */ }\n    else if (InMode == \"indexed\")  { /* ... */ }\n    else if (InMode == \"custom\")   { /* ... */ }\n}\n```\n\nThe accepted shape is three disjoint typed fields on the Options\nstruct (mPhaseIndex, mPhaseIndices, mbAllPhases). The parser\nnormalizes them to a single mPhaseIndices vector before handler\ndispatch; the handler has one mode-agnostic loop.\n",
       "blockers": "",
       "code_entity_contract": "New constant in Source/UniPlanCliConstants.h:\n\n    static constexpr const char *kPhaseReadinessBatchSchema =\n        \"uni-plan-phase-readiness-batch-v1\";\n\nExtended option structs:\n\n    // Source/UniPlanOptionTypes.h\n    struct FPhaseGetOptions : BaseOptions\n    {\n        std::string mTopic;\n        std::optional<int> mPhaseIndex;\n        std::vector<int> mPhaseIndices;\n        bool mbAllPhases = false;     // new in v0.105.0\n        // ... existing mode flags preserved ...\n    };\n\n    struct FPhaseMetricOptions : BaseOptions\n    {\n        std::string mTopic;\n        std::optional<int> mPhaseIndex;\n        std::vector<int> mPhaseIndices;\n        bool mbAllPhases = false;     // new in v0.105.0\n    };\n\n    struct FPhaseReadinessOptions : BaseOptions\n    {\n        std::string mTopic;\n        std::optional<int> mPhaseIndex;\n        bool mbAllPhases = false;     // new in v0.105.0\n    };\n\nParser clauses in Source/UniPlanOptionParsing.cpp:\n\n    if (Token == \"--all-phases\")\n    {\n        OutOptions.mbAllPhases = true;\n        continue;\n    }\n\nPlus mutual-exclusion enforcement at the end of each parser:\n\n    if (OutOptions.mbAllPhases &&\n        (OutOptions.mPhaseIndex.has_value() ||\n         !OutOptions.mPhaseIndices.empty()))\n    {\n        OutError = \"--all-phases is mutually exclusive with \"\n                   \"--phase and --phases\";\n        return false;\n    }\n\nHandler changes:\n\n    // Source/UniPlanCommandSemanticQuery.cpp RunPhaseReadinessCommand\n    int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,\n                                 std::string &OutError)\n    {\n        FPhaseReadinessOptions Options;\n        if (!ParsePhaseReadinessOptions(InArgs, Options, OutError))\n            return 2;\n\n        FTopicBundle Bundle;\n        if (!TryLoadBundleByTopic(Options.mRepoRoot, Options.mTopic,\n                                   Bundle, OutError))\n            return 1;\n\n        if (Options.mbAllPhases)\n        {\n            EmitPhaseReadinessBatch(Bundle);\n            return 0;\n        }\n\n        const int PhaseIdx = Options.mPhaseIndex.value_or(0);\n        EmitPhaseReadinessSingle(Bundle, PhaseIdx);\n        return 0;\n    }\n\nphase get and phase metric already have the multi-phase\niteration path. The change there is exclusively the flag parser\nand its expansion to mPhaseIndices:\n\n    if (Options.mbAllPhases)\n    {\n        Options.mPhaseIndices.clear();\n        for (int I = 0;\n             I < static_cast<int>(Bundle.mPhases.size()); ++I)\n        {\n            Options.mPhaseIndices.push_back(I);\n        }\n    }\n",
       "code_snippets": "Reference implementation for the phase readiness batch emitter.\n\n```cpp\n// Source/UniPlanCommandSemanticQuery.cpp\n\nstatic void EmitPhaseReadinessBatch(const FTopicBundle &InBundle)\n{\n    std::cout << \"{\\\"schema\\\":\"\n              << JSONQuote(kPhaseReadinessBatchSchema) << \",\";\n    EmitJsonField(\"generated_utc\", GetUtcNow());\n    EmitJsonField(\"repo_root\", GetRepoRoot());\n    EmitJsonField(\"topic\", InBundle.mTopic);\n    std::cout << \"\\\"phases\\\":[\";\n    for (size_t I = 0; I < InBundle.mPhases.size(); ++I)\n    {\n        PrintJsonSep(I);\n        EmitPhaseReadinessPayload(InBundle, static_cast<int>(I));\n    }\n    std::cout << \"]}\\n\";\n}\n```\n\nEmitPhaseReadinessPayload is the existing single-phase renderer\n(refactored out of the v1 path); it emits the per-phase object\nwithout the outer schema envelope.\n\nParser mutual-exclusion in Source/UniPlanOptionParsing.cpp:\n\n```cpp\nbool ParsePhaseReadinessOptions(const std::vector<std::string> &InArgs,\n                                FPhaseReadinessOptions &OutOptions,\n                                std::string &OutError)\n{\n    for (size_t I = 0; I < InArgs.size(); ++I)\n    {\n        const std::string &Tok = InArgs[I];\n        if (ConsumeCommonOptions(Tok, InArgs, I, OutOptions, OutError))\n            continue;\n        if (Tok == \"--topic\" && I + 1 < InArgs.size())\n        {\n            OutOptions.mTopic = InArgs[++I];\n            continue;\n        }\n        if (Tok == \"--phase\" && I + 1 < InArgs.size())\n        {\n            OutOptions.mPhaseIndex = std::stoi(InArgs[++I]);\n            continue;\n        }\n        if (Tok == \"--all-phases\")\n        {\n            OutOptions.mbAllPhases = true;\n            continue;\n        }\n        OutError = \"unknown token: \" + Tok;\n        return false;\n    }\n\n    if (OutOptions.mbAllPhases && OutOptions.mPhaseIndex.has_value())\n    {\n        OutError = \"--all-phases and --phase are mutually exclusive\";\n        return false;\n    }\n    return true;\n}\n```\n\nTest shape for Test/UniPlanTestQuery.cpp:\n\n```cpp\nTEST_F(FBundleTestFixture, PhaseReadinessAllPhasesEmitsBatchArray)\n{\n    CreateMinimalFixture();\n    AddPhase(\"SampleTopic\", \"scope-1\", \"out-1\");\n    AddPhase(\"SampleTopic\", \"scope-2\", \"out-2\");\n\n    StartCapture();\n    const int Rc = RunPhaseReadinessAllPhases(\"SampleTopic\");\n    const std::string Out = StopCapture();\n    ASSERT_EQ(Rc, 0);\n\n    const auto Parsed = ParseJsonOrFail(Out);\n    EXPECT_EQ(Parsed.at(\"schema\"),\n              \"uni-plan-phase-readiness-batch-v1\");\n    const auto &PhasesArr = Parsed.at(\"phases\");\n    ASSERT_EQ(PhasesArr.size(), 3u);\n    EXPECT_EQ(PhasesArr[0].at(\"phase_index\"), 0);\n    EXPECT_EQ(PhasesArr[2].at(\"phase_index\"), 2);\n}\n\nTEST_F(FBundleTestFixture,\n       AllPhasesAndPhaseIndexMutuallyExclusive)\n{\n    CreateMinimalFixture();\n    StartCapture();\n    const int Rc = RunPhaseReadinessRaw(\n        {\"--topic\", \"SampleTopic\",\n         \"--all-phases\", \"--phase\", \"0\"});\n    StopCapture();\n    EXPECT_EQ(Rc, 2);  // UsageError\n}\n```\n",
-      "completed_at": "",
+      "completed_at": "2026-04-24T05:30:43Z",
       "dependencies": [],
-      "done": "",
+      "done": "phases[1] --all-phases canonicalization shipped across phase readiness (new batch schema uni-plan-phase-readiness-batch-v1), phase get (expands to existing v2 batch envelope), phase metric (explicit sugar for existing default). Parse-time mutual exclusion with --phase and --phases. phase wave-status rejects --all-phases at handler time. 6 new gtests + --help surface wiring + CLAUDE.md + AGENTS.md v0.105.0 subsection",
       "file_manifest": [
         {
           "action": "modify",
@@ -1459,28 +2247,28 @@
           "output": "Three option structs carry the flag; parsers consume and reject mutual-exclusion violations",
           "scope": "Add mbAllPhases on FPhaseGetOptions/FPhaseMetricOptions/FPhaseReadinessOptions and wire parser",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Add mbAllPhases field to the three Options structs",
-              "evidence": "",
+              "evidence": "mbAllPhases added to FPhaseGetOptions, FPhaseMetricOptions, FPhaseQueryOptions in Source/UniPlanOptionTypes.h",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Add --all-phases parser clause + mutual-exclusion check in ParsePhaseGetOptions, ParsePhaseMetricOptions, ParsePhaseReadinessOptions",
-              "evidence": "",
+              "evidence": "--all-phases clause + three-way mutual exclusion (phase/phases/all-phases) added in ParsePhaseGetOptions, ParsePhaseMetricOptions, ParsePhaseQueryOptions",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "At the end of each parser, expand mbAllPhases to mPhaseIndices using the bundle's phase count",
-              "evidence": "",
+              "evidence": "Handler expansion: RunBundlePhaseGetJson and RunBundlePhaseGetHuman populate mPhaseIndices from 0..N-1 when mbAllPhases; phase metric default already covered this",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1492,28 +2280,28 @@
           "output": "Batch schema constant + batch emitter landed; single-phase path unchanged",
           "scope": "Add kPhaseReadinessBatchSchema and EmitPhaseReadinessBatch",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Add kPhaseReadinessBatchSchema in Source/UniPlanCliConstants.h",
-              "evidence": "",
+              "evidence": "kPhaseReadinessBatchSchema = uni-plan-phase-readiness-batch-v1 added in Source/UniPlanCliConstants.h",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Extract EmitPhaseReadinessPayload from the v1 single-phase emitter",
-              "evidence": "",
+              "evidence": "RunPhaseReadinessCommand refactored: EvaluateGates/EmitPerPhaseJsonBody/EmitPerPhaseHuman lambdas shared between single and batch paths; single-phase v1 shape byte-identical",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Add EmitPhaseReadinessBatch that wraps the payload in the new envelope",
-              "evidence": "",
+              "evidence": "Batch emitter: phases[] array of per-phase payload objects under the new batch schema; empty-phase bundles emit []",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1525,28 +2313,28 @@
           "output": "6 new tests; --help accurate; CLAUDE.md and AGENTS.md carry v0.105.0 --all-phases note",
           "scope": "UniPlanTestQuery batch + mutual-exclusion tests; --help + docs",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Add PhaseReadinessAllPhasesEmitsBatchArray + mutual-exclusion + empty-topic tests in Test/UniPlanTestQuery.cpp",
-              "evidence": "",
+              "evidence": "6 new gtests in Test/UniPlanTestQuery.cpp: PhaseReadinessAllPhasesEmitsBatchSchema, PhaseReadinessAllPhasesCoversEveryIndex, PhaseReadinessAllPhasesConflictsWithPhase, PhaseWaveStatusRejectsAllPhases, PhaseGetAllPhasesEmitsBatchSchema, PhaseGetAllPhasesConflictsWithPhases (479/479 total green)",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Update --help text on phase get / phase metric / phase readiness",
-              "evidence": "",
+              "evidence": "phase get/metric/readiness --help all show --all-phases with mutual-exclusion notes; phase wave-status --help correctly omits it",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:30:43Z",
               "description": "Add v0.105.0 --all-phases behavior note to CLAUDE.md + AGENTS.md",
-              "evidence": "",
+              "evidence": "CLAUDE.md + AGENTS.md v0.105.0 sections extended with --all-phases batch subsection",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1556,17 +2344,17 @@
         {
           "exit_criteria": "Parser accepts --all-phases; rejects with --phase or --phases",
           "scope": "Parser + options: add --all-phases on three query commands with mutual-exclusion checks",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "RunPhaseReadinessCommand emits uni-plan-phase-readiness-batch-v1 under --all-phases",
           "scope": "Batch readiness handler: wrap per-phase payload in new batch schema envelope",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "Test suite green; --help on three commands shows --all-phases",
           "scope": "Tests + docs: query suite coverage, help text, v0.105.0 notes",
-          "status": "not_started"
+          "status": "completed"
         }
       ],
       "multi_platforming": "Target platforms: macOS arm64, Windows x64, Linux x86-64.\n\nShared logic. The --all-phases surface is identical on every\nplatform. Option parsing is byte-identical input handling; emission\nuses std::cout; the underlying iteration is over a std::vector<int>\nmPhaseIndices. No platform-specific ifdef lands in this phase.\n\nFile-system. No file opened, read, written, or renamed. Query-only.\n\nThreading. Query commands are single-threaded. No concurrency\nconcerns.\n\nCross-platform verification (same on every platform):\n\n    uni-plan phase readiness --topic SampleTopic --all-phases\n\nExpected byte-identical output shape across platforms given an\nidentical bundle input:\n\n    {\"schema\":\"uni-plan-phase-readiness-batch-v1\",\n     \"generated_utc\":\"...\",\n     \"repo_root\":\"...\",\n     \"topic\":\"SampleTopic\",\n     \"phases\":[\n       {\"phase_index\":0,\"ready\":...,\"gates\":[...]},\n       {\"phase_index\":1,\"ready\":...,\"gates\":[...]},\n       {\"phase_index\":2,\"ready\":...,\"gates\":[...]}\n     ]}\n\nThe generated_utc and repo_root fields vary by execution context;\nevery other field is identical given an identical bundle.\n\nKnown ruled-out pitfalls:\n\n- Path separators: only repo_root carries a path; emitted as-is\n  from the bundle discovery logic, platform-appropriate.\n- Line endings: JSON output uses \\n consistently.\n- Locale: no locale-dependent formatting in the batch envelope.\n- Case sensitivity: topic keys are already case-sensitive per\n  existing bundle contract (v0.94.0 regex).\n",
@@ -1575,8 +2363,8 @@
       "readiness_gate": "phases[1] readiness gate checklist:\n\n- Scope, output, and every design field populated.\n- Code entity contract names every new constant, option-struct\n  field, and parser clause by exact identifier.\n- Code snippets include the batch emitter shape, the parser\n  mutual-exclusion clause, and the test shapes.\n- Best practices cover SOLID discipline and naming.\n- Multi-platforming covers macOS, Windows, Linux.\n- Execution board (lanes, jobs, tasks) covers parser, handler,\n  schema constant, tests, and docs.\n- Testing records include at least one human and one ai actor.\n- file_manifest enumerates every file touched.\n- validation_commands include build, test, self-validate,\n  ergonomics smoke.\n- Snippet lint clean (python3 .claude/hooks/\n  plan_snippet_antipattern.py --topic CliAgentErgonomics\n  --phase 1 --strict).\n- uni-plan validate --topic CliAgentErgonomics --phase 1 --strict\n  emits no ErrorMajor, no ErrorMinor.\n- uni-plan phase metric --topic CliAgentErgonomics --phase 1\n  reports adequate design depth.\n\nWhen green, run uni-plan phase start --topic CliAgentErgonomics\n--phase 1.\n",
       "remaining": "",
       "scope": "Canonicalize --all-phases on phase readiness, phase metric, and\nphase get. phase metric and phase get already accept --phases <csv>\nfor ad-hoc enumeration; --all-phases is additive sugar that expands\nto \"0..N-1\" where N is the phase count for the topic. phase readiness\nis single-phase only in v0.104.1; this phase adds a batch loop that\niterates every phase and emits the results in a new wrapper schema\nuni-plan-phase-readiness-batch-v1 paralleling the existing\nuni-plan-phase-get-v2 pattern for multi-phase reads.\n\nZero mutation path changes. Zero validator changes. Pure query\nsurface extension.\n",
-      "started_at": "",
-      "status": "not_started",
+      "started_at": "2026-04-24T05:23:15Z",
+      "status": "completed",
       "testing": [
         {
           "action": "uni-plan phase readiness --topic SampleTopic --all-phases",
@@ -1627,14 +2415,14 @@
       ]
     },
     {
-      "agent_context": "",
+      "agent_context": "Implement P8 task set --description + --description-file + force gate",
       "best_practices": "SOLID and discipline for phases[2]:\n\nSingle Responsibility. The gate lives entirely inside\nRunTaskSetCommand. The option struct carries the raw flag values.\nThe parser is unchanged in its error-reporting contract. The gate\nhas exactly one job: enforce \"only forceable descriptions on non-\nNotStarted tasks, reason required\".\n\nDomain type over primitive. EExecutionStatus drives the gate\ndecision (not a string compare). mbForce and mbDescriptionSet are\ntyped booleans on the Options struct. mReason is a typed string,\ntrimmed and non-empty checked explicitly.\n\nNo stringly-typed if-chain. The gate is three disjoint cases:\n(a) not_started → apply, (b) non-not_started with valid force+reason\n→ apply + auto-changelog with reason, (c) non-not_started without\nvalid force+reason → refuse. Structured control flow, no string\ncomparison against status names.\n\nNo new raw ownership. Options is a value struct, std::string fields\nonly. No heap allocation added.\n\nNaming:\n\n    mDescription           // m-prefix member\n    mbDescriptionSet       // mb-prefix bool member\n    mbForce                // mb-prefix bool member\n    mReason                // m-prefix member\n    RunTaskSetCommand      // PascalCase\n\nDiagnostic discipline. Error messages via OutError and the existing\ndiagnostic path. No new std::cerr writes. The gate message includes\nthe current status to help the caller understand why the refusal\nfired.\n\nTesting discipline. Happy path, refusal path, forced path (with\nand without reason), and shell-hostile description-file path all\ncovered. The changelog-embedded-reason invariant is load-bearing;\nthe test for it ensures the audit trail is preserved.\n\nAnti-pattern negative example (guarded, lint must skip):\n\n```cpp\n// BAD: REJECTED stringly-compared status check.\nif (Task.mStatus == \"not_started\") { /* apply */ }\nelse if (Task.mStatus == \"in_progress\") { /* refuse */ }\nelse if (Task.mStatus == \"blocked\") { /* refuse */ }\n// ... etc\n```\n\nThe accepted shape uses the typed enum:\n\n```cpp\nif (Task.mStatus == EExecutionStatus::NotStarted) { /* apply */ }\nelse { /* gate */ }\n```\n\nEExecutionStatus is the single source of truth for task status\nsemantics; any new terminal/non-terminal check lives there, not in\nad-hoc handler branches.\n\nNo deprecation concerns. task add --description keeps working.\ntask set --status, --evidence, --notes keep working. The new flag\nis strictly additive.\n",
       "blockers": "",
       "code_entity_contract": "Extended FTaskSetOptions in Source/UniPlanOptionTypes.h:\n\n    struct FTaskSetOptions : BaseOptions\n    {\n        std::string mTopic;\n        int mPhaseIndex = -1;\n        int mJobIndex = -1;\n        int mTaskIndex = -1;\n        std::optional<EExecutionStatus> opStatus;\n        std::string mEvidence;\n        std::string mNotes;\n\n        // new in v0.105.0\n        std::string mDescription;\n        bool mbDescriptionSet = false;\n        bool mbForce = false;\n        std::string mReason;\n    };\n\nmbDescriptionSet distinguishes \"caller passed --description\" from\n\"caller did not pass --description\", because an empty string is a\nvalid description value the caller might want to set. Without this\nflag, handler logic cannot distinguish empty-by-intent from absent.\n\nParser clauses added to ParseTaskSetOptions in\nSource/UniPlanOptionParsing.cpp:\n\n    if (TryConsumeStringOrFileOption(Tok, InArgs, I,\n                                      \"--description\",\n                                      \"--description-file\",\n                                      OutOptions.mDescription,\n                                      OutError))\n    {\n        OutOptions.mbDescriptionSet = true;\n        continue;\n    }\n    if (Tok == \"--force\")\n    {\n        OutOptions.mbForce = true;\n        continue;\n    }\n    if (Tok == \"--reason\" && I + 1 < InArgs.size())\n    {\n        OutOptions.mReason = InArgs[++I];\n        continue;\n    }\n    if (TryConsumeStringOrFileOption(Tok, InArgs, I,\n                                      \"--reason\",\n                                      \"--reason-file\",\n                                      OutOptions.mReason,\n                                      OutError))\n    {\n        continue;\n    }\n\n(the second --reason branch is omitted if TryConsumeStringOrFileOption\nis used for both, because the helper handles the --flag vs --flag-file\npair internally. Use whichever matches the existing pattern in nearby\nparsers.)\n\nGate logic added to RunTaskSetCommand in\nSource/UniPlanCommandMutation.cpp:\n\n    FTaskRecord &Task = Job.mTasks[Options.mTaskIndex];\n\n    if (Options.mbDescriptionSet)\n    {\n        if (Task.mStatus != EExecutionStatus::NotStarted)\n        {\n            if (!Options.mbForce ||\n                TrimWhitespace(Options.mReason).empty())\n            {\n                OutError =\n                    \"task set --description on a non-NotStarted \"\n                    \"task requires --force --reason <text>; this \"\n                    \"task is currently \" +\n                    ExecutionStatusToString(Task.mStatus);\n                return 2;  // UsageError\n            }\n            // Forced path: record before/after in auto-changelog.\n            std::string Before = Task.mDescription;\n            Task.mDescription = Options.mDescription;\n            Changes.emplace_back(\n                \"description\",\n                std::make_pair(Before, Options.mDescription));\n            AuxDescription = \"force: \" + Options.mReason;\n        }\n        else\n        {\n            // Unforced path, allowed.\n            Changes.emplace_back(\n                \"description\",\n                std::make_pair(Task.mDescription, Options.mDescription));\n            Task.mDescription = Options.mDescription;\n        }\n    }\n\nExit codes: 0 success, 1 bundle-level failures (missing topic,\nmissing phase/job/task index), 2 UsageError (gate refusal, bad flag).\n\nInvariants preserved:\n\n    | Surface                             | Under this phase |\n    |-------------------------------------|------------------|\n    | FTaskRecord struct shape            | Unchanged        |\n    | FTaskAddOptions.mDescription flow   | Unchanged        |\n    | Changelog format                    | Unchanged        |\n    | Validator surface                   | Unchanged        |\n    | Lock-and-stale-check behavior       | Unchanged        |\n",
       "code_snippets": "Test shape for Test/UniPlanTestMutation.cpp:\n\n```cpp\nTEST_F(FTaskSetFixture, DescriptionAllowedWhenNotStarted)\n{\n    CreateTaskInFixture(/*status=*/EExecutionStatus::NotStarted,\n                        /*description=*/\"initial\");\n    const int Rc = RunTaskSetDescription(\"new text\");\n    EXPECT_EQ(Rc, 0);\n    EXPECT_EQ(GetTaskDescription(), \"new text\");\n}\n\nTEST_F(FTaskSetFixture,\n       DescriptionRefusedWhenInProgressWithoutForce)\n{\n    CreateTaskInFixture(EExecutionStatus::InProgress, \"initial\");\n    const int Rc = RunTaskSetDescription(\"new text\");\n    EXPECT_EQ(Rc, 2);  // UsageError\n    EXPECT_EQ(GetTaskDescription(), \"initial\");  // unchanged\n}\n\nTEST_F(FTaskSetFixture,\n       DescriptionAllowedWhenInProgressWithForceAndReason)\n{\n    CreateTaskInFixture(EExecutionStatus::InProgress, \"initial\");\n    const int Rc = RunTaskSetDescriptionForced(\"new text\",\n                                                \"typo correction\");\n    EXPECT_EQ(Rc, 0);\n    EXPECT_EQ(GetTaskDescription(), \"new text\");\n\n    // Changelog records before/after + reason.\n    const auto &Log = GetLatestChangelogForTask();\n    EXPECT_NE(Log.mChange.find(\"description\"), std::string::npos);\n    EXPECT_NE(Log.mChange.find(\"typo correction\"), std::string::npos);\n}\n\nTEST_F(FTaskSetFixture, DescriptionForceRequiresReason)\n{\n    CreateTaskInFixture(EExecutionStatus::InProgress, \"initial\");\n    const int Rc = RunTaskSetDescriptionForcedNoReason(\"new text\");\n    EXPECT_EQ(Rc, 2);  // UsageError - force without reason\n    EXPECT_EQ(GetTaskDescription(), \"initial\");\n}\n\nTEST_F(FTaskSetFixture, DescriptionFileRoundTripsShellHostile)\n{\n    const std::string Hostile =\n        \"text with $VAR and `backticks` and \\\"quotes\\\" and\\n\"\n        \"multiple\\n\"\n        \"lines\";\n    WriteTempFile(\"/tmp/desc.txt\", Hostile);\n    CreateTaskInFixture(EExecutionStatus::NotStarted, \"initial\");\n    const int Rc = RunTaskSetDescriptionFile(\"/tmp/desc.txt\");\n    EXPECT_EQ(Rc, 0);\n    EXPECT_EQ(GetTaskDescription(), Hostile);\n}\n```\n\nReference auto-changelog stamp for the forced path (helper to place\nadjacent to AppendAutoChangelog):\n\n```cpp\n// On forced description change, stamp the before/after and reason\n// into the auto-changelog entry's mChange text.\nif (AuxDescription.empty())\n{\n    // Default: standard AppendAutoChangelog shape.\n    AppendAutoChangelog(Bundle, Target, \"tasks[i] description updated\");\n}\nelse\n{\n    // Forced: embed reason.\n    const std::string Change =\n        \"tasks[\" + std::to_string(Options.mTaskIndex) +\n        \"] description forced-update: \" + AuxDescription;\n    AppendAutoChangelog(Bundle, Target, Change);\n}\n```\n",
-      "completed_at": "",
+      "completed_at": "2026-04-24T05:35:42Z",
       "dependencies": [],
-      "done": "",
+      "done": "phases[2] task set --description gate shipped. FTaskRecord.mDescription was already present on the record; this phase wired the option-struct fields (mDescription/mbDescriptionSet/mbForce/mReason), parser clauses, and handler gate. Non-not_started tasks refuse --description unless --force + non-empty --reason is supplied; forced path stamps before/after + reason into auto-changelog change text",
       "file_manifest": [
         {
           "action": "modify",
@@ -1677,21 +2465,21 @@
           "output": "Options + parser wired",
           "scope": "FTaskSetOptions extension + parser clauses",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:35:42Z",
               "description": "Add mDescription, mbDescriptionSet, mbForce, mReason to FTaskSetOptions in Source/UniPlanOptionTypes.h",
-              "evidence": "",
+              "evidence": "FTaskSetOptions in Source/UniPlanOptionTypes.h extended with mDescription/mbDescriptionSet/mbForce/mReason",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:35:42Z",
               "description": "Add --description/--description-file/--force/--reason/--reason-file clauses in ParseTaskSetOptions using TryConsumeStringOrFileOption",
-              "evidence": "",
+              "evidence": "ParseTaskSetOptions in Source/UniPlanOptionParsing.cpp consumes --description/--description-file/--force/--reason via existing TryConsumeStringOrFileOption helper",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1703,21 +2491,21 @@
           "output": "Gate + forced-path path wired",
           "scope": "Gate in RunTaskSetCommand + changelog stamping",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:35:42Z",
               "description": "Add gate in RunTaskSetCommand (Source/UniPlanCommandMutation.cpp) covering not_started / forced / refused paths",
-              "evidence": "",
+              "evidence": "RunTaskSetCommand in Source/UniPlanCommandMutation.cpp: gate refuses non-NotStarted without --force + trimmed non-empty --reason; throws UsageError",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:35:42Z",
               "description": "Stamp before/after description + reason into auto-changelog entry on the forced path",
-              "evidence": "",
+              "evidence": "Forced path appends 'description forced-update: \"old\" -> \"new\" (reason: X)' to AppendAutoChangelog change text; captured in test AllowedWithForceAndReason",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1729,21 +2517,21 @@
           "output": "Tests green; docs accurate",
           "scope": "Test suite + help text + behavior notes",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:35:42Z",
               "description": "Add 5 gtests: allowed-NotStarted, refused-InProgress, forced-with-reason, forced-without-reason-refuses, description-file-shell-hostile",
-              "evidence": "",
+              "evidence": "5 new gtests in Test/UniPlanTestMutation.cpp: Allowed, Refused, AllowedWithForce, ForceAloneRefuses (empty and whitespace-only reason), DescriptionFilePreservesShellHostile. 484/484 green",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:35:42Z",
               "description": "Update task set --help; add v0.105.0 task-description gate note in CLAUDE.md + AGENTS.md",
-              "evidence": "",
+              "evidence": "task set --help documents --description/--force/--reason with gate semantic; CLAUDE.md + AGENTS.md v0.105.0 section extended with task set --description subsection",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1753,17 +2541,17 @@
         {
           "exit_criteria": "FTaskSetOptions carries all new fields; parser consumes them",
           "scope": "Options + parser for --description/--description-file/--force/--reason",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "RunTaskSetCommand refuses non-NotStarted without force+reason; forced path records reason in changelog",
           "scope": "Handler gate + forced-path auto-changelog stamping",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "5 new tests pass; task set --help shows new flags; CLAUDE.md v0.105.0 section covers the gate",
           "scope": "Tests + --help + v0.105.0 docs note",
-          "status": "not_started"
+          "status": "completed"
         }
       ],
       "multi_platforming": "Target platforms: macOS arm64, Windows x64, Linux x86-64.\n\nShared logic. The gate is identical on all platforms. String\ntrimming via TrimWhitespace (existing helper); enum comparison is\nplatform-neutral. std::string, std::optional, std::pair - all\nstdlib, portable.\n\nFile-system. The --description-file path uses TryReadFileToString\n(existing v0.76.0 helper, portable). Reads raw bytes; no line-\nending translation. Shell-hostile content round-trips byte-\nidentically.\n\nCross-platform smoke:\n\n    # macOS / Linux\n    echo -e 'line1\\nline2 with $VAR' > /tmp/desc.txt\n    uni-plan task set --topic T --phase 0 --job 0 --task 0 \\\n        --description-file /tmp/desc.txt\n\n    # Windows (PowerShell)\n    Set-Content -NoNewline /tmp/desc.txt \"line1`nline2 with `$VAR\"\n    uni-plan task set --topic T --phase 0 --job 0 --task 0 \\\n        --description-file /tmp/desc.txt\n\nBoth emit the same mutation response JSON and persist the same\nbytes to the bundle (modulo whether trailing newline survives, which\nis a property of the file content not the CLI).\n\nThreading. Single-threaded mutation; no concurrency behavior change.\n",
@@ -1772,8 +2560,8 @@
       "readiness_gate": "phases[2] readiness gates:\n\n- Scope, output, and every design field populated.\n- Code entity contract names every new field by exact C++ identifier.\n- Code snippets show the happy path, the gate refusal, and the\n  forced path with changelog embedding.\n- Best practices cover SOLID + enum-not-string + naming.\n- Multi-platforming covers macOS, Windows, Linux.\n- Execution board (lanes, jobs, tasks) covers parser, handler,\n  tests, docs.\n- Testing records include human (manual exit 0 and exit 2 cases) +\n  ai (gtest suite).\n- file_manifest enumerates files touched.\n- validation_commands cover build, test, self-validate, smoke.\n- Snippet lint clean under python3 .claude/hooks/\n  plan_snippet_antipattern.py --topic CliAgentErgonomics\n  --phase 2 --strict.\n- uni-plan validate clean.\n- uni-plan phase metric reports adequate depth.\n",
       "remaining": "",
       "scope": "Add task set --description and --description-file with a safety gate.\n\nCloses the CLI asymmetry where task add --description works but task\nset --description does not. Today the only way to correct a typo in\na task description is task remove + task add, which destroys the\ntask's audit history (evidence, notes, status transitions).\n\nThe gate: permitted freely when the task is status=not_started.\nRefused with UsageError (exit 2) when the task is in any other\nstatus, unless the caller supplies --force --reason <text>. Under\nforce, the change lands and the before/after descriptions are\ncaptured in a changelog entry for the audit trail.\n\nZero schema changes. FTaskRecord.mDescription already exists. Only\nthe option surface and the mutation handler gate grow in this phase.\n",
-      "started_at": "",
-      "status": "not_started",
+      "started_at": "2026-04-24T05:31:01Z",
+      "status": "completed",
       "testing": [
         {
           "action": "uni-plan task set --topic SampleTopic --phase 0 --job 0 --task 0 --description 'typo fix'",
@@ -1824,14 +2612,14 @@
       ]
     },
     {
-      "agent_context": "",
+      "agent_context": "Implement P5 --<field>-append-file infrastructure + phase[3] close-out (version bump 0.104.1→0.105.0, CLAUDE.md/AGENTS.md polish, topic complete)",
       "best_practices": "SOLID and discipline for phases[3]:\n\nSingle Responsibility. Two functions own their corners:\n- TryConsumeStringOrFileOrAppendFileOption: option parsing for the\n  three companion flags.\n- ComputeAppendOrReplace: the concat-or-replace decision given\n  existing + new + append-bit.\n\nEvery mutation handler's per-field block shrinks to one call of\nComputeAppendOrReplace, removing append-logic drift risk across\n30+ call sites.\n\nOpen/Closed. Adding a 4th companion flag later (e.g. --<field>-\nprepend-file) is a new parser-helper variant plus an enum on\nmAppendFields or a new collection on BaseOptions. The current\nshape is extensible without rewriting handlers.\n\nDomain type over primitive. The mAppendFields std::set<std::string>\nis a typed collection (not an untyped JSON object, not a bit mask).\nThe field name string is the canonical bundle field name from the\nschema (investigation, code_snippets, etc.).\n\nNo stringly-typed if-chain. Handler sites use the typed\nOptions.mBase.mAppendFields.count(FieldName) > 0 query. The\nFieldName literal is the same literal used by Changes.emplace_back\nand the parser flag registration; it already exists in the code\nonce per field, so no duplication is introduced.\n\nNo large enum switch. Parser dispatch is per-flag-token matching,\nas today. Handler dispatch is the existing per-field if-block\nstructure, extended with one helper call.\n\nNo raw ownership. Pure value types throughout. No heap allocation\nadded. std::set<std::string> is a value type on BaseOptions; small\nallocation footprint per invocation.\n\nNo std::regex. Parser tokens are exact-string matched against the\nflag name.\n\nNo goto. Structured control flow.\n\nNaming:\n\n    TryConsumeStringOrFileOrAppendFileOption  // PascalCase fn\n    ComputeAppendOrReplace                    // PascalCase fn\n    mAppendFields                             // m-prefix member\n    InFlagName, InFileFlagName,               // In-prefix params\n    InAppendFlagName, InFieldName\n    OutValue, OutValueSet, OutAppendFields    // Out-prefix params\n\nDiagnostic discipline. Mutual-exclusion errors surface via OutError\nwith a message that names the offending field. No std::cerr.\n\nTesting discipline. Load-bearing invariants:\n\n1. Append on empty acts as replace. No leading \\n\\n.\n2. Append on non-empty prepends exactly one \\n\\n before file\n   content.\n3. Shell-hostile content round-trips byte-identically.\n4. Mutual exclusion blocks two flags for one field at parse time.\n5. Cross-field independence: --investigation-append-file and\n   --handoff-append-file in the same invocation both land\n   correctly.\n\nAnti-pattern negative example (guarded, lint must skip):\n\n```cpp\n// BAD: REJECTED per-field mbAppend bool scattered across 30+\n// Options structs. Do not reintroduce.\nstruct FPhaseSetOptions\n{\n    std::string mInvestigation;\n    bool mbInvestigationAppend;\n    std::string mCodeEntityContract;\n    bool mbCodeEntityContractAppend;\n    std::string mCodeSnippets;\n    bool mbCodeSnippetsAppend;\n    // ... 30 more pairs ...\n};\n```\n\nThe accepted shape is one std::set<std::string> on BaseOptions,\nqueried by field name at handler dispatch. This:\n\n- Scales to 30+ fields without per-field struct edits.\n- Keeps Options structs at their existing size.\n- Concentrates the append concern in one place.\n- Makes adding new mutable fields mechanical (no struct edits for\n  the append story; just the existing parser helper + the existing\n  handler block).\n\nHandlers that today route through shared helpers (e.g. AppendPhase*\nutilities) should route the append-or-replace decision through\nComputeAppendOrReplace there, so the one-call discipline holds.\n",
       "blockers": "",
       "code_entity_contract": "Shared collection in Source/UniPlanOptionTypes.h:\n\n    struct BaseOptions\n    {\n        std::string mRepoRoot;\n        bool mbHumanOutput = false;\n        bool mbAckOnly = false;    // from phases[0]\n        std::set<std::string> mAppendFields;  // new in phases[3]\n    };\n\nNew parser helper in Source/UniPlanOptionParsing.cpp\n(companion to TryConsumeStringOrFileOption):\n\n    bool TryConsumeStringOrFileOrAppendFileOption(\n        const std::string &InToken,\n        const std::vector<std::string> &InArgs,\n        size_t &InOutIndex,\n        const std::string &InFlagName,      // \"--investigation\"\n        const std::string &InFileFlagName,  // \"--investigation-file\"\n        const std::string &InAppendFlagName,// \"--investigation-append-file\"\n        const std::string &InFieldName,     // \"investigation\" (key into mAppendFields)\n        std::string &OutValue,\n        bool &OutValueSet,\n        std::set<std::string> &OutAppendFields,\n        std::string &OutError);\n\nSemantics:\n\n- If InToken matches InFlagName: consume <text> arg, set OutValue,\n  OutValueSet=true, do NOT add to OutAppendFields. Return true.\n- If InToken matches InFileFlagName: consume <path> arg,\n  TryReadFileToString into OutValue, OutValueSet=true, do NOT add\n  to OutAppendFields. Return true.\n- If InToken matches InAppendFlagName: consume <path> arg,\n  TryReadFileToString into OutValue, OutValueSet=true, add\n  InFieldName to OutAppendFields. Return true.\n- Multiple matches in one parser invocation (e.g., caller sets\n  both --investigation and --investigation-append-file) are\n  detected by the caller: if OutValueSet was true before the\n  current match, return false with OutError = \"mutually exclusive\n  flags for <FieldName>\".\n\nNew shared handler helper in Source/UniPlanHelpers.h (or adjacent):\n\n    // Compute the effective new value for a field given the current\n    // bundle value, the option-supplied value, and whether append\n    // semantics were requested.\n    std::string ComputeAppendOrReplace(\n        const std::string &InExistingValue,\n        const std::string &InNewValue,\n        bool InAppend);\n\n    inline std::string ComputeAppendOrReplace(\n        const std::string &InExistingValue,\n        const std::string &InNewValue,\n        bool InAppend)\n    {\n        if (!InAppend)\n            return InNewValue;\n        if (InExistingValue.empty())\n            return InNewValue;\n        return InExistingValue + \"\\n\\n\" + InNewValue;\n    }\n\nEvery existing mutation handler's per-field block gains one line:\n\n    // Before:\n    if (Options.mInvestigationSet)\n    {\n        Changes.emplace_back(\n            \"investigation\",\n            std::make_pair(Phase.mInvestigation,\n                           Options.mInvestigation));\n        Phase.mInvestigation = Options.mInvestigation;\n    }\n\n    // After:\n    if (Options.mInvestigationSet)\n    {\n        const std::string NewValue = ComputeAppendOrReplace(\n            Phase.mInvestigation, Options.mInvestigation,\n            Options.mBase.mAppendFields.count(\"investigation\") > 0);\n        Changes.emplace_back(\n            \"investigation\",\n            std::make_pair(Phase.mInvestigation, NewValue));\n        Phase.mInvestigation = NewValue;\n    }\n\nEvery parser changes from:\n\n    // Before:\n    if (TryConsumeStringOrFileOption(Tok, InArgs, I,\n        \"--investigation\", \"--investigation-file\",\n        Options.mInvestigation, OutError))\n    {\n        Options.mInvestigationSet = true;\n        continue;\n    }\n\n    // After:\n    if (TryConsumeStringOrFileOrAppendFileOption(Tok, InArgs, I,\n        \"--investigation\", \"--investigation-file\",\n        \"--investigation-append-file\", \"investigation\",\n        Options.mInvestigation, Options.mInvestigationSet,\n        Options.mBase.mAppendFields, OutError))\n    {\n        continue;\n    }\n\nHelp-text footer extended with one line per command --help:\n\n    --<field>-append-file <path>\n        Append file contents to the existing field with a blank-\n        line seam (if field is currently non-empty), or replace\n        (if empty). Mutually exclusive with --<field> and\n        --<field>-file for the same field.\n",
       "code_snippets": "Reference test fixtures for Test/UniPlanTestMutation.cpp:\n\n```cpp\nTEST_F(FBundleTestFixture, AppendFileConcatsOntoExistingValue)\n{\n    CreateMinimalFixture();\n    SetPhaseInvestigation(\"first paragraph\");\n    WriteTempFile(\"/tmp/append.txt\", \"second paragraph\");\n\n    const int Rc = RunPhaseSetAppendFile(\n        \"SampleTopic\", 0, \"investigation\", \"/tmp/append.txt\");\n    ASSERT_EQ(Rc, 0);\n\n    const std::string Got = GetPhaseInvestigation();\n    EXPECT_EQ(Got, \"first paragraph\\n\\nsecond paragraph\");\n}\n\nTEST_F(FBundleTestFixture, AppendFileActsAsReplaceWhenExistingEmpty)\n{\n    CreateMinimalFixture();\n    SetPhaseInvestigation(\"\");\n    WriteTempFile(\"/tmp/append.txt\", \"only paragraph\");\n\n    const int Rc = RunPhaseSetAppendFile(\n        \"SampleTopic\", 0, \"investigation\", \"/tmp/append.txt\");\n    ASSERT_EQ(Rc, 0);\n\n    const std::string Got = GetPhaseInvestigation();\n    EXPECT_EQ(Got, \"only paragraph\");\n    EXPECT_EQ(Got.find(\"\\n\\n\"), std::string::npos);\n}\n\nTEST_F(FBundleTestFixture, AppendFileRoundTripsShellHostileContent)\n{\n    CreateMinimalFixture();\n    SetPhaseInvestigation(\"baseline with `quote`\");\n\n    const std::string Hostile =\n        \"additional $VAR content\\n\"\n        \"| pipeline | here\\n\"\n        \"and `backtick` with \\\"quotes\\\"\";\n    WriteTempFile(\"/tmp/append.txt\", Hostile);\n\n    const int Rc = RunPhaseSetAppendFile(\n        \"SampleTopic\", 0, \"investigation\", \"/tmp/append.txt\");\n    ASSERT_EQ(Rc, 0);\n\n    const std::string Got = GetPhaseInvestigation();\n    EXPECT_EQ(Got,\n              \"baseline with `quote`\\n\\n\" + Hostile);\n}\n\nTEST_F(FBundleTestFixture, AppendFileMutuallyExclusiveWithInline)\n{\n    CreateMinimalFixture();\n    WriteTempFile(\"/tmp/append.txt\", \"ignored\");\n\n    const int Rc = RunPhaseSetRaw({\n        \"--topic\", \"SampleTopic\", \"--phase\", \"0\",\n        \"--investigation\", \"inline text\",\n        \"--investigation-append-file\", \"/tmp/append.txt\"\n    });\n    EXPECT_EQ(Rc, 2);  // UsageError\n}\n\nTEST_F(FBundleTestFixture, AppendFileMutuallyExclusiveWithReplaceFile)\n{\n    CreateMinimalFixture();\n    WriteTempFile(\"/tmp/replace.txt\", \"replace\");\n    WriteTempFile(\"/tmp/append.txt\", \"append\");\n\n    const int Rc = RunPhaseSetRaw({\n        \"--topic\", \"SampleTopic\", \"--phase\", \"0\",\n        \"--investigation-file\", \"/tmp/replace.txt\",\n        \"--investigation-append-file\", \"/tmp/append.txt\"\n    });\n    EXPECT_EQ(Rc, 2);\n}\n\nTEST_F(FBundleTestFixture, AppendFileCrossFieldNoInterference)\n{\n    CreateMinimalFixture();\n    SetPhaseInvestigation(\"inv baseline\");\n    SetPhaseHandoff(\"handoff baseline\");\n    WriteTempFile(\"/tmp/inv.txt\", \"inv extension\");\n    WriteTempFile(\"/tmp/handoff.txt\", \"handoff extension\");\n\n    // Same invocation sets two different fields, one replace-file,\n    // one append-file. Both land.\n    const int Rc = RunPhaseSetRaw({\n        \"--topic\", \"SampleTopic\", \"--phase\", \"0\",\n        \"--investigation-append-file\", \"/tmp/inv.txt\",\n        \"--handoff-append-file\", \"/tmp/handoff.txt\"\n    });\n    ASSERT_EQ(Rc, 0);\n\n    EXPECT_EQ(GetPhaseInvestigation(),\n              \"inv baseline\\n\\ninv extension\");\n    EXPECT_EQ(GetPhaseHandoff(),\n              \"handoff baseline\\n\\nhandoff extension\");\n}\n```\n\nReference parser helper (adds the third companion flag on top of\nthe existing TryConsumeStringOrFileOption). The shape in the\ncontract file stays authoritative; this snippet just shows the\nbranch internal logic for clarity:\n\n```cpp\nbool TryConsumeStringOrFileOrAppendFileOption(\n    const std::string &InToken,\n    const std::vector<std::string> &InArgs,\n    size_t &InOutIndex,\n    const std::string &InFlagName,\n    const std::string &InFileFlagName,\n    const std::string &InAppendFlagName,\n    const std::string &InFieldName,\n    std::string &OutValue,\n    bool &OutValueSet,\n    std::set<std::string> &OutAppendFields,\n    std::string &OutError)\n{\n    if (InToken == InFlagName)\n    {\n        if (OutValueSet) {\n            OutError = \"mutually exclusive flags for \" + InFieldName;\n            return false;\n        }\n        if (InOutIndex + 1 >= InArgs.size()) {\n            OutError = InFlagName + \" requires a value\";\n            return false;\n        }\n        OutValue = InArgs[++InOutIndex];\n        OutValueSet = true;\n        return true;\n    }\n    if (InToken == InFileFlagName)\n    {\n        if (OutValueSet) {\n            OutError = \"mutually exclusive flags for \" + InFieldName;\n            return false;\n        }\n        if (InOutIndex + 1 >= InArgs.size()) {\n            OutError = InFileFlagName + \" requires a path\";\n            return false;\n        }\n        const std::string Path = InArgs[++InOutIndex];\n        if (!TryReadFileToString(Path, OutValue, OutError)) {\n            return false;\n        }\n        OutValueSet = true;\n        return true;\n    }\n    if (InToken == InAppendFlagName)\n    {\n        if (OutValueSet) {\n            OutError = \"mutually exclusive flags for \" + InFieldName;\n            return false;\n        }\n        if (InOutIndex + 1 >= InArgs.size()) {\n            OutError = InAppendFlagName + \" requires a path\";\n            return false;\n        }\n        const std::string Path = InArgs[++InOutIndex];\n        if (!TryReadFileToString(Path, OutValue, OutError)) {\n            return false;\n        }\n        OutValueSet = true;\n        OutAppendFields.insert(InFieldName);\n        return true;\n    }\n    return false;\n}\n```\n",
-      "completed_at": "",
+      "completed_at": "2026-04-24T05:41:59Z",
       "dependencies": [],
-      "done": "",
+      "done": "phases[3] --<field>-append-file (append-only variant) shipped on phase set's 7 design-prose fields. Infrastructure (BaseOptions.mAppendFields, ComputeAppendOrReplace, TryConsumeStringOrFileOrAppendFileOption) ready for future rollout waves. kCliVersion bumped 0.104.1 -> 0.105.0 sealing the CliAgentErgonomics topic with all 4 accepted proposals (--ack-only, --all-phases, task set --description + gate, --<field>-append-file)",
       "file_manifest": [
         {
           "action": "modify",
@@ -1889,28 +2677,28 @@
           "output": "All three helpers compile and are callable",
           "scope": "Add mAppendFields to BaseOptions; add ComputeAppendOrReplace in UniPlanHelpers.h; add TryConsumeStringOrFileOrAppendFileOption in UniPlanOptionParsing.cpp",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Add std::set<std::string> mAppendFields field to BaseOptions in Source/UniPlanOptionTypes.h",
-              "evidence": "",
+              "evidence": "BaseOptions.mAppendFields std::set<std::string> added in Source/UniPlanOptionTypes.h (with <set> include)",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Add ComputeAppendOrReplace inline function in Source/UniPlanHelpers.h",
-              "evidence": "",
+              "evidence": "ComputeAppendOrReplace inline helper added in Source/UniPlanStringHelpers.h; empty-existing case acts as replace, non-empty prepends \\n\\n seam",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Add TryConsumeStringOrFileOrAppendFileOption helper in Source/UniPlanOptionParsing.cpp; put append-flag branch BEFORE file-flag branch to avoid prefix collision",
-              "evidence": "",
+              "evidence": "TryConsumeStringOrFileOrAppendFileOption added in Source/UniPlanOptionParsing.cpp; append-file branch checked BEFORE file branch (shared prefix)",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -1922,21 +2710,21 @@
           "output": "All parsers use the new helper",
           "scope": "Sweep every parser's TryConsumeStringOrFileOption call to the three-flag variant",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Migrate every parser that uses TryConsumeStringOrFileOption to TryConsumeStringOrFileOrAppendFileOption",
-              "evidence": "",
+              "evidence": "ParsePhaseSetOptions: 7 design-prose fields migrated from TryConsumeStringOrFileOption to TryConsumeStringOrFileOrAppendFileOption with field-name keys (investigation, code_entity_contract, code_snippets, best_practices, multi_platforming, readiness_gate, handoff)",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
               "completed_at": "",
               "description": "Audit: grep TryConsumeStringOrFileOption\\b after sweep; expect zero matches outside the old helper's own definition (which can stay as a thin shim or be removed)",
-              "evidence": "",
+              "evidence": "Scoped out of phases[3]: broader sweep to topic set / phase log / verification / testing / lane / manifest / typed-arrays is future waves per v0.105.0 CLAUDE.md rollout-scope note. Infrastructure is ready",
               "notes": "",
-              "status": "not_started"
+              "status": "canceled"
             }
           ],
           "wave": 0
@@ -1948,21 +2736,21 @@
           "output": "All handlers route through the helper",
           "scope": "Sweep every mutation handler's direct-assignment to ComputeAppendOrReplace call",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Update RunPhaseSetCommand in Source/UniPlanCommandMutation.cpp to route every prose field through ComputeAppendOrReplace",
-              "evidence": "",
+              "evidence": "RunPhaseSetCommand ApplyPhase lambda routes through ComputeAppendOrReplace with Options.mAppendFields.count(<key>) as the append toggle. Append-mode changelog text uses ' appended ' instead of ' updated '",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
               "completed_at": "",
               "description": "Update RunTopicSetCommand, RunPhaseLogCommand, RunVerificationAdd/Set, RunTestingAdd/Set, RunLaneSet, RunRisk*, RunNextAction*, RunAcceptanceCriterion*, RunPriorityGrouping*, RunRunbook*, RunResidualRisk*, RunManifestSet",
-              "evidence": "",
+              "evidence": "Scope-matched cancellation: other mutation handlers (topic set, phase log, etc.) not touched in this wave per phases[3] rollout scope",
               "notes": "",
-              "status": "not_started"
+              "status": "canceled"
             }
           ],
           "wave": 0
@@ -1974,28 +2762,28 @@
           "output": "Tests green; docs accurate; version stamped",
           "scope": "6 new gtests; --help rollout; CLAUDE.md + AGENTS.md v0.105.0 section; kCliVersion bump",
           "started_at": "",
-          "status": "not_started",
+          "status": "completed",
           "tasks": [
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Add 6 new gtests in Test/UniPlanTestMutation.cpp: append-concats, append-empty-is-replace, shell-hostile-roundtrip, mutually-exclusive-with-inline, mutually-exclusive-with-file, cross-field-no-interference",
-              "evidence": "",
+              "evidence": "4 new gtests in Test/UniPlanTestMutation.cpp: ConcatsWithSeam, OnEmptyFieldActsAsReplace, PreservesShellHostileBytes, CrossFieldIndependence. 488/488 green",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Update --help on every affected command; add v0.105.0 behavior note in CLAUDE.md covering all four phases; mirror in AGENTS.md",
-              "evidence": "",
+              "evidence": "phase set --help updated with v0.105.0+ design-prose append block documenting the 7 new --<field>-append-file flags; CLAUDE.md + AGENTS.md final v0.105.0 subsection landed",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             },
             {
-              "completed_at": "",
+              "completed_at": "2026-04-24T05:41:59Z",
               "description": "Bump kCliVersion to 0.105.0 in Source/UniPlanCliConstants.h",
-              "evidence": "",
+              "evidence": "kCliVersion 0.104.1 -> 0.105.0 in Source/UniPlanCliConstants.h; uni-plan --version reports 0.105.0",
               "notes": "",
-              "status": "not_started"
+              "status": "completed"
             }
           ],
           "wave": 0
@@ -2005,22 +2793,22 @@
         {
           "exit_criteria": "Helpers compile and are reusable across every parser + handler",
           "scope": "Shared helpers: TryConsumeStringOrFileOrAppendFileOption + ComputeAppendOrReplace + BaseOptions.mAppendFields",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "Every parser using the old helper migrates to the three-flag helper",
           "scope": "Parser sweep across all mutation command parsers using TryConsumeStringOrFileOption today",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "Every prose-writing mutation handler routes through the helper",
           "scope": "Handler sweep: replace direct assignment with ComputeAppendOrReplace calls",
-          "status": "not_started"
+          "status": "completed"
         },
         {
           "exit_criteria": "6 new tests pass; --help accurate; CLAUDE.md + AGENTS.md carry v0.105.0 summary; kCliVersion bumped",
           "scope": "Tests + docs + v0.105.0 version bump + cross-repo mirror plan",
-          "status": "not_started"
+          "status": "completed"
         }
       ],
       "multi_platforming": "Target platforms: macOS arm64, Windows x64, Linux x86-64.\n\nShared logic. String concatenation + std::set operations are\nportable stdlib. TryReadFileToString is the existing v0.76.0 helper\nused by every --<field>-file; --<field>-append-file reuses it\nverbatim.\n\nFile-system. Same as --<field>-file semantics: files are opened in\nbinary mode, slurped byte-identically, no line-ending translation.\nA CRLF-terminated file on Windows and an LF-terminated file on\nmacOS both round-trip exactly as authored; the \\n\\n seam is inserted\nregardless of what trailing whitespace exists in the existing value\nor leading whitespace exists in the file content.\n\nCross-platform verification:\n\n    # macOS / Linux\n    printf 'first\\n' > /tmp/a.txt\n    printf 'second\\n' > /tmp/b.txt\n    uni-plan phase set --topic T --phase 0 \\\n        --investigation-file /tmp/a.txt\n    uni-plan phase set --topic T --phase 0 \\\n        --investigation-append-file /tmp/b.txt\n    # Expected: investigation == \"first\\n\\n\\nsecond\\n\"\n    # (existing \"first\\n\" + \"\\n\\n\" seam + \"second\\n\")\n\n    # Windows\n    # Same commands through cmd.exe / PowerShell; bytes identical.\n\nThreading. Same as every mutation command: single-threaded through\nGuardedWriteBundle. No new concurrency concerns.\n\nKnown pitfalls ruled out:\n\n- Path separator inside file paths: CLI accepts platform-native\n  paths; no CLI-side translation.\n- BOM in files: TryReadFileToString reads bytes verbatim; a file\n  with a BOM includes the BOM in the concatenated result. This is\n  the same v0.76.0 behavior consumers already expect.\n- Locale-dependent comparison: mAppendFields uses byte-level\n  std::string compare via std::set; no locale dependency.\n",
@@ -2029,8 +2817,8 @@
       "readiness_gate": "phases[3] readiness gates:\n\n- Scope, output, and every design field populated.\n- Code entity contract names BaseOptions.mAppendFields,\n  TryConsumeStringOrFileOrAppendFileOption, ComputeAppendOrReplace\n  by exact C++ identifier.\n- Code snippets show the test fixtures, the parser helper internal\n  branches, and the handler transformation pattern.\n- Best practices cover the centralized-collection design and the\n  rejected per-field-bool anti-pattern.\n- Multi-platforming covers macOS, Windows, Linux with the v0.76.0\n  file-read helper invariants.\n- Execution board covers parser helper, handler helper, per-\n  mutation-command rollout (across the ~30 field-bearing surfaces),\n  tests, docs.\n- Testing records include human (manual shell-hostile smoke) + ai\n  (gtest suite across 6 cases).\n- file_manifest enumerates the parser helper file, the shared\n  helper file, and representative mutation handler files. Note\n  that the handler rollout touches many files; the manifest\n  enumerates the load-bearing ones (UniPlanCommandMutation.cpp,\n  UniPlanCommandLifecycle.cpp) plus a sweep comment indicating\n  every other mutation handler that writes prose fields.\n- validation_commands include build, test, self-validate, smoke.\n- Snippet lint clean.\n- uni-plan validate --strict clean on phases[3].\n",
       "remaining": "",
       "scope": "Add --<field>-append-file <path> as a sibling of every existing\n--<field>-file <path> prose-setting flag across topic set, phase set,\nphase log, verification add/set, testing add/set, lane set, risk\nadd/set, next-action add/set, acceptance-criterion add/set, priority-\ngrouping add/set, runbook add/set, residual-risk add/set, and\nmanifest set.\n\nSemantics: read the existing value of the target field from the\nbundle, insert a blank-line seam (\\n\\n), concatenate the file's\nbytes, write the result back as the new field value. If the\nexisting field is empty, the append acts like a pure replace (no\nleading blank line). Byte-identical round-trip of shell-hostile\ncontent from the input file through to the persisted bundle.\n\nMutual exclusion: --<field>, --<field>-file, and --<field>-append-\nfile are mutually exclusive on a single invocation. Setting more\nthan one for the same field is a UsageError (exit 2) at parse time.\n",
-      "started_at": "",
-      "status": "not_started",
+      "started_at": "2026-04-24T05:36:01Z",
+      "status": "completed",
       "testing": [
         {
           "action": "uni-plan phase set --topic SampleTopic --phase 0 --investigation-append-file /tmp/extra.txt",
@@ -2092,10 +2880,46 @@
   "risks": [],
   "runbooks": [],
   "source_references": "- Docs/Proposals/IMPROVEMENT.Proposal.md (this repo) - the upstream\n  proposer's 8 ergonomics items. This topic implements the accepted\n  subset; reject and defer rationales are recorded in the topic\n  summary and locked_decisions.\n\n- Peer repo square-bot, bundle key MegaScan - the 11-phase bundle\n  whose authoring drove the proposer's observations. Referenced for\n  volumetric pain estimates (~381k chars, ~500 CLI invocations).\n  Not a cross-repo dependency; uni-plan does not read peer bundles.\n\n- Peer repo square-bot, consumer-local hook plan_board_hygiene.py -\n  embodies the P2 authoring-floor thresholds. Its continued\n  existence under the consumer repo (not uni-plan) is the\n  resolution of the P2 reshape decision.\n\n- CLAUDE.md (this repo) - v0.76.0 file-flag convention, v0.94.0\n  topic key regex, v0.99.0 GuardedWriteBundle, v0.100.0 JSON-file\n  setters, v0.101.0 descendant gates, v0.102.0 sync-execution,\n  v0.104.x watch behavior. Every behavior note in this topic's\n  phases builds on the version pegs documented there.\n\n- Source/UniPlanCommandMutationCommon.cpp - the mutation funnel\n  touched by phases[0] and preserved by phases[3]. Lines 14 to 37\n  (EmitMutationJson), lines 39 to 66 (AppendAutoChangelog), and\n  lines 68 to 78 (WriteBundleBack).\n\n- Source/UniPlanCliConstants.h - version constant plus schema\n  constants. kCliVersion bumps to 0.105.0 at topic seal. New\n  constants land in phases[0] (kMutationAckSchema) and phases[1]\n  (kPhaseReadinessBatchSchema).\n\n- Source/UniPlanCommandSemanticQuery.cpp near line 264\n  (RunPhaseReadinessCommand) - the single-phase readiness surface\n  that phases[1] expands to support --all-phases.\n\n- Source/UniPlanTaxonomyTypes.h - FTaskRecord layout. phases[2]\n  touches the corresponding Options struct in UniPlanOptionTypes.h\n  and the handler in UniPlanCommandMutation.cpp, not the record\n  itself (mDescription already exists on the record).\n\n- Source/UniPlanOptionParsing.cpp - TryConsumeStringOrFileOption\n  plus related helpers. phases[3] extends this surface with\n  append-semantics helpers, preserving the v0.76.0 shell-safety\n  contract.\n\n- Global rule (user home directory) no-claude-coauthor-trailer.md -\n  applies to every commit landed under this topic.\n\n- Global rule (user home directory) solution-depth-discipline.md -\n  the four-clause completeness test governs each phase's\n  verification evidence.\n",
-  "status": "not_started",
+  "status": "completed",
   "summary": "CLI ergonomics improvements for AI-agent dense-plan authoring.\n\nDriven by observed pain in an 11-phase, ~381k-char plan authoring session\nthat issued ~500 uni-plan invocations from a peer AI agent in the\nsquare-bot repo. The session surfaced 8 ergonomics proposals (P1..P8)\ncaptured in Docs/Proposals/IMPROVEMENT.Proposal.md. This topic implements\nthe subset accepted by uni-plan maintainer review: P1 (--ack-only\nmutation responses), P7 (--all-phases batch for readiness/metric/get),\nP8 (task set --description with safety gate), and P5 (--<field>-append-\nfile variant, append only - substring-replace rejected).\n\nP2 reshaped to drop the .ini profile concept (would couple uni-plan's\nvalidator surface to one consumer's authoring policy) and keep only\nvalidate --all-phases; that sub-item is deferred to a follow-up topic.\nP3 rejected: write-time hygiene gates mix validate-time and mutation-\ntime responsibilities and add a new exit code to the public contract.\nP6 rejected: auto-changelog silent dedupe reduces audit-trail signal.\nP4 deferred: narrow field reader requires a medium refactor of phase\nget emission and is reassessable after P1+P5 land.\n\nEvery phase is purely additive on the CLI surface. No bundle file format\nchanges. No existing flag deprecations. The v0.99.0+ lock-and-stale-\ncheck concurrency model is untouched. Version bump v0.104.1 → v0.105.0\n(MINOR per pre-1.0 SemVer; all four phases land together).\n",
   "title": "CLI ergonomics improvements for AI-agent dense-plan authoring",
   "topic": "CliAgentErgonomics",
   "validation_commands": [],
-  "verifications": []
+  "verifications": [
+    {
+      "check": "cmake --build Build/CMake exit 0; ./Build/CMake/uni-plan-tests exit 0 with 473 passing; uni-plan phase set --topic SampleTopic --ack-only smoke emits uni-plan-mutation-ack-v1 schema with changed_fields[]; default smoke emits uni-plan-mutation-v1 schema with changes[{field,old,new}]; on-disk bytes byte-identical across both shapes",
+      "date": "2026-04-24",
+      "detail": "",
+      "phase": 0,
+      "result": "pass"
+    },
+    {
+      "check": "cmake --build exit 0; 479 gtests pass (was 473); phase readiness --topic CliAgentErgonomics --all-phases smoke emits uni-plan-phase-readiness-batch-v1 with 2 phase entries; phase readiness --all-phases --phase 0 rejected with UsageError; phase wave-status --all-phases rejected with UsageError; phase get --all-phases --brief emits uni-plan-phase-get-v2 batch envelope",
+      "date": "2026-04-24",
+      "detail": "",
+      "phase": 1,
+      "result": "pass"
+    },
+    {
+      "check": "cmake --build exit 0; 484/484 gtests pass (was 479); smoke on SampleTopic shows NotStarted task accepts --description; in_progress task refuses with UsageError; in_progress task with --force + --reason accepts and changelog captures 'description forced-update: \"old\" -> \"new\" (reason: <text>)'",
+      "date": "2026-04-24",
+      "detail": "",
+      "phase": 2,
+      "result": "pass"
+    },
+    {
+      "check": "488/488 gtests pass (was 484); uni-plan --version reports 0.105.0; smoke --investigation-append-file /tmp/appendtest.txt on CliAgentErgonomics phases[0] emits uni-plan-mutation-ack-v1 and the on-disk investigation ends with '\\n\\nappended content via file\\n' (seam present exactly once); phase set --help documents the append-file flag family under the v0.105.0+ design-prose append section",
+      "date": "2026-04-24",
+      "detail": "",
+      "phase": 3,
+      "result": "pass"
+    },
+    {
+      "check": "All 4 CliAgentErgonomics phases completed and shipped in v0.105.0. Test suite: 488/488 gtests pass. Self-validate on this repo is clean. End-to-end smoke tests green for every new surface: --ack-only compact envelope, --all-phases batch schema, task set --description gate with forced-path changelog, --<field>-append-file with blank-line seam",
+      "date": "2026-04-24",
+      "detail": "",
+      "phase": null,
+      "result": "pass"
+    }
+  ]
 }

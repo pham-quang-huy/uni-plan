@@ -105,7 +105,7 @@ int RunPhaseStartCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -293,7 +293,7 @@ int RunPhaseCompleteCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -394,7 +394,7 @@ int RunLaneCompleteCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -453,7 +453,7 @@ int RunPhaseBlockCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -511,7 +511,7 @@ int RunPhaseUnblockCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -614,7 +614,7 @@ int RunPhaseCancelCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -673,7 +673,7 @@ int RunPhaseProgressCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -741,7 +741,7 @@ int RunPhaseCompleteJobsCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, Target, Changes, true);
+    EmitMutationJson(Options.mTopic, Target, Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -788,7 +788,7 @@ int RunTopicStartCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, "plan", Changes, true);
+    EmitMutationJson(Options.mTopic, "plan", Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -863,7 +863,7 @@ int RunTopicCompleteCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, "plan", Changes, true);
+    EmitMutationJson(Options.mTopic, "plan", Changes, true, Options.mbAckOnly);
     return 0;
 }
 
@@ -908,7 +908,7 @@ int RunTopicBlockCommand(const std::vector<std::string> &InArgs,
         std::cerr << Error << "\n";
         return 1;
     }
-    EmitMutationJson(Options.mTopic, "plan", Changes, true);
+    EmitMutationJson(Options.mTopic, "plan", Changes, true, Options.mbAckOnly);
     return 0;
 }
 
