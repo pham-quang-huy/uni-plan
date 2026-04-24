@@ -73,6 +73,22 @@ Flag violations when a phase advances to `in_progress` without satisfying these:
 | Validation clean | `uni-plan validate --topic <topic>` reports no ErrorMajor issues; under `--strict`, no Warning or ErrorMinor issues either |
 | Content hygiene | No smart quotes (`no_smart_quotes`), no HTML tags (`no_html_in_prose`), no dev-machine absolute paths (`no_dev_absolute_path`), no hardcoded endpoints (`no_hardcoded_endpoint`), no placeholder literals like `"None"`/`"TBD"` (`no_empty_placeholder_literal`), no unresolved markers in prescriptive prose or completed-phase evidence (`no_unresolved_marker`), no duplicate changelogs (`no_duplicate_changelog`), no duplicate phase-field content across `scope`/`output`/`done`/`remaining`/`handoff`/`readiness_gate`/`investigation`/`code_entity_contract`/`code_snippets`/`best_practices` (`no_duplicate_phase_field`), no hollow completed phases (`no_hollow_completed_phase` — `completed` status with zero jobs, zero testing, zero file manifest, and empty `code_snippets` + `investigation`), no broken topic refs (`topic_ref_integrity`), no impossible path refs (`path_resolves`), typed validation commands are well-formed (`validation_command_fields`, `validation_command_platform_consistency`) |
 
+### 2b. Snippet anti-pattern lint
+
+Runtime depth and hygiene gates do not inspect code shapes inside
+`code_snippets`, `code_entity_contract`, or `best_practices`. Run the
+snippet lint whenever a phase carries code-bearing design material:
+
+```bash
+python3 .claude/hooks/plan_snippet_antipattern.py --topic <topic> --all --strict
+```
+
+The lint reports stringly-typed if-chains (3+ arms), enum switches with
+7+ case arms, stringly-typed handler args, raw `new F<Name>` without a
+smart-pointer factory, and `goto`. Negative examples under an
+`## Anti-Pattern ...` heading or prefixed with `// BAD:` are skipped. See
+`.claude/rules/upl-plan-snippet-discipline.md`.
+
 ### 3. Report Findings
 
 Present structured findings in **table format**:

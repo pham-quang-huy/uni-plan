@@ -73,6 +73,22 @@ Flag violations when a phase advances to `in_progress` without satisfying these:
 | Validation clean | `uni-plan validate --topic <topic>` reports no ErrorMajor issues; under `--strict`, no Warning or ErrorMinor issues either |
 | Content hygiene | No V3 terminology drift (`v3_terminology_free`), no legacy `doc` CLI refs (`legacy_cli_free`), no smart quotes (`no_smart_quotes`), no placeholder literals like `"None"`/`"TBD"` (`no_empty_placeholder_literal`), no duplicate changelogs (`no_duplicate_changelog`), no stale `.Plan.md` refs (`stale_plan_md_reference`), no broken topic refs (`topic_ref_integrity`) |
 
+### 2b. Snippet anti-pattern lint
+
+Runtime depth and hygiene gates do not inspect code shapes inside
+`code_snippets`, `code_entity_contract`, or `best_practices`. Run the
+snippet lint whenever a phase carries code-bearing design material:
+
+```bash
+python3 .agents/hooks/plan_snippet_antipattern.py --topic <topic> --all --strict
+```
+
+The lint reports stringly-typed if-chains (3+ arms), enum switches with
+7+ case arms, stringly-typed handler args, raw `new F<Name>` without a
+smart-pointer factory, and `goto`. Negative examples under an
+`## Anti-Pattern ...` heading or prefixed with `// BAD:` are skipped. See
+`.agents/rules/upl-plan-snippet-discipline.md`.
+
 ### 3. Report Findings
 
 Present structured findings in **table format**:

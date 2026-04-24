@@ -70,8 +70,14 @@ Before marking a phase `in_progress`, verify ALL gates:
 | Content depth | Runtime metrics show enough plan detail for a future AI agent or junior developer: design chars, SOLID language, recursive words, field coverage, work items, tests, files, and evidence | `uni-plan phase metric --topic <T> --phase <N>` |
 | Testing | For testable phases: testing records exist | `uni-plan phase get --topic <T> --phase <N> --execution` |
 | Validation clean | No ErrorMajor issues for this topic | `uni-plan validate --topic <T>` |
+| Snippet anti-pattern lint clean | No rejected code shapes in `code_snippets`, `code_entity_contract`, or `best_practices` | `python3 .agents/hooks/plan_snippet_antipattern.py --topic <T> --phase <N> --strict` |
 
-If any gate is not met, populate the phase design material first.
+If any gate is not met, populate the phase design material first. The
+snippet lint scans for stringly-typed if-chains (3+ arms), enum switches
+with 7+ case arms, stringly-typed handler args, raw `new F<Name>` without
+a smart-pointer factory, and `goto`. Negative examples under an
+`## Anti-Pattern ...` heading or prefixed with `// BAD:` are skipped. See
+`.agents/rules/upl-plan-snippet-discipline.md`.
 
 ### 4. Claim the Phase
 

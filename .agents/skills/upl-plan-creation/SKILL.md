@@ -105,9 +105,17 @@ Call `uni-plan phase add` again for each trailing phase. Auto-changelog + typed 
 ```bash
 uni-plan validate --topic <topic> --human
 uni-plan phase metric --topic <topic> --human
+python3 .agents/hooks/plan_snippet_antipattern.py --topic <topic> --all --strict
 ```
 
-Fix all findings before considering the plan bundle complete.
+Fix all findings before considering the plan bundle complete. The final
+hook is a snippet anti-pattern lint that scans `code_snippets`,
+`code_entity_contract`, and `best_practices` for stringly-typed
+if-chains (3+ arms), enum switches with 7+ case arms, stringly-typed
+handler args, raw `new F<Name>` without a smart-pointer factory, and
+`goto`. Negative examples under an `## Anti-Pattern ...` heading or
+prefixed with `// BAD:` are skipped. See
+`.agents/rules/upl-plan-snippet-discipline.md`.
 
 ### Optional: Normalize Smart Characters
 
