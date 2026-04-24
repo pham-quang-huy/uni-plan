@@ -65,6 +65,42 @@ bool HasWarningContaining(const UniPlan::FDocWatchSnapshot &InSnapshot,
     return false;
 }
 
+std::string RepeatString(const std::string &InText, const size_t InCount)
+{
+    std::string Result;
+    for (size_t Index = 0; Index < InCount; ++Index)
+    {
+        Result += InText;
+    }
+    return Result;
+}
+
+std::string StripAnsiCodes(const std::string &InText)
+{
+    std::string Result;
+    for (size_t Index = 0; Index < InText.size();)
+    {
+        if (InText[Index] == '\033' && Index + 1 < InText.size() &&
+            InText[Index + 1] == '[')
+        {
+            Index += 2;
+            while (Index < InText.size() &&
+                   !(InText[Index] >= '@' && InText[Index] <= '~'))
+            {
+                ++Index;
+            }
+            if (Index < InText.size())
+            {
+                ++Index;
+            }
+            continue;
+        }
+        Result.push_back(InText[Index]);
+        ++Index;
+    }
+    return Result;
+}
+
 std::string RenderElementToString(ftxui::Element InElement)
 {
     ftxui::Screen Screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(220),
@@ -396,13 +432,103 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelRendersDefaultAndMetricsViews)
         RenderElementToString(Panel.Render(*Plan, 0, false));
     const std::string MetricsView =
         RenderElementToString(Panel.Render(*Plan, 0, true));
+    const std::string PlainMetricsView = StripAnsiCodes(MetricsView);
 
     EXPECT_NE(DefaultView.find("Design"), std::string::npos);
     EXPECT_NE(DefaultView.find("Taxonomy"), std::string::npos);
+    EXPECT_NE(DefaultView.find("Scope"), std::string::npos);
     EXPECT_EQ(DefaultView.find("SOLID"), std::string::npos);
     EXPECT_NE(MetricsView.find("Design"), std::string::npos);
+    EXPECT_NE(MetricsView.find("Scope"), std::string::npos);
+    EXPECT_NE(MetricsView.find("Phase 0"), std::string::npos);
     EXPECT_NE(MetricsView.find("SOLID"), std::string::npos);
     EXPECT_NE(MetricsView.find("Evidence"), std::string::npos);
+    const size_t EvidenceColumn = PlainMetricsView.find("Evidence");
+    const size_t ScopeColumn = PlainMetricsView.find("Scope");
+    ASSERT_NE(EvidenceColumn, std::string::npos);
+    ASSERT_NE(ScopeColumn, std::string::npos);
+    EXPECT_LT(EvidenceColumn, ScopeColumn);
+}
+
+TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsRichMetricsComparable)
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "Scale";
+    Plan.mPlanStatus = "in_progress";
+
+    UniPlan::PhaseItem Low;
+    Low.mPhaseKey = "0";
+    Low.mStatus = UniPlan::EExecutionStatus::NotStarted;
+    Low.mMetrics.mDesignChars = 20000;
+    Low.mMetrics.mSolidWordCount = 50;
+    Low.mMetrics.mRecursiveWordCount = 3000;
+    Low.mMetrics.mFieldCoveragePercent = 90;
+    Low.mMetrics.mWorkItemCount = 30;
+    Low.mMetrics.mTestingRecordCount = 4;
+    Low.mMetrics.mFileManifestCount = 8;
+    Low.mMetrics.mEvidenceItemCount = 10;
+
+    UniPlan::PhaseItem High = Low;
+    High.mPhaseKey = "1";
+    High.mMetrics.mDesignChars = 40000;
+    High.mMetrics.mSolidWordCount = 100;
+    High.mMetrics.mRecursiveWordCount = 6000;
+    High.mMetrics.mFieldCoveragePercent = 100;
+    High.mMetrics.mWorkItemCount = 60;
+    High.mMetrics.mTestingRecordCount = 8;
+    High.mMetrics.mFileManifestCount = 16;
+    High.mMetrics.mEvidenceItemCount = 20;
+
+    Plan.mPhases.push_back(Low);
+    Plan.mPhases.push_back(High);
+
+    const UniPlan::PhaseDetailPanel Panel;
+    const std::string MetricsView =
+        RenderElementToString(Panel.Render(Plan, 0, true));
+
+    EXPECT_NE(MetricsView.find("20000"), std::string::npos);
+    EXPECT_NE(MetricsView.find("40000"), std::string::npos);
+    EXPECT_NE(MetricsView.find("\xe2\x96\x91"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture,
+       PhaseDetailPanelDoesNotSaturateFieldWorkAndTestBaselines)
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "Scale";
+    Plan.mPlanStatus = "in_progress";
+
+    UniPlan::PhaseItem Phase;
+    Phase.mPhaseKey = "0";
+    Phase.mStatus = UniPlan::EExecutionStatus::NotStarted;
+    Phase.mScope = "Retain scope context";
+    Phase.mMetrics.mFieldCoveragePercent = 86;
+    Phase.mMetrics.mWorkItemCount = 20;
+    Phase.mMetrics.mTestingRecordCount = 3;
+    Plan.mPhases.push_back(Phase);
+
+    const UniPlan::PhaseDetailPanel Panel;
+    const std::string MetricsView =
+        RenderElementToString(Panel.Render(Plan, 0, true));
+    const std::string PlainMetricsView = StripAnsiCodes(MetricsView);
+    const std::string Full = "\xe2\x96\x88";
+    const std::string Empty = "\xe2\x96\x91";
+
+    EXPECT_NE(PlainMetricsView.find(RepeatString(Full, 6) +
+                                    RepeatString(Empty, 2) + " 86%"),
+              std::string::npos);
+    EXPECT_EQ(PlainMetricsView.find(RepeatString(Full, 8) + " 86%"),
+              std::string::npos);
+    EXPECT_NE(PlainMetricsView.find(RepeatString(Full, 4) +
+                                    RepeatString(Empty, 4) + " 20"),
+              std::string::npos);
+    EXPECT_EQ(PlainMetricsView.find(RepeatString(Full, 8) + " 20"),
+              std::string::npos);
+    EXPECT_NE(PlainMetricsView.find(RepeatString(Full, 3) +
+                                    RepeatString(Empty, 5) + " 3"),
+              std::string::npos);
+    EXPECT_EQ(PlainMetricsView.find(RepeatString(Full, 8) + " 3"),
+              std::string::npos);
 }
 
 TEST_F(FBundleTestFixture, WatchMetricsMatchPhaseMetricCommand)

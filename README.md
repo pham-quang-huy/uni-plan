@@ -28,7 +28,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.104.0`) |
+| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.104.1`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |
@@ -250,6 +250,16 @@ metric recompute count, validation run/reuse, and lint run/reuse. These counts
 are the primary performance signal; tests assert operation counts instead of
 fragile wall-clock timing. This cache is not persisted and does not alter
 `.Plan.json` schema or command JSON output.
+
+Metric gauge fill uses adaptive per-plan scaling once every phase in that
+column has reached the absolute rich threshold. Color still comes from the
+fixed audit thresholds; fill becomes a comparison signal for already-rich
+phases so dense plans do not render every metric as full. `Fields` reaches
+full only at 100% coverage, and `Work` uses 40 items as the rich threshold so a
+common 20-item phase reads as mid-range rather than saturated. `Tests` uses
+8 records as the rich threshold so three test records no longer saturate the
+column. The metrics view keeps the `Scope` column visible after `Evidence` so
+the gauge row stays tied to phase intent while toggling with `d`.
 
 ## primary_use_cases
 
@@ -571,7 +581,7 @@ uni-plan/
 │   └── UniPlan*Helpers.h      # Domain helpers (String, File, JSON, Inventory, Markdown, Status, Output)
 ├── Schemas/                   # 10 canonical V3 schema files (used only by `uni-plan lint`)
 ├── Docs/                      # Plan corpus — active .Plan.json bundles live in Docs/Plans/
-├── Test/                      # GoogleTest suite (467 tests as of v0.104.0)
+├── Test/                      # GoogleTest suite (469 tests as of v0.104.1)
 ├── ThirdParty/                # FTXUI
 ├── Build/                     # CMake output (ignored)
 ├── .claude/                   # Rules, hooks, skills, agents

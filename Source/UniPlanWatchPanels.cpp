@@ -173,15 +173,17 @@ static Element DesignCharsBar(size_t InChars)
 }
 
 static Element MetricGaugeBar(const size_t InValue, const size_t InHollow,
-                              const size_t InRich, const std::string &InLabel)
+                              const size_t InRich, const size_t InFillMax,
+                              const std::string &InLabel)
 {
     static constexpr int kMetricBarWidth = 8;
-    const int Filled =
-        InRich == 0
-            ? 0
-            : std::min(kMetricBarWidth,
-                       static_cast<int>(
-                           (InValue * kMetricBarWidth + InRich - 1) / InRich));
+    const size_t Denominator = std::max<size_t>(1, InFillMax);
+    int Filled = static_cast<int>((InValue * kMetricBarWidth) / Denominator);
+    if (InValue > 0 && Filled == 0)
+    {
+        Filled = 1;
+    }
+    Filled = std::min(kMetricBarWidth, Filled);
     const int Empty = kMetricBarWidth - Filled;
     const auto BarColor = (InValue < InHollow) ? color(Color::Red)
                           : (InValue < InRich) ? color(Color::Yellow)
@@ -197,6 +199,83 @@ static Element MetricGaugeBar(const size_t InValue, const size_t InHollow,
     }
     Bar.push_back(text(" " + InLabel));
     return hbox(std::move(Bar));
+}
+
+struct FMetricGaugeScale
+{
+    size_t mHollow = 0;
+    size_t mRich = 0;
+    size_t mMinValue = 0;
+    size_t mMaxValue = 0;
+    bool mbUseRelativeRichRange = false;
+};
+
+static FMetricGaugeScale
+BuildMetricGaugeScale(const std::vector<PhaseItem> &InPhases,
+                      const size_t InHollow, const size_t InRich,
+                      size_t (*InReadValue)(const FPhaseRuntimeMetrics &))
+{
+    FMetricGaugeScale Scale;
+    Scale.mHollow = InHollow;
+    Scale.mRich = InRich;
+
+    bool bSawValue = false;
+    bool bAllValuesRich = true;
+    for (const PhaseItem &Phase : InPhases)
+    {
+        const size_t Value = InReadValue(Phase.mMetrics);
+        if (!bSawValue)
+        {
+            Scale.mMinValue = Value;
+            Scale.mMaxValue = Value;
+            bSawValue = true;
+        }
+        else
+        {
+            Scale.mMinValue = std::min(Scale.mMinValue, Value);
+            Scale.mMaxValue = std::max(Scale.mMaxValue, Value);
+        }
+        if (Value < InRich)
+        {
+            bAllValuesRich = false;
+        }
+    }
+
+    Scale.mbUseRelativeRichRange =
+        bSawValue && bAllValuesRich && Scale.mMaxValue > Scale.mMinValue;
+    return Scale;
+}
+
+static size_t ResolveMetricFillMax(const size_t InValue,
+                                   const FMetricGaugeScale &InScale)
+{
+    if (!InScale.mbUseRelativeRichRange)
+    {
+        return std::max(InScale.mRich, InScale.mMaxValue);
+    }
+
+    // When every visible phase already meets the absolute rich threshold,
+    // the gauge becomes a relative intensity signal. Keep the weakest rich
+    // row half-full so green rows still read as healthy while the stronger
+    // rows remain visually distinguishable.
+    static constexpr size_t kMetricBarWidth = 8;
+    static constexpr size_t kRelativeRichBaseFill = kMetricBarWidth / 2;
+    const size_t Range = InScale.mMaxValue - InScale.mMinValue;
+    const size_t ExtraWidth = kMetricBarWidth - kRelativeRichBaseFill;
+    const size_t RelativeFill =
+        kRelativeRichBaseFill +
+        ((InValue - InScale.mMinValue) * ExtraWidth) / Range;
+    const size_t ClampedFill =
+        std::min(kMetricBarWidth, std::max<size_t>(1, RelativeFill));
+    return std::max<size_t>(1, (InValue * kMetricBarWidth) / ClampedFill);
+}
+
+static Element MetricGaugeBar(const size_t InValue,
+                              const FMetricGaugeScale &InScale,
+                              const std::string &InLabel)
+{
+    return MetricGaugeBar(InValue, InScale.mHollow, InScale.mRich,
+                          ResolveMetricFillMax(InValue, InScale), InLabel);
 }
 
 // Truncate helper removed in v0.97.0 — FTXUI renders panel content
@@ -486,6 +565,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
             text("Tests") | bold | size(WIDTH, EQUAL, 14),
             text("Files") | bold | size(WIDTH, EQUAL, 14),
             text("Evidence") | bold | size(WIDTH, EQUAL, 14),
+            text("Scope") | bold | flex,
         }));
     }
     else
@@ -502,6 +582,56 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
 
     const int MaxPhases = 20;
     const int Count = static_cast<int>(InPlan.mPhases.size());
+
+    FMetricGaugeScale DesignScale;
+    FMetricGaugeScale SolidScale;
+    FMetricGaugeScale WordsScale;
+    FMetricGaugeScale FieldsScale;
+    FMetricGaugeScale WorkScale;
+    FMetricGaugeScale TestsScale;
+    FMetricGaugeScale FilesScale;
+    FMetricGaugeScale EvidenceScale;
+    if (InMetricView)
+    {
+        DesignScale = BuildMetricGaugeScale(
+            InPlan.mPhases, kPhaseHollowChars, kPhaseRichMinChars,
+            [](const FPhaseRuntimeMetrics &InMetrics)
+            { return InMetrics.mDesignChars; });
+        SolidScale =
+            BuildMetricGaugeScale(InPlan.mPhases, kPhaseMetricSolidHollowWords,
+                                  kPhaseMetricSolidRichWords,
+                                  [](const FPhaseRuntimeMetrics &InMetrics)
+                                  { return InMetrics.mSolidWordCount; });
+        WordsScale = BuildMetricGaugeScale(
+            InPlan.mPhases, kPhaseMetricRecursiveHollowWords,
+            kPhaseMetricRecursiveRichWords,
+            [](const FPhaseRuntimeMetrics &InMetrics)
+            { return InMetrics.mRecursiveWordCount; });
+        FieldsScale = BuildMetricGaugeScale(
+            InPlan.mPhases, kPhaseMetricFieldCoverageHollowPercent,
+            kPhaseMetricFieldCoverageRichPercent,
+            [](const FPhaseRuntimeMetrics &InMetrics)
+            { return InMetrics.mFieldCoveragePercent; });
+        WorkScale = BuildMetricGaugeScale(
+            InPlan.mPhases, kPhaseMetricWorkHollowItems,
+            kPhaseMetricWorkRichItems, [](const FPhaseRuntimeMetrics &InMetrics)
+            { return InMetrics.mWorkItemCount; });
+        TestsScale = BuildMetricGaugeScale(
+            InPlan.mPhases, kPhaseMetricTestingHollowRecords,
+            kPhaseMetricTestingRichRecords,
+            [](const FPhaseRuntimeMetrics &InMetrics)
+            { return InMetrics.mTestingRecordCount; });
+        FilesScale = BuildMetricGaugeScale(
+            InPlan.mPhases, kPhaseMetricFileManifestHollowEntries,
+            kPhaseMetricFileManifestRichEntries,
+            [](const FPhaseRuntimeMetrics &InMetrics)
+            { return InMetrics.mFileManifestCount; });
+        EvidenceScale = BuildMetricGaugeScale(
+            InPlan.mPhases, kPhaseMetricEvidenceHollowItems,
+            kPhaseMetricEvidenceRichItems,
+            [](const FPhaseRuntimeMetrics &InMetrics)
+            { return InMetrics.mEvidenceItemCount; });
+    }
 
     // Scroll window
     int ScrollOffset = 0;
@@ -613,46 +743,32 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
             RowCells = PadGridRow({
                 text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 3),
                 ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 12),
-                MetricGaugeBar(Metrics.mDesignChars, kPhaseHollowChars,
-                               kPhaseRichMinChars,
+                MetricGaugeBar(Metrics.mDesignChars, DesignScale,
                                std::to_string(Metrics.mDesignChars)) |
                     size(WIDTH, EQUAL, 14),
-                MetricGaugeBar(Metrics.mSolidWordCount,
-                               kPhaseMetricSolidHollowWords,
-                               kPhaseMetricSolidRichWords,
+                MetricGaugeBar(Metrics.mSolidWordCount, SolidScale,
                                std::to_string(Metrics.mSolidWordCount)) |
                     size(WIDTH, EQUAL, 14),
-                MetricGaugeBar(Metrics.mRecursiveWordCount,
-                               kPhaseMetricRecursiveHollowWords,
-                               kPhaseMetricRecursiveRichWords,
+                MetricGaugeBar(Metrics.mRecursiveWordCount, WordsScale,
                                std::to_string(Metrics.mRecursiveWordCount)) |
                     size(WIDTH, EQUAL, 14),
-                MetricGaugeBar(Metrics.mFieldCoveragePercent,
-                               kPhaseMetricFieldCoverageHollowPercent,
-                               kPhaseMetricFieldCoverageRichPercent,
+                MetricGaugeBar(Metrics.mFieldCoveragePercent, FieldsScale,
                                std::to_string(Metrics.mFieldCoveragePercent) +
                                    "%") |
                     size(WIDTH, EQUAL, 14),
-                MetricGaugeBar(Metrics.mWorkItemCount,
-                               kPhaseMetricWorkHollowItems,
-                               kPhaseMetricWorkRichItems,
+                MetricGaugeBar(Metrics.mWorkItemCount, WorkScale,
                                std::to_string(Metrics.mWorkItemCount)) |
                     size(WIDTH, EQUAL, 14),
-                MetricGaugeBar(Metrics.mTestingRecordCount,
-                               kPhaseMetricTestingHollowRecords,
-                               kPhaseMetricTestingRichRecords,
+                MetricGaugeBar(Metrics.mTestingRecordCount, TestsScale,
                                std::to_string(Metrics.mTestingRecordCount)) |
                     size(WIDTH, EQUAL, 14),
-                MetricGaugeBar(Metrics.mFileManifestCount,
-                               kPhaseMetricFileManifestHollowEntries,
-                               kPhaseMetricFileManifestRichEntries,
+                MetricGaugeBar(Metrics.mFileManifestCount, FilesScale,
                                std::to_string(Metrics.mFileManifestCount)) |
                     size(WIDTH, EQUAL, 14),
-                MetricGaugeBar(Metrics.mEvidenceItemCount,
-                               kPhaseMetricEvidenceHollowItems,
-                               kPhaseMetricEvidenceRichItems,
+                MetricGaugeBar(Metrics.mEvidenceItemCount, EvidenceScale,
                                std::to_string(Metrics.mEvidenceItemCount)) |
                     size(WIDTH, EQUAL, 14),
+                text(Desc) | dim | flex,
             });
         }
         else

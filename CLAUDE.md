@@ -120,7 +120,7 @@ uni-plan/
 │   ├── Plans/                 # Active .Plan.json bundles
 │   ├── Implementation/        # Legacy markdown fixtures / historical references
 │   └── Playbooks/             # Legacy markdown fixtures / historical references
-├── Test/                      # GoogleTest suite (467 tests as of v0.104.0)
+├── Test/                      # GoogleTest suite (469 tests as of v0.104.1)
 ├── ThirdParty/                # FTXUI (terminal UI library)
 ├── Build/                     # CMake output directory
 ├── .claude/                   # Claude Code system
@@ -466,6 +466,24 @@ reuse) so performance can be audited without wall-clock-only guesses.
 
 **kCliVersion bump**: 0.103.0 → 0.104.0. MINOR per pre-1.0 SemVer — changes
 watch runtime behavior and visible watch status text.
+
+### v0.104.1 behavior note — adaptive watch metric gauges
+
+The PHASE DETAIL metrics view now separates audit status from comparison
+intensity. Gauge color still uses the fixed hollow/rich thresholds, but gauge
+fill switches to an adaptive per-plan scale when every phase in that metric
+column is already rich. Dense plans therefore keep visible row-to-row
+differences instead of rendering every already-rich metric as a full bar. The
+metrics toggle keeps the `Scope` column visible so phase intent remains in
+view after the `Evidence` gauge column. `Fields` reaches full only at 100%
+coverage, and `Work` uses 40 items as the rich threshold so common 20-item
+phases render as mid-range rather than saturated. `Tests` uses 8 records as the
+rich threshold so three test records no longer saturate the column.
+
+**kCliVersion bump**: 0.104.0 → 0.104.1. PATCH per pre-1.0 SemVer — fixes
+watch metric display semantics only; no command/schema/persisted-state change.
+`phase metric` threshold values are recalibrated under the existing output
+schema.
 
 ## documentation_rules
 

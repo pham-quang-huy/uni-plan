@@ -236,6 +236,11 @@ TEST_F(FBundleTestFixture, PhaseMetricJsonReturnsMetrics)
     EXPECT_EQ(Json["status_filter"], "all");
     EXPECT_EQ(Json["count"], 3);
     ASSERT_TRUE(Json.contains("thresholds"));
+    EXPECT_EQ(Json["thresholds"]["field_coverage_percent"]["rich"], 100);
+    EXPECT_EQ(Json["thresholds"]["work_items"]["hollow"], 10);
+    EXPECT_EQ(Json["thresholds"]["work_items"]["rich"], 40);
+    EXPECT_EQ(Json["thresholds"]["testing_records"]["hollow"], 2);
+    EXPECT_EQ(Json["thresholds"]["testing_records"]["rich"], 8);
     ASSERT_TRUE(Json.contains("phases"));
     ASSERT_TRUE(Json["phases"][0].contains("solid_words"));
     ASSERT_TRUE(Json["phases"][0].contains("recursive_words"));
