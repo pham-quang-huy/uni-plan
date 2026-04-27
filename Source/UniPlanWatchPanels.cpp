@@ -107,23 +107,35 @@ static Element ColorStatus(const std::string &InStatus)
     return text(InStatus);
 }
 
+// Fixed-width gauge so plans with different phase counts render at the
+// same visual length, enabling cross-row completion comparison in the
+// ACTIVE PLANS panel. Width matches kDesignBarWidth.
 static Element PhaseProgressBar(int InDone, int InTotal)
 {
     if (InTotal == 0)
     {
         return text("no phases") | dim;
     }
-    Elements Bar;
-    for (int Index = 0; Index < InTotal; ++Index)
+    static constexpr int kPhaseProgressBarWidth = 10;
+    int Filled = (InDone * kPhaseProgressBarWidth + InTotal - 1) / InTotal;
+    if (InDone > 0 && Filled == 0)
     {
-        if (Index < InDone)
-        {
-            Bar.push_back(text("\xe2\x96\x88") | color(Color::Green));
-        }
-        else
-        {
-            Bar.push_back(text("\xe2\x96\x91") | dim);
-        }
+        Filled = 1;
+    }
+    if (InDone < InTotal && Filled == kPhaseProgressBarWidth)
+    {
+        Filled = kPhaseProgressBarWidth - 1;
+    }
+    Filled = std::min(kPhaseProgressBarWidth, std::max(0, Filled));
+    const int Empty = kPhaseProgressBarWidth - Filled;
+    Elements Bar;
+    for (int Index = 0; Index < Filled; ++Index)
+    {
+        Bar.push_back(text("\xe2\x96\x88") | color(Color::Green));
+    }
+    for (int Index = 0; Index < Empty; ++Index)
+    {
+        Bar.push_back(text("\xe2\x96\x91") | dim);
     }
     Bar.push_back(
         text(" " + std::to_string(InDone) + "/" + std::to_string(InTotal)));
