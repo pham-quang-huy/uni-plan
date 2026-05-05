@@ -24,8 +24,40 @@ namespace fs = std::filesystem;
 namespace UniPlan
 {
 
+enum class EBundleLoadProbeResult
+{
+    Missing,
+    Loaded,
+    Failed
+};
+
+static EBundleLoadProbeResult TryLoadBundleFile(const fs::path &InPath,
+                                                FTopicBundle &OutBundle,
+                                                std::string &OutError)
+{
+    std::error_code EC;
+    if (!fs::is_regular_file(InPath, EC))
+    {
+        return EBundleLoadProbeResult::Missing;
+    }
+
+    if (!TryReadTopicBundle(InPath, OutBundle, OutError))
+    {
+        return EBundleLoadProbeResult::Failed;
+    }
+
+    OutBundle.mBundlePath = InPath.string();
+    std::string SessionError;
+    if (!CaptureReadSession(InPath, OutBundle.mReadSession, SessionError))
+    {
+        OutError = "Bundle read-session capture failed: " + SessionError;
+        return EBundleLoadProbeResult::Failed;
+    }
+    return EBundleLoadProbeResult::Loaded;
+}
+
 // ---------------------------------------------------------------------------
-// TryLoadBundleByTopic — recursive search for <TopicKey>.Plan.json
+// TryLoadBundleByTopic — canonical direct lookup, then recursive fallback
 // ---------------------------------------------------------------------------
 
 bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
@@ -33,6 +65,19 @@ bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
                           FTopicBundle &OutBundle, std::string &OutError)
 {
     const std::string TargetName = InTopicKey + ".Plan.json";
+    const fs::path CanonicalPath = InRepoRoot / "Docs" / "Plans" / TargetName;
+
+    const EBundleLoadProbeResult DirectResult =
+        TryLoadBundleFile(CanonicalPath, OutBundle, OutError);
+    if (DirectResult == EBundleLoadProbeResult::Loaded)
+    {
+        return true;
+    }
+    if (DirectResult == EBundleLoadProbeResult::Failed)
+    {
+        return false;
+    }
+
     std::error_code EC;
     for (auto Iterator = fs::recursive_directory_iterator(InRepoRoot, EC);
          Iterator != fs::recursive_directory_iterator(); ++Iterator)
@@ -49,17 +94,13 @@ bool TryLoadBundleByTopic(const fs::path &InRepoRoot,
             continue;
         if (Iterator->path().filename().string() != TargetName)
             continue;
-        if (!TryReadTopicBundle(Iterator->path(), OutBundle, OutError))
-            return false;
-        OutBundle.mBundlePath = Iterator->path().string();
-        std::string SessionError;
-        if (!CaptureReadSession(Iterator->path(), OutBundle.mReadSession,
-                                SessionError))
+        const EBundleLoadProbeResult Result =
+            TryLoadBundleFile(Iterator->path(), OutBundle, OutError);
+        if (Result == EBundleLoadProbeResult::Loaded)
         {
-            OutError = "Bundle read-session capture failed: " + SessionError;
-            return false;
+            return true;
         }
-        return true;
+        return false;
     }
     OutError = "Bundle not found: " + TargetName +
                " (searched recursively from " + InRepoRoot.string() + ")";

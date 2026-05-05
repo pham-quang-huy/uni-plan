@@ -266,7 +266,7 @@ int RunRiskListCommand(const std::vector<std::string> &InArgs,
     }
 
     const std::string UTC = GetUtcNow();
-    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Filtered.size());
     EmitRisksJson("risks", Filtered, true, &OriginalIndices);
@@ -484,7 +484,7 @@ int RunNextActionListCommand(const std::vector<std::string> &InArgs,
     }
 
     const std::string UTC = GetUtcNow();
-    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Filtered.size());
     EmitNextActionsJson("next_actions", Filtered, true, &OriginalIndices);
@@ -698,7 +698,7 @@ int RunAcceptanceCriterionListCommand(const std::vector<std::string> &InArgs,
     }
 
     const std::string UTC = GetUtcNow();
-    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Filtered.size());
     EmitAcceptanceCriteriaJson("acceptance_criteria", Filtered, true,
@@ -918,7 +918,7 @@ int RunPriorityGroupingListCommand(const std::vector<std::string> &InArgs,
     }
 
     const std::string UTC = GetUtcNow();
-    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Bundle.mMetadata.mPriorityGroupings.size());
     EmitPriorityGroupingsJson("priority_groupings",
@@ -1103,7 +1103,7 @@ int RunRunbookListCommand(const std::vector<std::string> &InArgs,
     }
 
     const std::string UTC = GetUtcNow();
-    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Bundle.mMetadata.mRunbooks.size());
     EmitRunbooksJson("runbooks", Bundle.mMetadata.mRunbooks);
@@ -1309,7 +1309,7 @@ int RunResidualRiskListCommand(const std::vector<std::string> &InArgs,
     }
 
     const std::string UTC = GetUtcNow();
-    PrintJsonHeader(kListSchema, UTC, InRepoRoot);
+    PrintJsonHeader(kListSchema, UTC, RepoRoot.string());
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldSizeT("count", Bundle.mMetadata.mResidualRisks.size());
     EmitResidualRisksJson("residual_risks", Bundle.mMetadata.mResidualRisks);

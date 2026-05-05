@@ -640,6 +640,17 @@ batch schema, full-index coverage, parse-time mutual exclusion on
 The `--all-phases` surface is observable in the shipped binary after
 phases[1] builds green.
 
+### v0.106.0 behavior note — query schemas and topic lookup
+
+Read-only semantic queries no longer reuse the mutation envelope.
+`topic status`, `phase next`, single-phase `phase readiness`, and
+`phase wave-status` emit dedicated query schemas with `generated_utc`
+and normalized `repo_root` fields. Typed-array list commands now honor
+an explicit `--repo-root` in their JSON envelope even when the caller's
+working directory is different. Single-topic lookup first checks the
+canonical `Docs/Plans/<Topic>.Plan.json` path, then falls back to the
+recursive scan for project-scoped bundles.
+
 ### v0.105.0 behavior note — `task set --description` with safety gate
 
 Closes a documented CLI asymmetry from

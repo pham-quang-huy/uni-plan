@@ -57,13 +57,16 @@ int RunPhaseNextCommand(const std::vector<std::string> &InArgs,
                       << kColorReset;
             return 0;
         }
-        std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+        const std::string UTC = GetUtcNow();
+        std::vector<std::string> Warnings;
+        PrintJsonHeader(kPhaseNextSchema, UTC, RepoRoot.string());
         EmitJsonFieldBool("ok", true);
         EmitJsonField("topic", Options.mTopic);
         EmitJsonFieldInt("phase_index", -1);
         EmitJsonField("scope", "");
         EmitJsonFieldBool("ready", false);
-        std::cout << "\"missing_fields\":[]}\n";
+        std::cout << "\"missing_fields\":[],";
+        PrintJsonClose(Warnings);
         return 0;
     }
 
@@ -107,7 +110,9 @@ int RunPhaseNextCommand(const std::vector<std::string> &InArgs,
         return 0;
     }
 
-    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    const std::string UTC = GetUtcNow();
+    std::vector<std::string> Warnings;
+    PrintJsonHeader(kPhaseNextSchema, UTC, RepoRoot.string());
     EmitJsonFieldBool("ok", true);
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldInt("phase_index", NextIndex);
@@ -119,7 +124,8 @@ int RunPhaseNextCommand(const std::vector<std::string> &InArgs,
         PrintJsonSep(I);
         std::cout << JSONQuote(MissingFields[I]);
     }
-    std::cout << "]}\n";
+    std::cout << "],";
+    PrintJsonClose(Warnings);
     return 0;
 }
 
@@ -384,10 +390,13 @@ int RunPhaseReadinessCommand(const std::vector<std::string> &InArgs,
         return 0;
     }
 
-    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    const std::string UTC = GetUtcNow();
+    std::vector<std::string> Warnings;
+    PrintJsonHeader(kPhaseReadinessSchema, UTC, RepoRoot.string());
     EmitJsonFieldBool("ok", true);
     EmitPerPhaseJsonBody(Options.mPhaseIndex);
-    std::cout << "}\n";
+    std::cout << ",";
+    PrintJsonClose(Warnings);
     return 0;
 }
 
@@ -538,7 +547,8 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
         return 0;
     }
 
-    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    const std::string UTC = GetUtcNow();
+    PrintJsonHeader(kTopicStatusSchema, UTC, RepoRoot.string());
     EmitJsonFieldBool("ok", true);
     EmitJsonFieldInt("total", Total);
     std::cout << "\"counts\":{";
@@ -564,7 +574,8 @@ int RunTopicStatusCommand(const std::vector<std::string> &InArgs,
         EmitJsonFieldInt("total", Active[I].mPhasesTotal, false);
         std::cout << "}}";
     }
-    std::cout << "]}\n";
+    std::cout << "],";
+    PrintJsonClose(Warnings);
     return 0;
 }
 
@@ -658,7 +669,9 @@ int RunPhaseWaveStatusCommand(const std::vector<std::string> &InArgs,
         return 0;
     }
 
-    std::cout << "{\"schema\":" << JSONQuote(kMutationSchema) << ",";
+    const std::string UTC = GetUtcNow();
+    std::vector<std::string> Warnings;
+    PrintJsonHeader(kPhaseWaveStatusSchema, UTC, RepoRoot.string());
     EmitJsonFieldBool("ok", true);
     EmitJsonField("topic", Options.mTopic);
     EmitJsonFieldInt("phase_index", Options.mPhaseIndex);
@@ -674,7 +687,8 @@ int RunPhaseWaveStatusCommand(const std::vector<std::string> &InArgs,
         EmitJsonFieldInt("completed", Pair.second.mCompleted, false);
         std::cout << "}";
     }
-    std::cout << "]}\n";
+    std::cout << "],";
+    PrintJsonClose(Warnings);
     return 0;
 }
 

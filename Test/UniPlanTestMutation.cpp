@@ -1279,6 +1279,42 @@ TEST_F(FBundleTestFixture, AcceptanceCriterionListFiltersByStatus)
               "M");
 }
 
+TEST_F(FBundleTestFixture, TypedArrayListCommandsHonorExplicitRepoRoot)
+{
+    CopyFixture("SampleTopic");
+    RESET_TYPED_ARRAYS(std::string("SampleTopic"));
+    const std::string CallerRoot = (mRepoRoot / "NotTheRepo").string();
+
+    auto ExpectRepoRoot =
+        [&](int (*InRunner)(const std::vector<std::string> &,
+                            const std::string &),
+            std::vector<std::string> InArgs)
+    {
+        InArgs.push_back("--repo-root");
+        InArgs.push_back(mRepoRoot.string());
+
+        StartCapture();
+        const int Code = InRunner(InArgs, CallerRoot);
+        StopCapture();
+        EXPECT_EQ(Code, 0);
+        const auto Json = ParseCapturedJSON();
+        EXPECT_EQ(Json["repo_root"].get<std::string>(), mRepoRoot.string());
+    };
+
+    ExpectRepoRoot(UniPlan::RunRiskListCommand,
+                   {"--topic", "SampleTopic"});
+    ExpectRepoRoot(UniPlan::RunNextActionListCommand,
+                   {"--topic", "SampleTopic"});
+    ExpectRepoRoot(UniPlan::RunAcceptanceCriterionListCommand,
+                   {"--topic", "SampleTopic"});
+    ExpectRepoRoot(UniPlan::RunPriorityGroupingListCommand,
+                   {"--topic", "SampleTopic"});
+    ExpectRepoRoot(UniPlan::RunRunbookListCommand,
+                   {"--topic", "SampleTopic"});
+    ExpectRepoRoot(UniPlan::RunResidualRiskListCommand,
+                   {"--topic", "SampleTopic"});
+}
+
 // ===================================================================
 // Dual-read: legacy pipe-delimited string form is auto-promoted to
 // typed arrays on bundle load without touching on-disk form. Writer

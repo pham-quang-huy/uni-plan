@@ -160,6 +160,27 @@ TEST_F(FBundleTestFixture, TopicGetMissingTopicFails)
     EXPECT_EQ(Code, 1);
 }
 
+TEST_F(FBundleTestFixture, TopicLookupPrefersCanonicalPlanPath)
+{
+    CopyFixture("SampleTopic");
+
+    const fs::path CanonicalPath =
+        mRepoRoot / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    const fs::path EarlierRecursivePath =
+        mRepoRoot / "AAA" / "Docs" / "Plans" / "SampleTopic.Plan.json";
+    fs::create_directories(EarlierRecursivePath.parent_path());
+    fs::copy_file(CanonicalPath, EarlierRecursivePath,
+                  fs::copy_options::overwrite_existing);
+
+    UniPlan::FTopicBundle Bundle;
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryLoadBundleByTopic(mRepoRoot, "SampleTopic", Bundle,
+                                              Error))
+        << Error;
+    EXPECT_EQ(fs::path(Bundle.mBundlePath).lexically_normal(),
+              CanonicalPath.lexically_normal());
+}
+
 // ===================================================================
 // topic status
 // ===================================================================
@@ -173,6 +194,8 @@ TEST_F(FBundleTestFixture, TopicStatusJsonHasCounts)
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-topic-status-v1");
+    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
     EXPECT_EQ(Json["total"], 1);
     EXPECT_TRUE(Json.contains("counts"));
     EXPECT_EQ(Json["counts"]["in_progress"], 1);
@@ -497,6 +520,8 @@ TEST_F(FBundleTestFixture, PhaseNextFindsNotStarted)
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-phase-next-v1");
+    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
     EXPECT_EQ(Json["phase_index"], 2);
 }
 
@@ -511,6 +536,8 @@ TEST_F(FBundleTestFixture, PhaseNextAllStartedReturnsNegative)
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-phase-next-v1");
+    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
     EXPECT_EQ(Json["phase_index"], -1);
 }
 
@@ -529,6 +556,8 @@ TEST_F(FBundleTestFixture, PhaseReadinessReportsGates)
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-phase-readiness-v1");
+    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
     EXPECT_TRUE(Json.contains("gates"));
     EXPECT_FALSE(Json["gates"].empty());
 }
@@ -548,6 +577,8 @@ TEST_F(FBundleTestFixture, PhaseWaveStatusReportsWaves)
     StopCapture();
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-phase-wave-status-v1");
+    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
     EXPECT_TRUE(Json.contains("waves"));
     EXPECT_TRUE(Json.contains("current_wave"));
 }

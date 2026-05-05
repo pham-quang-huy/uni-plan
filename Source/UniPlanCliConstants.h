@@ -9,7 +9,7 @@ namespace UniPlan
 // CLI version and JSON schema constants
 // ---------------------------------------------------------------------------
 
-static constexpr const char *kCliVersion = "0.105.5";
+static constexpr const char *kCliVersion = "0.106.0";
 static constexpr const char *kListSchema = "uni-plan-list-v1";
 static constexpr const char *kPairListSchema = "uni-plan-pair-list-v1";
 static constexpr const char *kLintSchema = "uni-plan-lint-v1";
@@ -109,8 +109,14 @@ inline std::string MakeChangelogTarget(int InIndex)
 // V4 bundle-native command schemas
 static constexpr const char *kTopicListSchema = "uni-plan-topic-list-v1";
 static constexpr const char *kTopicGetSchema = "uni-plan-topic-get-v1";
+static constexpr const char *kTopicStatusSchema = "uni-plan-topic-status-v1";
 static constexpr const char *kPhaseGetSchema = "uni-plan-phase-get-v1";
 static constexpr const char *kPhaseMetricSchema = "uni-plan-phase-metric-v1";
+static constexpr const char *kPhaseNextSchema = "uni-plan-phase-next-v1";
+static constexpr const char *kPhaseReadinessSchema =
+    "uni-plan-phase-readiness-v1";
+static constexpr const char *kPhaseWaveStatusSchema =
+    "uni-plan-phase-wave-status-v1";
 // Batch multi-phase get (v0.84.0). Single-phase --phase <N> continues to
 // emit v1 at the top level (backward compat). --phases 1,3,5 emits this
 // wrapped schema with the phase objects inside a `phases` array.

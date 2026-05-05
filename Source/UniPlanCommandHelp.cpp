@@ -244,7 +244,7 @@ static const FSubcommandHelpEntry kTopicSubs[] = {
         nullptr,
         nullptr,
         nullptr,
-        "uni-plan-topic-list-v1",
+        "uni-plan-topic-status-v1",
         "Examples:\n"
         "  uni-plan topic status\n"
         "  uni-plan topic status --human\n",
@@ -717,7 +717,7 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  --topic <T>             Topic key\n\n",
         nullptr,
         nullptr,
-        "uni-plan-phase-get-v1",
+        "uni-plan-phase-next-v1",
         "Examples:\n"
         "  uni-plan phase next --topic MultiPlatforming\n"
         "  uni-plan phase next --topic X --human\n",
@@ -746,14 +746,15 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  testing (applies to all phases)\n\n"
         "v0.105.0+ adds --all-phases for a batch sweep. The wrapped JSON\n"
         "envelope uses schema uni-plan-phase-readiness-batch-v1; each\n"
-        "element of `phases[]` carries the same shape as the single-phase\n"
-        "v1 emission. --phase and --all-phases are mutually exclusive.\n\n",
+        "element of `phases[]` carries the same payload fields as the\n"
+        "single-phase uni-plan-phase-readiness-v1 emission. --phase and\n"
+        "--all-phases are mutually exclusive.\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n"
         "  (one of) --phase <N>  |  --all-phases\n\n",
         nullptr,
         nullptr,
-        "uni-plan-phase-get-v1",
+        "uni-plan-phase-readiness-v1",
         "Examples:\n"
         "  uni-plan phase readiness --topic X --phase 6 --human\n",
         false,
@@ -771,7 +772,7 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "  --phase <N>             Phase index\n\n",
         nullptr,
         nullptr,
-        "uni-plan-phase-get-v1",
+        "uni-plan-phase-wave-status-v1",
         "Examples:\n"
         "  uni-plan phase wave-status --topic X --phase 6 --human\n",
         false,
