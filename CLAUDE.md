@@ -120,7 +120,7 @@ uni-plan/
 │   ├── Plans/                 # Active .Plan.json bundles
 │   ├── Implementation/        # Legacy markdown fixtures / historical references
 │   └── Playbooks/             # Legacy markdown fixtures / historical references
-├── Test/                      # GoogleTest suite (469 tests as of v0.104.1)
+├── Test/                      # GoogleTest suite (488 macOS / 487 Windows as of v0.105.2)
 ├── ThirdParty/                # FTXUI (terminal UI library)
 ├── Build/                     # CMake output directory
 ├── .claude/                   # Claude Code system

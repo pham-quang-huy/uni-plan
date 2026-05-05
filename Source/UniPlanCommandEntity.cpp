@@ -3,6 +3,7 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanOutputHelpers.h"
+#include "UniPlanProcessHelpers.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
@@ -1109,10 +1110,10 @@ static bool RunGitLogNameStatusInWindow(const fs::path &InRepoRoot,
             << "--since=\"" << InSinceISO << "\" "
             << "--until=\"" << InUntilISO << "\" "
             << "--pretty=format:";
-    FILE *rpPipe = popen(Command.str().c_str(), "r");
+    FILE *rpPipe = OpenReadPipe(Command.str());
     if (rpPipe == nullptr)
     {
-        OutError = "manifest suggest: failed to spawn `git log` (popen)";
+        OutError = "manifest suggest: failed to spawn `git log`";
         return false;
     }
     char Buffer[4096];
@@ -1120,7 +1121,7 @@ static bool RunGitLogNameStatusInWindow(const fs::path &InRepoRoot,
     {
         OutStdout.append(Buffer);
     }
-    const int ExitCode = pclose(rpPipe);
+    const int ExitCode = CloseReadPipe(rpPipe);
     if (ExitCode != 0)
     {
         OutError = "manifest suggest: `git log` exited non-zero (status=" +

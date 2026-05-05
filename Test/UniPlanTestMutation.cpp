@@ -2104,7 +2104,7 @@ TEST_F(FBundleTestFixture, TaskSetDescriptionFilePreservesShellHostileContent)
     const std::string Hostile =
         "line with $VAR, backticks ``, quotes \"\", and newline:\nsecond line";
     const fs::path DescPath = mRepoRoot / "desc.txt";
-    std::ofstream(DescPath) << Hostile;
+    std::ofstream(DescPath, std::ios::binary) << Hostile;
 
     StartCapture();
     const int Code = UniPlan::RunTaskSetCommand(
@@ -2139,7 +2139,7 @@ TEST_F(FBundleTestFixture, PhaseSetInvestigationAppendFileConcatsWithSeam)
     StopCapture();
 
     const fs::path AppendPath = mRepoRoot / "append.txt";
-    std::ofstream(AppendPath) << "second paragraph";
+    std::ofstream(AppendPath, std::ios::binary) << "second paragraph";
 
     StartCapture();
     const int Code = UniPlan::RunPhaseSetCommand(
@@ -2167,7 +2167,7 @@ TEST_F(FBundleTestFixture, PhaseSetAppendFileOnEmptyFieldActsAsReplace)
     ASSERT_EQ(Before.mPhases[2].mDesign.mInvestigation, "");
 
     const fs::path AppendPath = mRepoRoot / "append.txt";
-    std::ofstream(AppendPath) << "only paragraph";
+    std::ofstream(AppendPath, std::ios::binary) << "only paragraph";
 
     StartCapture();
     const int Code = UniPlan::RunPhaseSetCommand(
@@ -2202,7 +2202,7 @@ TEST_F(FBundleTestFixture, PhaseSetAppendFilePreservesShellHostileBytes)
                                 "| pipeline | here\n"
                                 "backticks `cat` and \"quotes\"";
     const fs::path AppendPath = mRepoRoot / "append.txt";
-    std::ofstream(AppendPath) << Hostile;
+    std::ofstream(AppendPath, std::ios::binary) << Hostile;
 
     StartCapture();
     const int Code = UniPlan::RunPhaseSetCommand(
@@ -2236,8 +2236,8 @@ TEST_F(FBundleTestFixture, PhaseSetAppendFileCrossFieldIndependence)
 
     const fs::path InvPath = mRepoRoot / "inv.txt";
     const fs::path HandoffPath = mRepoRoot / "handoff.txt";
-    std::ofstream(InvPath) << "inv extension";
-    std::ofstream(HandoffPath) << "handoff extension";
+    std::ofstream(InvPath, std::ios::binary) << "inv extension";
+    std::ofstream(HandoffPath, std::ios::binary) << "handoff extension";
 
     StartCapture();
     const int Code = UniPlan::RunPhaseSetCommand(

@@ -68,6 +68,15 @@ static fs::path BuildSiblingTmpPath(const fs::path &InFinal)
     return Out;
 }
 
+#ifdef _WIN32
+static fs::path BuildSiblingLockPath(const fs::path &InFinal)
+{
+    fs::path Out = InFinal;
+    Out += ".lock";
+    return Out;
+}
+#endif
+
 static bool ShouldInjectPreRenameFault()
 {
     const char *Val = std::getenv("UPLAN_FAULT_PRE_RENAME");
@@ -210,13 +219,13 @@ FBundleFileLock::FBundleFileLock(const fs::path &InPath, std::string &OutError,
     const auto Poll = std::chrono::milliseconds(20);
 
 #ifdef _WIN32
-    const std::wstring WidePath = InPath.wstring();
+    const std::wstring WidePath = BuildSiblingLockPath(InPath).wstring();
     for (;;)
     {
         mHandle =
-            CreateFileW(WidePath.c_str(), GENERIC_READ,
+            CreateFileW(WidePath.c_str(), GENERIC_READ | GENERIC_WRITE,
                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                        nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (mHandle != INVALID_HANDLE_VALUE)
         {
             OVERLAPPED Ovl;

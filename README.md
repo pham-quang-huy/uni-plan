@@ -28,7 +28,7 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Language | C++17 |
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
-| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.104.1`) |
+| Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.105.2`) |
 | Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
 | Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
 | Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |
@@ -581,7 +581,7 @@ uni-plan/
 │   └── UniPlan*Helpers.h      # Domain helpers (String, File, JSON, Inventory, Markdown, Status, Output)
 ├── Schemas/                   # 10 canonical V3 schema files (used only by `uni-plan lint`)
 ├── Docs/                      # Plan corpus — active .Plan.json bundles live in Docs/Plans/
-├── Test/                      # GoogleTest suite (469 tests as of v0.104.1)
+├── Test/                      # GoogleTest suite (488 macOS / 487 Windows as of v0.105.2)
 ├── ThirdParty/                # FTXUI
 ├── Build/                     # CMake output (ignored)
 ├── .claude/                   # Rules, hooks, skills, agents

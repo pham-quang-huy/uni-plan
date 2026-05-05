@@ -3,6 +3,7 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanJSONIO.h"
 #include "UniPlanTopicTypes.h"
+#include "UniPlanTestPlatform.h"
 
 #include <fstream>
 #include <regex>
@@ -14,13 +15,10 @@
 void FBundleTestFixture::SetUp()
 {
     const fs::path TmpRoot = fs::path(UPLAN_TEST_SOURCE_DIR) / ".tmp";
-    fs::create_directories(TmpRoot);
-    const std::string Template = (TmpRoot / "test-XXXXXX").string();
-    std::vector<char> Buffer(Template.begin(), Template.end());
-    Buffer.push_back('\0');
-    const char *Result = mkdtemp(Buffer.data());
-    ASSERT_NE(Result, nullptr) << "mkdtemp failed";
-    mRepoRoot = fs::path(Result);
+    std::string Error;
+    ASSERT_TRUE(
+        UniPlanTest::CreateUniqueDirectory(TmpRoot, "test", mRepoRoot, Error))
+        << Error;
     fs::create_directories(mRepoRoot / "Docs" / "Plans");
 }
 
@@ -76,8 +74,8 @@ void FBundleTestFixture::CreateMinimalFixture(
     // `completed_topic_criteria_all_met`. Tests exercising those
     // evaluators specifically can overwrite these fields after
     // ReloadBundle.
-    if (InTopicStatus != UniPlan::ETopicStatus::NotStarted
-        && InTopicStatus != UniPlan::ETopicStatus::Canceled)
+    if (InTopicStatus != UniPlan::ETopicStatus::NotStarted &&
+        InTopicStatus != UniPlan::ETopicStatus::Canceled)
     {
         Bundle.mMetadata.mGoals = "Test goal";
         Bundle.mMetadata.mNonGoals = "Test non-goal";
@@ -89,8 +87,8 @@ void FBundleTestFixture::CreateMinimalFixture(
         AC.mStatus = UniPlan::ECriterionStatus::Met;
         Bundle.mMetadata.mAcceptanceCriteria.push_back(std::move(AC));
     }
-    if (InTopicStatus == UniPlan::ETopicStatus::InProgress
-        || InTopicStatus == UniPlan::ETopicStatus::Blocked)
+    if (InTopicStatus == UniPlan::ETopicStatus::InProgress ||
+        InTopicStatus == UniPlan::ETopicStatus::Blocked)
     {
         UniPlan::FNextActionEntry NA;
         NA.mOrder = 1;

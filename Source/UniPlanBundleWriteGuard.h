@@ -22,16 +22,17 @@ namespace UniPlan
 // of the same bundle both serialize their mutation back to disk, the second
 // write clobbering the first. The guard funnels every mutation through:
 //
-//   1. Acquire exclusive advisory lock on the bundle file
-//      (flock(LOCK_EX) on POSIX, LockFileEx on Windows).
+//   1. Acquire exclusive advisory lock for the bundle
+//      (flock(LOCK_EX) on POSIX; a sibling `.lock` file on Windows because
+//      LockFileEx byte-range locks are mandatory and would block the
+//      under-lock stale-check read).
 //   2. If the caller's FTopicBundle.mReadSession.mbValid is true, re-stat
 //      and re-hash the on-disk bytes; if anything changed since the read,
 //      fail with a conflict error (no bypass flag).
 //   3. Serialize + write to a sibling <bundle>.tmp.<pid>.<tid> file.
 //   4. fsync + close.
-//   5. Release the lock handle BEFORE rename (Windows refuses replace-rename
-//      across a live handle; POSIX releases automatically on close anyway,
-//      but doing it explicitly keeps the ordering documented).
+//   5. Rename before releasing the lock so a peer cannot pass stale-check
+//      against the old content and then race the replacement.
 //   6. std::filesystem::rename(tmp, final) — atomic on POSIX same-filesystem;
 //      MOVEFILE_REPLACE_EXISTING-equivalent on Windows.
 //
@@ -57,7 +58,7 @@ bool CaptureReadSession(const fs::path &InPath, FBundleReadSession &OutSession,
 
 // ---------------------------------------------------------------------------
 // Re-stat and re-hash the file at InPath; return true iff every field
-// matches InSession. Caller must hold FBundleFileLock over InPath for the
+// matches InSession. Caller must hold FBundleFileLock for InPath for the
 // duration of the call (otherwise a lost-update window reopens between
 // this check and the rename).
 //
@@ -82,7 +83,7 @@ bool VerifyReadSessionUnderLock(const fs::path &InPath,
 int GuardedWriteBundle(const FTopicBundle &InBundle, std::string &OutError);
 
 // ---------------------------------------------------------------------------
-// FBundleFileLock — RAII exclusive advisory lock on a bundle file.
+// FBundleFileLock — RAII exclusive advisory lock for a bundle file.
 //
 // Used internally by GuardedWriteBundle; exposed for tests that need to
 // hold a lock across command invocations (e.g. "migrate blocks while a
@@ -91,8 +92,7 @@ int GuardedWriteBundle(const FTopicBundle &InBundle, std::string &OutError);
 // Construction blocks up to InTimeout (default 5 s) acquiring the lock;
 // on timeout or error, IsLocked() returns false and OutError (via the
 // GetError() accessor) is populated. The destructor releases on both
-// platforms — explicit Unlock() is offered for the guard's documented
-// release-before-rename ordering on Windows.
+// platforms — explicit Unlock() is offered for tests and early-release paths.
 // ---------------------------------------------------------------------------
 class FBundleFileLock
 {
@@ -112,8 +112,8 @@ class FBundleFileLock
         return mbLocked;
     }
 
-    // Explicit early release (before the guard's atomic rename). Safe to
-    // call multiple times and safe to call from the destructor path.
+    // Explicit early release. Safe to call multiple times and safe to call
+    // from the destructor path.
     void Unlock();
 
   private:

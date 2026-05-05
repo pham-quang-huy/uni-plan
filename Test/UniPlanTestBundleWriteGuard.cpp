@@ -12,6 +12,7 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanJSONIO.h"
 #include "UniPlanTopicTypes.h"
+#include "UniPlanTestPlatform.h"
 
 #include <atomic>
 #include <chrono>
@@ -312,10 +313,12 @@ TEST_F(FBundleTestFixture, GuardRenameFailureLeavesOriginalIntact)
     ASSERT_TRUE(ReloadBundle("GuardFault", Loaded));
     Loaded.mMetadata.mSummary = "This should never hit disk";
 
-    ASSERT_EQ(::setenv("UPLAN_FAULT_PRE_RENAME", "1", 1), 0);
+    ASSERT_EQ(UniPlanTest::SetEnvironmentVariableForTest(
+                  "UPLAN_FAULT_PRE_RENAME", "1", true),
+              0);
     std::string Error;
     const int Code = UniPlan::GuardedWriteBundle(Loaded, Error);
-    ::unsetenv("UPLAN_FAULT_PRE_RENAME");
+    UniPlanTest::UnsetEnvironmentVariableForTest("UPLAN_FAULT_PRE_RENAME");
 
     EXPECT_EQ(Code, 1);
     EXPECT_NE(Error.find("UPLAN_FAULT_PRE_RENAME"), std::string::npos) << Error;

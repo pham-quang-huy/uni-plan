@@ -2,9 +2,11 @@
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
 #include "UniPlanPhaseKind.h"
+#include "UniPlanProcessHelpers.h"
 #include "UniPlanTopicTypes.h"
 #include "UniPlanTypes.h"
 
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
@@ -1216,8 +1218,8 @@ static bool BuildFirstCommitMap(const fs::path &InRepoRoot,
 {
     std::ostringstream Cmd;
     Cmd << "git -C \"" << InRepoRoot.string() << "\" log --reverse "
-        << "--name-only --pretty=format:%aI 2>/dev/null";
-    FILE *rpPipe = popen(Cmd.str().c_str(), "r");
+        << "--name-only --pretty=format:%aI " << ShellStderrToNull();
+    FILE *rpPipe = OpenReadPipe(Cmd.str());
     if (rpPipe == nullptr)
         return false;
     char Buffer[8192];
@@ -1244,7 +1246,7 @@ static bool BuildFirstCommitMap(const fs::path &InRepoRoot,
         if (OutMap.find(Line) == OutMap.end())
             OutMap[Line] = CurrentTimestamp;
     }
-    const int ExitCode = pclose(rpPipe);
+    const int ExitCode = CloseReadPipe(rpPipe);
     return ExitCode == 0;
 }
 
@@ -1635,8 +1637,8 @@ void EvalPriorityGroupingWellformed(const std::vector<FTopicBundle> &InBundles,
                 "priority_groupings[" + std::to_string(I) + "]";
             if (G.mID.empty())
                 Fail(OutChecks, "priority_grouping_wellformed",
-                     EValidationSeverity::ErrorMinor, B.mTopicKey,
-                     Base + ".id", "id is empty");
+                     EValidationSeverity::ErrorMinor, B.mTopicKey, Base + ".id",
+                     "id is empty");
             if (G.mPhaseIndices.empty())
                 Fail(OutChecks, "priority_grouping_wellformed",
                      EValidationSeverity::ErrorMinor, B.mTopicKey,
@@ -1764,7 +1766,8 @@ void EvalResidualRiskWellformed(const std::vector<FTopicBundle> &InBundles,
         for (size_t I = 0; I < B.mMetadata.mResidualRisks.size(); ++I)
         {
             const FResidualRiskEntry &R = B.mMetadata.mResidualRisks[I];
-            const std::string Base = "residual_risks[" + std::to_string(I) + "]";
+            const std::string Base =
+                "residual_risks[" + std::to_string(I) + "]";
             if (R.mArea.empty())
                 Fail(OutChecks, "residual_risk_wellformed",
                      EValidationSeverity::ErrorMinor, B.mTopicKey,
