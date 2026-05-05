@@ -266,6 +266,9 @@ LintResult BuildLintResult(const std::string &InRepoRoot,
 std::vector<ValidateCheck>
 ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
                    const fs::path &InRepoRoot = fs::path());
+std::vector<ValidateCheck>
+ValidateTopicBundle(const std::vector<FTopicBundle> &InAllBundles,
+                    const fs::path &InRepoRoot, const std::string &InTopicKey);
 
 // Shared validation helper — emits a failure entry with the given id,
 // severity, topic, path, and detail. Defined in UniPlanValidation.cpp;
@@ -330,6 +333,9 @@ void EvalCompletedTopicCriteriaAllMet(
 void EvalNoUnresolvedMarker(const std::vector<FTopicBundle> &InBundles,
                             std::vector<ValidateCheck> &OutChecks);
 void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks);
+void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
+                           const std::vector<FTopicBundle> &InReferenceBundles,
                            std::vector<ValidateCheck> &OutChecks);
 void EvalNoDuplicateChangelog(const std::vector<FTopicBundle> &InBundles,
                               std::vector<ValidateCheck> &OutChecks);

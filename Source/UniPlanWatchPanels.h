@@ -65,8 +65,7 @@ class DeferredPlansPanel
 class ValidationFailPanel
 {
   public:
-    ftxui::Element
-    Render(const std::vector<ValidateCheck> &InFailedChecks) const;
+    ftxui::Element Render(const FWatchValidationSummary &InValidation) const;
 };
 
 class ExecutionTaxonomyPanel

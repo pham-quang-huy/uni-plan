@@ -95,6 +95,14 @@ struct FWatchPlanSummary
 
 struct FWatchValidationSummary
 {
+    enum class EState
+    {
+        Pending,
+        Running,
+        Ready,
+        Stale
+    };
+
     int mTotalChecks = 0;
     int mPassedChecks = 0;
     int mFailedChecks = 0;
@@ -102,14 +110,26 @@ struct FWatchValidationSummary
     int mErrorMinorCount = 0;
     int mWarningCount = 0;
     bool mbOk = true;
+    EState mState = EState::Pending;
+    std::string mStateMessage;
     std::vector<ValidateCheck> mFailedCheckDetails;
 };
 
 struct FWatchLintSummary
 {
+    enum class EState
+    {
+        Pending,
+        Running,
+        Ready,
+        Stale
+    };
+
     int mWarningCount = 0;
     int mNamePatternWarnings = 0;
     int mMissingH1Warnings = 0;
+    EState mState = EState::Pending;
+    std::string mStateMessage;
 };
 
 struct FDocWatchSnapshot
@@ -165,6 +185,14 @@ struct FWatchSnapshotCache
     FWatchLintSummary mLint{};
 };
 
+struct FWatchSnapshotBuildOptions
+{
+    bool mbRunValidation = true;
+    bool mbRunLint = true;
+    bool mbMarkSkippedValidationRunning = false;
+    bool mbMarkSkippedLintRunning = false;
+};
+
 FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
                                      bool InUseCache,
                                      const std::string &InCacheDir,
@@ -173,5 +201,10 @@ FDocWatchSnapshot
 BuildWatchSnapshotCached(const std::string &InRepoRoot, bool InUseCache,
                          const std::string &InCacheDir, bool InCacheVerbose,
                          FWatchSnapshotCache &InOutCache, bool InForceRefresh);
+FDocWatchSnapshot
+BuildWatchSnapshotCached(const std::string &InRepoRoot, bool InUseCache,
+                         const std::string &InCacheDir, bool InCacheVerbose,
+                         FWatchSnapshotCache &InOutCache, bool InForceRefresh,
+                         const FWatchSnapshotBuildOptions &InOptions);
 
 } // namespace UniPlan

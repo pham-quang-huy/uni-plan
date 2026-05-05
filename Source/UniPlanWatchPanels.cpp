@@ -348,6 +348,22 @@ Element InventoryPanel::Render(const FWatchInventoryCounters &InCounters) const
 Element
 ValidationPanel::Render(const FWatchValidationSummary &InValidation) const
 {
+    if (InValidation.mState == FWatchValidationSummary::EState::Running ||
+        InValidation.mState == FWatchValidationSummary::EState::Pending)
+    {
+        const std::string Message = InValidation.mStateMessage.empty()
+                                        ? "Validation pending"
+                                        : InValidation.mStateMessage;
+        return window(text(" VALIDATION  pending ") | bold,
+                      vbox({
+                          text(Message) | color(Color::Yellow) | bold,
+                          separator(),
+                          text("Plan inventory is available") | dim,
+                          text("Results will appear after validation") | dim,
+                      })) |
+               size(HEIGHT, EQUAL, 9);
+    }
+
     auto SummaryLine = hbox({
         text("\xe2\x9c\x93 " + std::to_string(InValidation.mPassedChecks) +
              " passed") |
@@ -366,7 +382,14 @@ ValidationPanel::Render(const FWatchValidationSummary &InValidation) const
     Content.push_back(SummaryLine);
     Content.push_back(separator());
 
-    if (InValidation.mFailedChecks == 0)
+    if (InValidation.mState == FWatchValidationSummary::EState::Stale)
+    {
+        const std::string Message = InValidation.mStateMessage.empty()
+                                        ? "Validation stale"
+                                        : InValidation.mStateMessage;
+        Content.push_back(text(Message) | color(Color::Yellow) | bold);
+    }
+    else if (InValidation.mFailedChecks == 0)
     {
         Content.push_back(text("All checks passed") | color(Color::Green) |
                           bold);
@@ -399,6 +422,17 @@ ValidationPanel::Render(const FWatchValidationSummary &InValidation) const
 
 Element LintPanel::Render(const FWatchLintSummary &InLint) const
 {
+    if (InLint.mState == FWatchLintSummary::EState::Running ||
+        InLint.mState == FWatchLintSummary::EState::Pending)
+    {
+        const std::string Message = InLint.mStateMessage.empty()
+                                        ? "Lint pending"
+                                        : InLint.mStateMessage;
+        return window(text(" LINT ") | bold,
+                      text(Message) | color(Color::Yellow)) |
+               size(HEIGHT, EQUAL, 5);
+    }
+
     std::vector<std::vector<Element>> Data;
     Data.push_back(
         {text("Total warnings") | dim,
@@ -996,10 +1030,23 @@ DeferredPlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans) const
 // ValidationFailPanel
 // ---------------------------------------------------------------------------
 
-Element ValidationFailPanel::Render(
-    const std::vector<ValidateCheck> &InFailedChecks) const
+Element
+ValidationFailPanel::Render(const FWatchValidationSummary &InValidation) const
 {
-    if (InFailedChecks.empty())
+    if (InValidation.mState == FWatchValidationSummary::EState::Running ||
+        InValidation.mState == FWatchValidationSummary::EState::Pending)
+    {
+        const std::string Message = InValidation.mStateMessage.empty()
+                                        ? "Validation pending"
+                                        : InValidation.mStateMessage;
+        return window(text(" VALIDATION FAILURES ") | bold,
+                      text(Message) | color(Color::Yellow) | bold) |
+               size(HEIGHT, EQUAL, 5);
+    }
+
+    const std::vector<ValidateCheck> &FailedChecks =
+        InValidation.mFailedCheckDetails;
+    if (FailedChecks.empty())
     {
         return window(text(" VALIDATION FAILURES ") | bold,
                       text("All checks passed") | color(Color::Green) | bold) |
@@ -1009,7 +1056,7 @@ Element ValidationFailPanel::Render(
     std::vector<std::vector<Element>> Data;
     Data.push_back({text("Check") | bold, text("Detail") | bold | flex});
 
-    for (const ValidateCheck &Check : InFailedChecks)
+    for (const ValidateCheck &Check : FailedChecks)
     {
         std::string Detail = Check.mDetail;
         if (Detail.empty() && !Check.mDiagnostics.empty())
@@ -1025,7 +1072,7 @@ Element ValidationFailPanel::Render(
     FailTable.SelectRow(0).SeparatorHorizontal(LIGHT);
 
     return window(text(" VALIDATION FAILURES (" +
-                       std::to_string(InFailedChecks.size()) + ") ") |
+                       std::to_string(FailedChecks.size()) + ") ") |
                       bold | color(Color::Red),
                   FailTable.Render() | flex) |
            size(HEIGHT, EQUAL, 5);
@@ -1985,11 +2032,11 @@ Element WatchStatusBar::Render(
     const std::string Validation =
         InPerformance.mbValidationRan
             ? std::to_string(InPerformance.mValidationDurationMs) + "ms"
-            : "reuse";
+            : "pending/reuse";
     const std::string Lint =
         InPerformance.mbLintRan
             ? std::to_string(InPerformance.mLintDurationMs) + "ms"
-            : "reuse";
+            : "pending/reuse";
     return hbox({
         text(" Poll #" + std::to_string(InTick)) | bold,
         text("  |  Last: " + std::to_string(InPollMs) + "ms") | dim,

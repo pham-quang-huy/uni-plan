@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 // ===================================================================
 // Content-hygiene validation tests
 //
@@ -29,6 +31,20 @@ int CountIssuesWithId(const nlohmann::json &InJson, const std::string &InId)
     {
         if (Issue["id"].get<std::string>() == InId)
             ++Count;
+    }
+    return Count;
+}
+
+int CountChecksWithId(const std::vector<UniPlan::ValidateCheck> &InChecks,
+                      const std::string &InId)
+{
+    int Count = 0;
+    for (const UniPlan::ValidateCheck &Check : InChecks)
+    {
+        if (Check.mID == InId && !Check.mbOk)
+        {
+            ++Count;
+        }
     }
     return Count;
 }
@@ -97,6 +113,27 @@ TEST_F(FBundleTestFixture, NoDevAbsolutePathFlagsUsersPath)
     EXPECT_EQ(Issue["severity"], "error_minor");
 }
 
+TEST_F(FBundleTestFixture, NoDevAbsolutePathFlagsWindowsUsersPath)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mMetadata.mValidationCommands = {
+        MakeVC(R"(cd C:\Users\alice\code\project)")};
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "no_dev_absolute_path");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "error_minor");
+}
+
 TEST_F(FBundleTestFixture, NoDevAbsolutePathCleanBundlePasses)
 {
     CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
@@ -127,6 +164,26 @@ TEST_F(FBundleTestFixture, NoHardcodedEndpointFlagsLocalhost)
     ASSERT_TRUE(ReloadBundle("T", Bundle));
     Bundle.mMetadata.mValidationCommands = {
         MakeVC("curl localhost:8080/health")};
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    const auto Issue = FirstIssueWithId(Json, "no_hardcoded_endpoint");
+    ASSERT_FALSE(Issue.empty());
+    EXPECT_EQ(Issue["severity"], "warning");
+}
+
+TEST_F(FBundleTestFixture, NoHardcodedEndpointFlagsPrivateIpv4)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mMetadata.mValidationCommands = {MakeVC("curl 10.1.2.3/health")};
     WriteBundle(mRepoRoot, "T", Bundle);
 
     StartCapture();
@@ -372,6 +429,25 @@ TEST_F(FBundleTestFixture, NoUnresolvedMarkerCleanBundlePasses)
     UniPlan::FTopicBundle Bundle;
     ASSERT_TRUE(ReloadBundle("T", Bundle));
     Bundle.mPhases[0].mLifecycle.mDone = "Shipped. Retest complete.";
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    StartCapture();
+    UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(CountIssuesWithId(Json, "no_unresolved_marker"), 0);
+}
+
+TEST_F(FBundleTestFixture, NoUnresolvedMarkerRespectsWordBoundary)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::Completed, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+    Bundle.mPhases[0].mLifecycle.mDone =
+        "Shipped. The TODOist import was not part of this change.";
     WriteBundle(mRepoRoot, "T", Bundle);
 
     StartCapture();
@@ -982,6 +1058,39 @@ TEST_F(FBundleTestFixture, TopicRefIntegrityScopedRunResolvesCrossTopicRef)
     // full loaded set.
     EXPECT_EQ(Json["bundle_count"].get<int>(), 1);
     EXPECT_EQ(Json["summary"]["topic_count"].get<int>(), 1);
+}
+
+TEST_F(FBundleTestFixture, ValidateTopicBundleScansOnlyTargetTopic)
+{
+    CreateMinimalFixture("A", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    CreateMinimalFixture("B", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+
+    UniPlan::FTopicBundle BundleA;
+    ASSERT_TRUE(ReloadBundle("A", BundleA));
+    BundleA.mMetadata.mSourceReferences =
+        "A references the real sibling topic B.Plan.json.";
+    WriteBundle(mRepoRoot, "A", BundleA);
+
+    UniPlan::FTopicBundle BundleB;
+    ASSERT_TRUE(ReloadBundle("B", BundleB));
+    BundleB.mMetadata.mSourceReferences =
+        "Bad legacy path Docs/Implementation/Impossible.Plan.json.";
+    WriteBundle(mRepoRoot, "B", BundleB);
+
+    ASSERT_TRUE(ReloadBundle("A", BundleA));
+    ASSERT_TRUE(ReloadBundle("B", BundleB));
+    const std::vector<UniPlan::FTopicBundle> Bundles = {BundleA, BundleB};
+
+    const std::vector<UniPlan::ValidateCheck> ScopedChecks =
+        UniPlan::ValidateTopicBundle(Bundles, mRepoRoot, "A");
+    EXPECT_EQ(CountChecksWithId(ScopedChecks, "path_resolves"), 0);
+    EXPECT_EQ(CountChecksWithId(ScopedChecks, "topic_ref_integrity"), 0);
+
+    const std::vector<UniPlan::ValidateCheck> FullChecks =
+        UniPlan::ValidateAllBundles(Bundles, mRepoRoot);
+    EXPECT_GT(CountChecksWithId(FullChecks, "path_resolves"), 0);
 }
 
 // Regression guard (v0.73.3): --topic <T> pointing at a missing topic

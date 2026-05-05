@@ -989,9 +989,10 @@ EvalValidationCommandFields(const std::vector<FTopicBundle> &InBundles,
 // V4 Bundle Validation — orchestrator
 // ---------------------------------------------------------------------------
 
-std::vector<ValidateCheck>
-ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
-                   const fs::path &InRepoRoot)
+static std::vector<ValidateCheck> ValidateBundlesWithReferences(
+    const std::vector<FTopicBundle> &InBundles,
+    const std::vector<FTopicBundle> &InReferenceBundles,
+    const fs::path &InRepoRoot)
 {
     std::vector<ValidateCheck> Checks;
 
@@ -1028,7 +1029,7 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
 
     // Content-hygiene (ErrorMinor + Warning)
     EvalNoDevAbsolutePath(InBundles, Checks);
-    EvalTopicRefIntegrity(InBundles, Checks);
+    EvalTopicRefIntegrity(InBundles, InReferenceBundles, Checks);
     EvalNoHardcodedEndpoint(InBundles, Checks);
     // Structural checks on typed FValidationCommand records (Phase A).
     EvalValidationCommandFields(InBundles, Checks);
@@ -1082,6 +1083,34 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
     EvalResidualRiskClosureShaFormat(InBundles, Checks);
 
     return Checks;
+}
+
+std::vector<ValidateCheck>
+ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
+                   const fs::path &InRepoRoot)
+{
+    return ValidateBundlesWithReferences(InBundles, InBundles, InRepoRoot);
+}
+
+std::vector<ValidateCheck>
+ValidateTopicBundle(const std::vector<FTopicBundle> &InAllBundles,
+                    const fs::path &InRepoRoot, const std::string &InTopicKey)
+{
+    if (InTopicKey.empty())
+    {
+        return ValidateAllBundles(InAllBundles, InRepoRoot);
+    }
+
+    std::vector<FTopicBundle> TargetBundles;
+    for (const FTopicBundle &Bundle : InAllBundles)
+    {
+        if (Bundle.mTopicKey == InTopicKey)
+        {
+            TargetBundles.push_back(Bundle);
+        }
+    }
+    return ValidateBundlesWithReferences(TargetBundles, InAllBundles,
+                                         InRepoRoot);
 }
 
 } // namespace UniPlan

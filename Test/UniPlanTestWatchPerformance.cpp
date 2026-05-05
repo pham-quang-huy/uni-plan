@@ -281,6 +281,79 @@ TEST_F(FBundleTestFixture, WatchCacheReusesNoChangeSnapshot)
     ASSERT_NE(FindPlan(Second, "Beta"), nullptr);
 }
 
+TEST_F(FBundleTestFixture, WatchSnapshotCanPostInventoryBeforeValidation)
+{
+    CreateMinimalFixture("Alpha", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    CreateMinimalFixture("Beta", UniPlan::ETopicStatus::NotStarted, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+
+    UniPlan::FWatchSnapshotCache Cache;
+    UniPlan::FWatchSnapshotBuildOptions FastOptions;
+    FastOptions.mbRunValidation = false;
+    FastOptions.mbRunLint = false;
+    FastOptions.mbMarkSkippedValidationRunning = true;
+    FastOptions.mbMarkSkippedLintRunning = true;
+
+    const UniPlan::FDocWatchSnapshot Fast = UniPlan::BuildWatchSnapshotCached(
+        mRepoRoot.string(), true, "", false, Cache, true, FastOptions);
+    EXPECT_EQ(Fast.mInventory.mPlanCount, 2);
+    EXPECT_EQ(Fast.mInventory.mActivePlanCount, 1);
+    EXPECT_EQ(Fast.mInventory.mNonActivePlanCount, 1);
+    EXPECT_NE(FindPlan(Fast, "Alpha"), nullptr);
+    EXPECT_NE(FindPlan(Fast, "Beta"), nullptr);
+    EXPECT_EQ(Fast.mValidation.mState,
+              UniPlan::FWatchValidationSummary::EState::Running);
+    EXPECT_EQ(Fast.mLint.mState, UniPlan::FWatchLintSummary::EState::Running);
+    EXPECT_FALSE(Fast.mPerformance.mbValidationRan);
+    EXPECT_FALSE(Fast.mPerformance.mbLintRan);
+
+    const UniPlan::FDocWatchSnapshot Full = UniPlan::BuildWatchSnapshotCached(
+        mRepoRoot.string(), true, "", false, Cache, false);
+    EXPECT_EQ(Full.mPerformance.mBundleReloadCount, 0);
+    EXPECT_EQ(Full.mPerformance.mBundleReuseCount, 2);
+    EXPECT_TRUE(Full.mPerformance.mbValidationRan);
+    EXPECT_TRUE(Full.mPerformance.mbLintRan);
+    EXPECT_EQ(Full.mValidation.mState,
+              UniPlan::FWatchValidationSummary::EState::Ready);
+    EXPECT_EQ(Full.mLint.mState, UniPlan::FWatchLintSummary::EState::Ready);
+}
+
+TEST_F(FBundleTestFixture, WatchSnapshotShowsStaleValidationDuringRefresh)
+{
+    CreateMinimalFixture("Alpha", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+
+    UniPlan::FWatchSnapshotCache Cache;
+    const UniPlan::FDocWatchSnapshot Ready = UniPlan::BuildWatchSnapshotCached(
+        mRepoRoot.string(), true, "", false, Cache, true);
+    ASSERT_EQ(Ready.mValidation.mState,
+              UniPlan::FWatchValidationSummary::EState::Ready);
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "Alpha", "--phase", "0", "--output", "Changed",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0) << mCapturedStderr;
+
+    UniPlan::FWatchSnapshotBuildOptions FastOptions;
+    FastOptions.mbRunValidation = false;
+    FastOptions.mbRunLint = false;
+    FastOptions.mbMarkSkippedValidationRunning = true;
+    FastOptions.mbMarkSkippedLintRunning = true;
+
+    const UniPlan::FDocWatchSnapshot Fast = UniPlan::BuildWatchSnapshotCached(
+        mRepoRoot.string(), true, "", false, Cache, false, FastOptions);
+    EXPECT_EQ(Fast.mInventory.mPlanCount, 1);
+    EXPECT_EQ(Fast.mValidation.mState,
+              UniPlan::FWatchValidationSummary::EState::Stale);
+    EXPECT_NE(Fast.mValidation.mStateMessage.find("running"),
+              std::string::npos);
+    EXPECT_FALSE(Fast.mPerformance.mbValidationRan);
+}
+
 TEST_F(FBundleTestFixture, WatchCacheSnapshotMatchesFullRebuild)
 {
     CreateMinimalFixture("Alpha", UniPlan::ETopicStatus::InProgress, 2,
@@ -588,6 +661,26 @@ TEST_F(FBundleTestFixture, WatchValidationSummaryMatchesValidateCommand)
         }
     }
     EXPECT_EQ(WarningCount, Snapshot.mValidation.mWarningCount);
+}
+
+TEST_F(FBundleTestFixture, ValidationPanelsRenderRunningState)
+{
+    UniPlan::FWatchValidationSummary Validation;
+    Validation.mState = UniPlan::FWatchValidationSummary::EState::Running;
+    Validation.mStateMessage = "Validation running";
+
+    const UniPlan::ValidationPanel SummaryPanel;
+    const UniPlan::ValidationFailPanel FailurePanel;
+    const std::string Summary =
+        StripAnsiCodes(RenderElementToString(SummaryPanel.Render(Validation)));
+    const std::string Failures =
+        StripAnsiCodes(RenderElementToString(FailurePanel.Render(Validation)));
+
+    EXPECT_NE(Summary.find("Validation running"), std::string::npos);
+    EXPECT_NE(Summary.find("Plan inventory is available"), std::string::npos);
+    EXPECT_EQ(Summary.find("All checks passed"), std::string::npos);
+    EXPECT_NE(Failures.find("Validation running"), std::string::npos);
+    EXPECT_EQ(Failures.find("All checks passed"), std::string::npos);
 }
 
 #endif // defined(UPLAN_WATCH)

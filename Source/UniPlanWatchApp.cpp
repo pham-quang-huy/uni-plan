@@ -162,8 +162,7 @@ int DocWatchApp::Run()
             auto rightRow3 =
                 PanelFileManifest.Render(SelectedTaxonomy, mFilePageIndex);
             auto rightRow4 = PanelBlockers.Render(mSnapshot.mAllBlockers);
-            auto rightRow5 = PanelValidationFail.Render(
-                mSnapshot.mValidation.mFailedCheckDetails);
+            auto rightRow5 = PanelValidationFail.Render(mSnapshot.mValidation);
 
             auto rightRow0 = PanelPlanDetail.Render(SelectedPlan);
 
@@ -570,20 +569,40 @@ int DocWatchApp::Run()
     mDataThread = std::thread(
         [this, &screen]
         {
+            const auto PostSnapshot =
+                [this, &screen](FDocWatchSnapshot &&InSnapshot)
+            {
+                screen.Post(
+                    [this, Snap = std::move(InSnapshot)]() mutable
+                    {
+                        mSnapshot = std::move(Snap);
+                        mTickCount++;
+                    });
+                screen.PostEvent(ftxui::Event::Custom);
+            };
+
             bool bFirstTick = true;
             while (mRunning.load(std::memory_order_relaxed))
             {
                 const bool bForceRefresh =
                     mbForceRefresh.exchange(false, std::memory_order_relaxed);
 
-                // Full snapshot rebuild
+                // Build an inventory-first snapshot before expensive
+                // validators. This lets the UI show real plan counts and
+                // navigation while validation/lint catch up in the same
+                // background thread.
                 FDocWatchSnapshot Fresh;
                 try
                 {
+                    FWatchSnapshotBuildOptions FastOptions;
+                    FastOptions.mbRunValidation = false;
+                    FastOptions.mbRunLint = false;
+                    FastOptions.mbMarkSkippedValidationRunning = true;
+                    FastOptions.mbMarkSkippedLintRunning = true;
                     Fresh = BuildWatchSnapshotCached(
                         mRepoRoot, mbUseCache, mConfig.mCacheDir,
                         mConfig.mbCacheVerbose, mSnapshotCache,
-                        bForceRefresh || bFirstTick);
+                        bForceRefresh || bFirstTick, FastOptions);
                 }
                 catch (const std::exception &Ex)
                 {
@@ -602,7 +621,13 @@ int DocWatchApp::Run()
                 }
                 bFirstTick = false;
 
-                // Post the fresh snapshot back to the UI thread.
+                const bool bNeedsValidation =
+                    Fresh.mValidation.mState !=
+                    FWatchValidationSummary::EState::Ready;
+                const bool bNeedsLint =
+                    Fresh.mLint.mState != FWatchLintSummary::EState::Ready;
+
+                // Post the inventory-first snapshot back to the UI thread.
                 //
                 // Pair the state-updating Closure with a follow-up
                 // Event::Custom. FTXUI's ScreenInteractive::HandleTask
@@ -612,13 +637,35 @@ int DocWatchApp::Run()
                 // prior render. Posting Event::Custom after the Closure
                 // forces the next Draw() pass to re-render against the
                 // just-updated mSnapshot.
-                screen.Post(
-                    [this, Snap = std::move(Fresh)]() mutable
+                PostSnapshot(std::move(Fresh));
+
+                if ((bNeedsValidation || bNeedsLint) &&
+                    mRunning.load(std::memory_order_relaxed))
+                {
+                    FDocWatchSnapshot Full;
+                    try
                     {
-                        mSnapshot = std::move(Snap);
-                        mTickCount++;
-                    });
-                screen.PostEvent(ftxui::Event::Custom);
+                        Full = BuildWatchSnapshotCached(
+                            mRepoRoot, mbUseCache, mConfig.mCacheDir,
+                            mConfig.mbCacheVerbose, mSnapshotCache,
+                            /*InForceRefresh=*/false);
+                    }
+                    catch (const std::exception &Ex)
+                    {
+                        std::cerr << "[watch] validation snapshot error: "
+                                  << Ex.what() << "\n";
+                        if (!WaitForNextPoll())
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                    if (!mRunning.load(std::memory_order_relaxed))
+                    {
+                        break;
+                    }
+                    PostSnapshot(std::move(Full));
+                }
 
                 if (!WaitForNextPoll())
                 {

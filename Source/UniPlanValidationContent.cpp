@@ -20,9 +20,608 @@
 namespace UniPlan
 {
 
+static bool IsPlanPathTokenChar(const char InChar)
+{
+    const unsigned char Value = static_cast<unsigned char>(InChar);
+    return std::isalnum(Value) != 0 || InChar == '_' || InChar == '.' ||
+           InChar == '-';
+}
+
+static bool IsDevUserNameChar(const char InChar)
+{
+    const unsigned char Value = static_cast<unsigned char>(InChar);
+    return std::isalnum(Value) != 0 || InChar == '_' || InChar == '.' ||
+           InChar == '-';
+}
+
+static bool IsRegexWordChar(const char InChar)
+{
+    const unsigned char Value = static_cast<unsigned char>(InChar);
+    return std::isalnum(Value) != 0 || InChar == '_';
+}
+
+static bool StringEndsWith(const std::string &InValue,
+                           const std::string &InSuffix)
+{
+    return InValue.size() >= InSuffix.size() &&
+           InValue.compare(InValue.size() - InSuffix.size(), InSuffix.size(),
+                           InSuffix) == 0;
+}
+
+static bool TryFindImpossiblePlanPathRef(const std::string &InContent,
+                                         std::string &OutMatch)
+{
+    static constexpr std::array<const char *, 2> kBadPrefixes = {
+        "Docs/Implementation/", "Docs/Playbooks/"};
+    static const std::string kSuffix = ".Plan.json";
+
+    for (const char *rpPrefix : kBadPrefixes)
+    {
+        const std::string Prefix(rpPrefix);
+        size_t SearchFrom = 0;
+        while (SearchFrom < InContent.size())
+        {
+            const size_t PrefixPos = InContent.find(Prefix, SearchFrom);
+            if (PrefixPos == std::string::npos)
+            {
+                break;
+            }
+
+            size_t End = PrefixPos + Prefix.size();
+            if (End < InContent.size() && InContent[End] == '`')
+            {
+                ++End;
+            }
+
+            const size_t NameStart = End;
+            while (End < InContent.size() &&
+                   IsPlanPathTokenChar(InContent[End]))
+            {
+                ++End;
+            }
+            while (End > NameStart)
+            {
+                const unsigned char Last =
+                    static_cast<unsigned char>(InContent[End - 1]);
+                if (std::isalnum(Last) != 0)
+                {
+                    break;
+                }
+                --End;
+            }
+
+            if (End > NameStart)
+            {
+                const std::string Filename =
+                    InContent.substr(NameStart, End - NameStart);
+                if (StringEndsWith(Filename, kSuffix))
+                {
+                    OutMatch = InContent.substr(PrefixPos, End - PrefixPos);
+                    return true;
+                }
+            }
+
+            SearchFrom = PrefixPos + Prefix.size();
+        }
+    }
+
+    return false;
+}
+
+static bool TryFindUnixDevAbsolutePath(const std::string &InContent,
+                                       const std::string &InPrefix,
+                                       std::string &OutMatch)
+{
+    size_t SearchFrom = 0;
+    while (SearchFrom < InContent.size())
+    {
+        const size_t PrefixPos = InContent.find(InPrefix, SearchFrom);
+        if (PrefixPos == std::string::npos)
+        {
+            break;
+        }
+
+        size_t End = PrefixPos + InPrefix.size();
+        if (End >= InContent.size())
+        {
+            break;
+        }
+
+        const unsigned char First = static_cast<unsigned char>(InContent[End]);
+        if (std::islower(First) == 0)
+        {
+            SearchFrom = End + 1;
+            continue;
+        }
+
+        while (End < InContent.size() && IsDevUserNameChar(InContent[End]))
+        {
+            ++End;
+        }
+        if (End < InContent.size() && InContent[End] == '/')
+        {
+            ++End;
+            OutMatch = InContent.substr(PrefixPos, End - PrefixPos);
+            return true;
+        }
+
+        SearchFrom = End + 1;
+    }
+    return false;
+}
+
+static bool TryFindWindowsDevAbsolutePath(const std::string &InContent,
+                                          std::string &OutMatch)
+{
+    static const std::string kNeedle = ":\\Users\\";
+
+    size_t SearchFrom = 0;
+    while (SearchFrom < InContent.size())
+    {
+        const size_t NeedlePos = InContent.find(kNeedle, SearchFrom);
+        if (NeedlePos == std::string::npos)
+        {
+            break;
+        }
+        if (NeedlePos == 0)
+        {
+            SearchFrom = NeedlePos + kNeedle.size();
+            continue;
+        }
+
+        const size_t DrivePos = NeedlePos - 1;
+        const unsigned char Drive =
+            static_cast<unsigned char>(InContent[DrivePos]);
+        if (std::isupper(Drive) == 0)
+        {
+            SearchFrom = NeedlePos + kNeedle.size();
+            continue;
+        }
+
+        size_t End = NeedlePos + kNeedle.size();
+        const size_t NameStart = End;
+        while (End < InContent.size() && IsDevUserNameChar(InContent[End]))
+        {
+            ++End;
+        }
+        if (End > NameStart)
+        {
+            OutMatch = InContent.substr(DrivePos, End - DrivePos);
+            return true;
+        }
+
+        SearchFrom = NeedlePos + kNeedle.size();
+    }
+    return false;
+}
+
+static bool TryFindDevAbsolutePath(const std::string &InContent,
+                                   std::string &OutMatch)
+{
+    return TryFindUnixDevAbsolutePath(InContent, "/Users/", OutMatch) ||
+           TryFindUnixDevAbsolutePath(InContent, "/home/", OutMatch) ||
+           TryFindWindowsDevAbsolutePath(InContent, OutMatch);
+}
+
+static bool HasWordMarkerAt(const std::string &InContent, const size_t InPos,
+                            const std::string &InMarker)
+{
+    if (InPos + InMarker.size() > InContent.size())
+    {
+        return false;
+    }
+    if (InContent.compare(InPos, InMarker.size(), InMarker) != 0)
+    {
+        return false;
+    }
+    if (InPos > 0 && IsRegexWordChar(InContent[InPos - 1]))
+    {
+        return false;
+    }
+    const size_t After = InPos + InMarker.size();
+    return After >= InContent.size() || !IsRegexWordChar(InContent[After]);
+}
+
+static bool TryFindUnresolvedMarker(const std::string &InContent,
+                                    std::string &OutMatch)
+{
+    static constexpr std::array<const char *, 4> kWordMarkers = {
+        "TODO", "FIXME", "XXX", "HACK"};
+
+    for (size_t Pos = 0; Pos < InContent.size(); ++Pos)
+    {
+        if (Pos + 3 <= InContent.size() &&
+            InContent.compare(Pos, 3, "???") == 0)
+        {
+            OutMatch = "???";
+            return true;
+        }
+        for (const char *rpMarker : kWordMarkers)
+        {
+            const std::string Marker(rpMarker);
+            if (HasWordMarkerAt(InContent, Pos, Marker))
+            {
+                OutMatch = Marker;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool HasWordBoundaryBefore(const std::string &InContent,
+                                  const size_t InPos)
+{
+    return InPos == 0 || !IsRegexWordChar(InContent[InPos - 1]);
+}
+
+static bool HasWordBoundaryAfter(const std::string &InContent,
+                                 const size_t InPos)
+{
+    return InPos >= InContent.size() || !IsRegexWordChar(InContent[InPos]);
+}
+
+static bool TryReadDigits(const std::string &InContent, size_t &InOutPos)
+{
+    const size_t Start = InOutPos;
+    while (InOutPos < InContent.size())
+    {
+        const unsigned char Value =
+            static_cast<unsigned char>(InContent[InOutPos]);
+        if (std::isdigit(Value) == 0)
+        {
+            break;
+        }
+        ++InOutPos;
+    }
+    return InOutPos > Start;
+}
+
+static bool TryFindLocalhostEndpoint(const std::string &InContent,
+                                     std::string &OutMatch)
+{
+    static const std::string kPrefix = "localhost:";
+
+    size_t SearchFrom = 0;
+    while (SearchFrom < InContent.size())
+    {
+        const size_t Pos = InContent.find(kPrefix, SearchFrom);
+        if (Pos == std::string::npos)
+        {
+            break;
+        }
+        if (!HasWordBoundaryBefore(InContent, Pos))
+        {
+            SearchFrom = Pos + kPrefix.size();
+            continue;
+        }
+
+        size_t End = Pos + kPrefix.size();
+        if (TryReadDigits(InContent, End) &&
+            HasWordBoundaryAfter(InContent, End))
+        {
+            OutMatch = InContent.substr(Pos, End - Pos);
+            return true;
+        }
+        SearchFrom = Pos + kPrefix.size();
+    }
+    return false;
+}
+
+static bool TryFindWordLiteral(const std::string &InContent,
+                               const std::string &InLiteral,
+                               std::string &OutMatch)
+{
+    size_t SearchFrom = 0;
+    while (SearchFrom < InContent.size())
+    {
+        const size_t Pos = InContent.find(InLiteral, SearchFrom);
+        if (Pos == std::string::npos)
+        {
+            break;
+        }
+        const size_t End = Pos + InLiteral.size();
+        if (HasWordBoundaryBefore(InContent, Pos) &&
+            HasWordBoundaryAfter(InContent, End))
+        {
+            OutMatch = InLiteral;
+            return true;
+        }
+        SearchFrom = End;
+    }
+    return false;
+}
+
+static bool TryFindPrivateIpv4Prefix(const std::string &InContent,
+                                     const std::string &InPrefix,
+                                     const int InRemainingOctets,
+                                     std::string &OutMatch)
+{
+    size_t SearchFrom = 0;
+    while (SearchFrom < InContent.size())
+    {
+        const size_t Pos = InContent.find(InPrefix, SearchFrom);
+        if (Pos == std::string::npos)
+        {
+            break;
+        }
+        if (!HasWordBoundaryBefore(InContent, Pos))
+        {
+            SearchFrom = Pos + InPrefix.size();
+            continue;
+        }
+
+        size_t End = Pos + InPrefix.size();
+        bool bMatched = true;
+        for (int Octet = 0; Octet < InRemainingOctets; ++Octet)
+        {
+            if (!TryReadDigits(InContent, End))
+            {
+                bMatched = false;
+                break;
+            }
+            if (Octet + 1 < InRemainingOctets)
+            {
+                if (End >= InContent.size() || InContent[End] != '.')
+                {
+                    bMatched = false;
+                    break;
+                }
+                ++End;
+            }
+        }
+        if (bMatched && HasWordBoundaryAfter(InContent, End))
+        {
+            OutMatch = InContent.substr(Pos, End - Pos);
+            return true;
+        }
+        SearchFrom = Pos + InPrefix.size();
+    }
+    return false;
+}
+
+static bool TryFindHardcodedEndpoint(const std::string &InContent,
+                                     std::string &OutMatch)
+{
+    return TryFindLocalhostEndpoint(InContent, OutMatch) ||
+           TryFindWordLiteral(InContent, "127.0.0.1", OutMatch) ||
+           TryFindPrivateIpv4Prefix(InContent, "192.168.", 2, OutMatch) ||
+           TryFindPrivateIpv4Prefix(InContent, "10.", 3, OutMatch);
+}
+
+static bool EqualAsciiCaseInsensitive(const std::string &InContent,
+                                      const size_t InPos,
+                                      const std::string &InNeedle)
+{
+    if (InPos + InNeedle.size() > InContent.size())
+    {
+        return false;
+    }
+    for (size_t I = 0; I < InNeedle.size(); ++I)
+    {
+        const unsigned char L =
+            static_cast<unsigned char>(InContent[InPos + I]);
+        const unsigned char R = static_cast<unsigned char>(InNeedle[I]);
+        if (std::tolower(L) != std::tolower(R))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool TryMatchHtmlTagAt(const std::string &InContent, const size_t InPos,
+                              std::string &OutMatch)
+{
+    if (InContent[InPos] != '<')
+    {
+        return false;
+    }
+
+    const size_t NamePos = InPos + 1;
+    static constexpr std::array<const char *, 4> kNames = {"br", "div", "span",
+                                                           "p"};
+    for (const char *rpName : kNames)
+    {
+        const std::string Name(rpName);
+        const size_t After = NamePos + Name.size();
+        if (EqualAsciiCaseInsensitive(InContent, NamePos, Name) &&
+            HasWordBoundaryAfter(InContent, After))
+        {
+            OutMatch = InContent.substr(InPos, After - InPos);
+            return true;
+        }
+    }
+
+    if (NamePos + 2 <= InContent.size() &&
+        (InContent[NamePos] == 'h' || InContent[NamePos] == 'H') &&
+        InContent[NamePos + 1] >= '1' && InContent[NamePos + 1] <= '6' &&
+        HasWordBoundaryAfter(InContent, NamePos + 2))
+    {
+        OutMatch = InContent.substr(InPos, 3);
+        return true;
+    }
+
+    return false;
+}
+
+static bool TryFindHtmlTagInProse(const std::string &InContent,
+                                  std::string &OutMatch)
+{
+    size_t SearchFrom = 0;
+    while (SearchFrom < InContent.size())
+    {
+        const size_t Pos = InContent.find('<', SearchFrom);
+        if (Pos == std::string::npos)
+        {
+            break;
+        }
+        if (TryMatchHtmlTagAt(InContent, Pos, OutMatch))
+        {
+            return true;
+        }
+        SearchFrom = Pos + 1;
+    }
+    return false;
+}
+
+static std::string TrimAsciiWhitespace(const std::string &InValue)
+{
+    size_t Start = 0;
+    while (Start < InValue.size())
+    {
+        const unsigned char Value = static_cast<unsigned char>(InValue[Start]);
+        if (std::isspace(Value) == 0)
+        {
+            break;
+        }
+        ++Start;
+    }
+
+    size_t End = InValue.size();
+    while (End > Start)
+    {
+        const unsigned char Value =
+            static_cast<unsigned char>(InValue[End - 1]);
+        if (std::isspace(Value) == 0)
+        {
+            break;
+        }
+        --End;
+    }
+    return InValue.substr(Start, End - Start);
+}
+
+static std::string ToLowerAscii(const std::string &InValue)
+{
+    std::string Result = InValue;
+    for (char &Char : Result)
+    {
+        const unsigned char Value = static_cast<unsigned char>(Char);
+        Char = static_cast<char>(std::tolower(Value));
+    }
+    return Result;
+}
+
+static bool TryFindClassicPlaceholderLiteral(const std::string &InContent,
+                                             std::string &OutMatch)
+{
+    const std::string Trimmed = TrimAsciiWhitespace(InContent);
+    static constexpr std::array<const char *, 7> kPlaceholders = {
+        "None", "N/A", "n/a", "none", "TBD", "tbd", "-"};
+    for (const char *rpPlaceholder : kPlaceholders)
+    {
+        if (Trimmed == rpPlaceholder)
+        {
+            OutMatch = Trimmed;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool IsStatusSeparator(const char InChar)
+{
+    const unsigned char Value = static_cast<unsigned char>(InChar);
+    return InChar == '_' || std::isspace(Value) != 0;
+}
+
+static bool EqualsTwoPartStatus(const std::string &InValue,
+                                const std::string &InLeft,
+                                const std::string &InRight)
+{
+    const size_t ExpectedSize = InLeft.size() + 1 + InRight.size();
+    return InValue.size() == ExpectedSize &&
+           InValue.compare(0, InLeft.size(), InLeft) == 0 &&
+           IsStatusSeparator(InValue[InLeft.size()]) &&
+           InValue.compare(InLeft.size() + 1, InRight.size(), InRight) == 0;
+}
+
+static bool IsStatusQuoteChar(const char InChar)
+{
+    return InChar == '`' || InChar == '"' || InChar == '\'';
+}
+
+static bool TryFindStatusPlaceholderLiteral(const std::string &InContent,
+                                            std::string &OutMatch)
+{
+    std::string Trimmed = TrimAsciiWhitespace(InContent);
+    while (!Trimmed.empty() && IsStatusQuoteChar(Trimmed.front()))
+    {
+        Trimmed.erase(Trimmed.begin());
+    }
+    while (!Trimmed.empty() && IsStatusQuoteChar(Trimmed.back()))
+    {
+        Trimmed.pop_back();
+    }
+    Trimmed = TrimAsciiWhitespace(Trimmed);
+    const std::string Lower = ToLowerAscii(Trimmed);
+
+    static constexpr std::array<const char *, 6> kStatusPlaceholders = {
+        "complete", "completed", "blocked", "pending", "wip", "done"};
+    for (const char *rpPlaceholder : kStatusPlaceholders)
+    {
+        if (Lower == rpPlaceholder)
+        {
+            OutMatch = Trimmed;
+            return true;
+        }
+    }
+    if (EqualsTwoPartStatus(Lower, "in", "progress") ||
+        EqualsTwoPartStatus(Lower, "not", "started"))
+    {
+        OutMatch = Trimmed;
+        return true;
+    }
+    return false;
+}
+
+static void FindTopicPlanJsonReferences(const std::string &InContent,
+                                        std::set<std::string> &OutReferences)
+{
+    static const std::string kSuffix = ".Plan.json";
+    size_t SearchFrom = 0;
+    while (SearchFrom < InContent.size())
+    {
+        const size_t SuffixPos = InContent.find(kSuffix, SearchFrom);
+        if (SuffixPos == std::string::npos)
+        {
+            break;
+        }
+
+        size_t Start = SuffixPos;
+        while (Start > 0)
+        {
+            const unsigned char Prev =
+                static_cast<unsigned char>(InContent[Start - 1]);
+            if (std::isalnum(Prev) == 0)
+            {
+                break;
+            }
+            --Start;
+        }
+
+        const size_t Length = SuffixPos - Start;
+        if (Length >= 2)
+        {
+            const unsigned char First =
+                static_cast<unsigned char>(InContent[Start]);
+            if (std::isupper(First) != 0)
+            {
+                OutReferences.insert(InContent.substr(Start, Length));
+            }
+        }
+
+        SearchFrom = SuffixPos + kSuffix.size();
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Content-hygiene helper: regex-scan one prose string and emit a single
-// failure (capturing the matched fragment) when the pattern hits.
+// Content-hygiene helper: scan one prose string and emit a single failure
+// when the pattern hits. High-volume simple checks route through
+// deterministic string scanners first; the regex fallback is reserved for
+// lower-volume patterns whose matching semantics are not a startup hotspot.
 // ---------------------------------------------------------------------------
 
 static void
@@ -34,6 +633,60 @@ ScanProseField(const std::string &InTopic, const std::string &InPath,
 {
     if (InContent.empty())
         return;
+    if (InCheckID == "no_dev_absolute_path")
+    {
+        std::string Match;
+        if (TryFindDevAbsolutePath(InContent, Match))
+        {
+            Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
+                 InDetailPrefix + Match);
+        }
+        return;
+    }
+    if (InCheckID == "no_unresolved_marker")
+    {
+        std::string Match;
+        if (TryFindUnresolvedMarker(InContent, Match))
+        {
+            Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
+                 InDetailPrefix + Match);
+        }
+        return;
+    }
+    if (InCheckID == "no_hardcoded_endpoint")
+    {
+        std::string Match;
+        if (TryFindHardcodedEndpoint(InContent, Match))
+        {
+            Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
+                 InDetailPrefix + Match);
+        }
+        return;
+    }
+    if (InCheckID == "no_html_in_prose")
+    {
+        std::string Match;
+        if (TryFindHtmlTagInProse(InContent, Match))
+        {
+            Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
+                 InDetailPrefix + Match);
+        }
+        return;
+    }
+    if (InCheckID == "no_empty_placeholder_literal")
+    {
+        std::string Match;
+        const bool bMatched =
+            InDetailPrefix == "status-word placeholder: "
+                ? TryFindStatusPlaceholderLiteral(InContent, Match)
+                : TryFindClassicPlaceholderLiteral(InContent, Match);
+        if (bMatched)
+        {
+            Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
+                 InDetailPrefix + Match);
+        }
+        return;
+    }
     std::smatch Match;
     if (std::regex_search(InContent, Match, InPattern))
     {
@@ -388,22 +1041,19 @@ static void ScanPhaseLifecycleProse(const FTopicBundle &InBundle,
 void EvalPathResolves(const std::vector<FTopicBundle> &InBundles,
                       std::vector<ValidateCheck> &OutChecks)
 {
-    static const std::regex BadPath(
-        R"(Docs/(?:Implementation|Playbooks)/`?[\w.-]+\.Plan\.json)");
-
     const auto Scan = [&](const std::string &InTopic, const std::string &InPath,
                           const std::string &InContent)
     {
         if (InContent.empty())
             return;
-        std::smatch Match;
-        if (std::regex_search(InContent, Match, BadPath))
+        std::string Match;
+        if (TryFindImpossiblePlanPathRef(InContent, Match))
         {
             Fail(OutChecks, "path_resolves", EValidationSeverity::ErrorMinor,
                  InTopic, InPath,
                  "impossible path ref (.Plan.json lives at Docs/Plans/, "
                  "not Docs/Implementation|Playbooks/): " +
-                     Match.str());
+                     Match);
         }
     };
 
@@ -834,31 +1484,25 @@ void EvalNoUnresolvedMarker(const std::vector<FTopicBundle> &InBundles,
 // 29. topic_ref_integrity (ErrorMinor) — `<X>.Plan.json` prose references
 // must resolve to a real topic key in the loaded bundle set.
 void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
+                           const std::vector<FTopicBundle> &InReferenceBundles,
                            std::vector<ValidateCheck> &OutChecks)
 {
     std::set<std::string> KnownKeys;
-    for (const FTopicBundle &B : InBundles)
+    for (const FTopicBundle &B : InReferenceBundles)
         KnownKeys.insert(B.mTopicKey);
-
-    static const std::regex Pattern(R"(([A-Z][A-Za-z0-9]+)\.Plan\.json)");
 
     const auto Walk = [&](const std::string &InTopic, const std::string &InPath,
                           const std::string &InContent)
     {
         if (InContent.empty())
             return;
-        auto Begin =
-            std::sregex_iterator(InContent.begin(), InContent.end(), Pattern);
-        const auto End = std::sregex_iterator();
-        std::set<std::string> Reported;
-        for (auto It = Begin; It != End; ++It)
+        std::set<std::string> References;
+        FindTopicPlanJsonReferences(InContent, References);
+        for (const std::string &Ref : References)
         {
-            const std::string Ref = (*It)[1].str();
             if (Ref == InTopic)
                 continue; // self-reference ok
             if (KnownKeys.count(Ref) > 0)
-                continue;
-            if (!Reported.insert(Ref).second)
                 continue;
             Fail(OutChecks, "topic_ref_integrity",
                  EValidationSeverity::ErrorMinor, InTopic, InPath,
@@ -907,6 +1551,12 @@ void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
             Walk(B.mTopicKey, Base + ".output", P.mOutput);
         }
     }
+}
+
+void EvalTopicRefIntegrity(const std::vector<FTopicBundle> &InBundles,
+                           std::vector<ValidateCheck> &OutChecks)
+{
+    EvalTopicRefIntegrity(InBundles, InBundles, OutChecks);
 }
 
 // 31. no_duplicate_changelog (Warning) — same (phase, change text) pair

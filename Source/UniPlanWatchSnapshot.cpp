@@ -138,6 +138,7 @@ BuildWatchValidationSummary(const std::vector<FTopicBundle> &InBundles,
     FWatchValidationSummary Validation;
     const std::vector<ValidateCheck> Checks =
         ValidateAllBundles(InBundles, InRepoRoot);
+    Validation.mState = FWatchValidationSummary::EState::Ready;
 
     for (const ValidateCheck &Check : Checks)
     {
@@ -172,9 +173,54 @@ static FWatchLintSummary BuildWatchLintSummary(const std::string &InRepoRoot)
 {
     FWatchLintSummary Summary;
     const LintResult Lint = BuildLintResult(InRepoRoot, /*InQuiet=*/true);
+    Summary.mState = FWatchLintSummary::EState::Ready;
     Summary.mWarningCount = Lint.mWarningCount;
     Summary.mNamePatternWarnings = Lint.mNamePatternWarningCount;
     Summary.mMissingH1Warnings = Lint.mMissingH1WarningCount;
+    return Summary;
+}
+
+static FWatchValidationSummary
+BuildSkippedValidationSummary(const FWatchValidationSummary &InCachedValidation,
+                              const bool bHasCachedValidation,
+                              const bool bMarkRunning)
+{
+    FWatchValidationSummary Summary;
+    if (bHasCachedValidation)
+    {
+        Summary = InCachedValidation;
+        Summary.mState = FWatchValidationSummary::EState::Stale;
+        Summary.mStateMessage = bMarkRunning
+                                    ? "Validation running; showing stale result"
+                                    : "Validation stale";
+        return Summary;
+    }
+
+    Summary.mState = bMarkRunning ? FWatchValidationSummary::EState::Running
+                                  : FWatchValidationSummary::EState::Pending;
+    Summary.mStateMessage =
+        bMarkRunning ? "Validation running" : "Validation pending";
+    Summary.mbOk = false;
+    return Summary;
+}
+
+static FWatchLintSummary
+BuildSkippedLintSummary(const FWatchLintSummary &InCachedLint,
+                        const bool bHasCachedLint, const bool bMarkRunning)
+{
+    FWatchLintSummary Summary;
+    if (bHasCachedLint)
+    {
+        Summary = InCachedLint;
+        Summary.mState = FWatchLintSummary::EState::Stale;
+        Summary.mStateMessage =
+            bMarkRunning ? "Lint running; showing stale result" : "Lint stale";
+        return Summary;
+    }
+
+    Summary.mState = bMarkRunning ? FWatchLintSummary::EState::Running
+                                  : FWatchLintSummary::EState::Pending;
+    Summary.mStateMessage = bMarkRunning ? "Lint running" : "Lint pending";
     return Summary;
 }
 
@@ -248,12 +294,11 @@ static void AddPlanSummaryToSnapshot(FDocWatchSnapshot &InOutSnapshot,
     }
 }
 
-FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
-                                           const bool InUseCache,
-                                           const std::string &InCacheDir,
-                                           const bool InCacheVerbose,
-                                           FWatchSnapshotCache &InOutCache,
-                                           const bool InForceRefresh)
+FDocWatchSnapshot BuildWatchSnapshotCached(
+    const std::string &InRepoRoot, const bool InUseCache,
+    const std::string &InCacheDir, const bool InCacheVerbose,
+    FWatchSnapshotCache &InOutCache, const bool InForceRefresh,
+    const FWatchSnapshotBuildOptions &InOptions)
 {
     (void)InCacheDir;
     const auto StartTime = std::chrono::steady_clock::now();
@@ -301,6 +346,11 @@ FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
     Snapshot.mPerformance.mbMarkdownSignatureChanged =
         bMarkdownSignatureChanged;
 
+    const bool bHadValidationValid = InUseCache && InOutCache.mbValidationValid;
+    const bool bHadLintValid = InUseCache && InOutCache.mbLintValid;
+    const FWatchValidationSummary PreviousValidation = InOutCache.mValidation;
+    const FWatchLintSummary PreviousLint = InOutCache.mLint;
+
     if (!InUseCache)
     {
         InOutCache = FWatchSnapshotCache{};
@@ -308,6 +358,11 @@ FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
     else if (bBundleSignatureChanged)
     {
         RemoveDeletedBundlesFromCache(InOutCache, BundleIndex.mBundles);
+        InOutCache.mbValidationValid = false;
+    }
+    if (bMarkdownSignatureChanged)
+    {
+        InOutCache.mbLintValid = false;
     }
 
     std::vector<FTopicBundle> Bundles;
@@ -362,7 +417,7 @@ FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
     {
         Snapshot.mValidation = InOutCache.mValidation;
     }
-    else
+    else if (InOptions.mbRunValidation)
     {
         const auto ValidationStart = std::chrono::steady_clock::now();
         Snapshot.mValidation = BuildWatchValidationSummary(Bundles, RepoRoot);
@@ -378,12 +433,18 @@ FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
             InOutCache.mbValidationValid = true;
         }
     }
+    else
+    {
+        Snapshot.mValidation = BuildSkippedValidationSummary(
+            PreviousValidation, bHadValidationValid,
+            InOptions.mbMarkSkippedValidationRunning);
+    }
 
     if (InUseCache && !bMarkdownSignatureChanged && InOutCache.mbLintValid)
     {
         Snapshot.mLint = InOutCache.mLint;
     }
-    else
+    else if (InOptions.mbRunLint)
     {
         const auto LintStart = std::chrono::steady_clock::now();
         Snapshot.mLint = BuildWatchLintSummary(InRepoRoot);
@@ -398,6 +459,11 @@ FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
             InOutCache.mLint = Snapshot.mLint;
             InOutCache.mbLintValid = true;
         }
+    }
+    else
+    {
+        Snapshot.mLint = BuildSkippedLintSummary(
+            PreviousLint, bHadLintValid, InOptions.mbMarkSkippedLintRunning);
     }
 
     // Aggregate all blockers
@@ -447,6 +513,19 @@ FDocWatchSnapshot BuildWatchSnapshot(const std::string &InRepoRoot,
     return BuildWatchSnapshotCached(InRepoRoot, InUseCache, InCacheDir,
                                     InCacheVerbose, Cache,
                                     /*InForceRefresh=*/true);
+}
+
+FDocWatchSnapshot BuildWatchSnapshotCached(const std::string &InRepoRoot,
+                                           const bool InUseCache,
+                                           const std::string &InCacheDir,
+                                           const bool InCacheVerbose,
+                                           FWatchSnapshotCache &InOutCache,
+                                           const bool InForceRefresh)
+{
+    const FWatchSnapshotBuildOptions Options;
+    return BuildWatchSnapshotCached(InRepoRoot, InUseCache, InCacheDir,
+                                    InCacheVerbose, InOutCache, InForceRefresh,
+                                    Options);
 }
 
 } // namespace UniPlan
