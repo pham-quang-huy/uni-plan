@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Debug Build",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/Build/CMake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "UPLAN_WATCH": "ON",
+        "UPLAN_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "dev-tests",
+      "displayName": "Debug Build With Tests",
+      "inherits": "dev",
+      "cacheVariables": {
+        "UPLAN_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "dev-tests",
+      "configurePreset": "dev-tests"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev-tests",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

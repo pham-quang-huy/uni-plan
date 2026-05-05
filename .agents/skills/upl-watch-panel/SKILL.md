@@ -117,8 +117,15 @@ In `Source/UniPlanWatchApp.cpp`:
 ### Step 4: Build and Verify
 
 ```bash
-./build.sh  # must have UPLAN_WATCH=1 in CMake
+./build.sh  # shared presets build with UPLAN_WATCH=ON
 uni-plan watch --repo <test-repo>
+```
+
+On Windows, use the matching PowerShell entrypoint:
+
+```powershell
+.\build.ps1
+uni-plan.exe watch --repo <test-repo>
 ```
 
 Verify:

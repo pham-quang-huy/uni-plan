@@ -4,6 +4,7 @@ project(UniPlan LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+include(GNUInstallDirs)
 
 # ---------------------------------------------------------------------------
 # Options
@@ -84,6 +85,21 @@ endif()
 
 add_executable(uni-plan Source/Main.cpp)
 target_link_libraries(uni-plan PRIVATE uni-plan-lib)
+
+install(TARGETS uni-plan
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    COMPONENT runtime
+)
+
+install(FILES "${CMAKE_SOURCE_DIR}/uni-plan.ini"
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    COMPONENT runtime
+)
+
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/Schemas"
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    COMPONENT runtime
+)
 
 # ---------------------------------------------------------------------------
 # Post-build: copy config and schemas next to binary

@@ -12,7 +12,8 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 - **Build system**: CMake 3.20+ with Ninja generator
 - **Watch mode**: FTXUI terminal UI (conditional via `UPLAN_WATCH` CMake option)
 - **Root namespace**: `UniPlan`
-- **Binary**: `~/bin/uni-plan` (symlinked by `build.sh`)
+- **Build output**: `Build/CMake/uni-plan` or `Build/CMake/uni-plan.exe`
+- **Installed binary**: `~/bin/uni-plan` or `%USERPROFILE%\bin\uni-plan.exe`
 
 ## quick_reference
 
@@ -22,25 +23,36 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 | Build | CMake + Ninja |
 | Namespace | `UniPlan` |
 | Version source | `Source/UniPlanCliConstants.h` → `kCliVersion` |
-| Binary | `~/bin/uni-plan` |
-| Watch mode | FTXUI (optional, `UPLAN_WATCH=1`) |
+| Build output | `Build/CMake/uni-plan(.exe)` |
+| Installed binary | `~/bin/uni-plan` / `%USERPROFILE%\bin\uni-plan.exe` |
+| Watch mode | FTXUI (`UPLAN_WATCH=ON` in shared presets) |
 
 ## build_commands
 
 ```bash
-# Full build + install
+# macOS/Linux full build + install
 ./build.sh
 
-# Manual build
-cmake -S . -B Build/CMake -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build Build/CMake -j "$(sysctl -n hw.logicalcpu)"
+# macOS/Linux build + tests
+./build.sh --tests
 
-# With watch mode
-cmake -S . -B Build/CMake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUPLAN_WATCH=1
-cmake --build Build/CMake -j "$(sysctl -n hw.logicalcpu)"
+# Manual build through shared presets
+cmake --preset dev
+cmake --build Build/CMake --parallel
 
 # Verify
 uni-plan --version
+```
+
+```powershell
+# Windows full build + install
+.\build.ps1
+
+# Windows build + tests
+.\build.ps1 -Tests
+
+# Verify
+uni-plan.exe --version
 ```
 
 ## key_conventions
@@ -135,8 +147,10 @@ uni-plan/
 ├── CODING.md                  # Code style and SOLID principles
 ├── NAMING.md                  # Naming conventions
 ├── .clang-format              # clang-format configuration
+├── CMakePresets.json          # Shared dev/dev-tests presets; output is Build/CMake
 ├── CMakeLists.txt             # Build configuration
-├── build.sh                   # Build + install script
+├── build.sh                   # macOS/Linux build + install script
+├── build.ps1                  # Windows PowerShell build + install script
 └── uni-plan.ini               # Runtime config (cache settings)
 ```
 

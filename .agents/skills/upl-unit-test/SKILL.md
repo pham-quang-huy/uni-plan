@@ -25,11 +25,17 @@ Do NOT report test results to the user until the coverage audit is complete and 
 ## Quick Run
 
 ```bash
-# Configure with tests enabled (first time only, or after CMakeLists.txt changes)
-cmake -S . -B Build/CMake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUPLAN_TESTS=ON -DUPLAN_WATCH=ON
+# macOS/Linux: configure, build, install, and run all tests
+./build.sh --tests
 
-# Build and run all tests
-cmake --build Build/CMake -j "$(sysctl -n hw.logicalcpu)" && ./Build/CMake/uni-plan-tests
+# Windows PowerShell: same output/install convention
+.\build.ps1 -Tests
+
+# Manual configure with tests enabled
+cmake --preset dev-tests
+
+# Manual build and run all tests
+cmake --build Build/CMake --parallel && ./Build/CMake/uni-plan-tests
 
 # Run specific test suite
 ./Build/CMake/uni-plan-tests --gtest_filter="OptionParsing.*"
@@ -101,7 +107,9 @@ This is the deliverable. "92 tests, 0 failures" alone is insufficient.
 - Object library `uni-plan-lib` compiles all Source/*.cpp except Main.cpp
 - Both `uni-plan` and `uni-plan-tests` link against it (no double compilation)
 - Google Test fetched via CMake FetchContent (v1.15.2)
-- Option `UPLAN_TESTS=OFF` by default — `build.sh` is unaffected
+- Shared CMake presets always use `Build/CMake` on macOS/Linux and Windows
+- Option `UPLAN_TESTS=OFF` by default; use `./build.sh --tests`,
+  `.\build.ps1 -Tests`, or `cmake --preset dev-tests` to enable tests
 
 ## Fixture: FBundleTestFixture
 
@@ -163,7 +171,7 @@ TEST_F(FBundleTestFixture, CommandNameHappyPath)
 }
 ```
 
-3. Build and run: `cmake --build Build/CMake && ./Build/CMake/uni-plan-tests`
+3. Build and run: `./build.sh --tests`
 
 ### For a new option parser
 
@@ -197,7 +205,7 @@ TEST(OptionParsing, NewParserRequiresTopic)
 
 | Issue | Fix |
 |-------|-----|
-| `gtest/gtest.h not found` | Run cmake configure with `-DUPLAN_TESTS=ON` |
+| `gtest/gtest.h not found` | Run `cmake --preset dev-tests` or the script test mode |
 | Fixture not found | Verify `Example/Docs/Plans/SampleTopic.Plan.json` exists |
 | Schema not found in validate | Post-build copies Schemas/ — rebuild the test target |
 | Static `bPrinted` noise in stderr | Expected — `NormalizeRepoRootPath` prints once per process |

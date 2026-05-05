@@ -29,9 +29,10 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
 | Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.105.2`) |
-| Binary | `~/bin/uni-plan` (symlinked by [build.sh](build.sh)) |
-| Watch mode | FTXUI terminal UI (optional, `-DUPLAN_WATCH=1`) |
-| Tests | GoogleTest, `./Build/CMake/uni-plan-tests` |
+| Build output | `Build/CMake/uni-plan` or `Build/CMake/uni-plan.exe` |
+| Installed binary | `~/bin/uni-plan` or `%USERPROFILE%\bin\uni-plan.exe` |
+| Watch mode | FTXUI terminal UI (`UPLAN_WATCH=ON` in shared presets) |
+| Tests | GoogleTest, `Build/CMake/uni-plan-tests(.exe)` |
 
 ## non_negotiable_rules
 
@@ -590,8 +591,10 @@ uni-plan/
 ├── CODING.md                  # Code style and SOLID principles
 ├── NAMING.md                  # Naming conventions
 ├── .clang-format              # Formatter config (consumed by the auto-format hook)
+├── CMakePresets.json          # Shared dev/dev-tests presets; output is Build/CMake
 ├── CMakeLists.txt             # Build configuration
-├── build.sh                   # Build + install driver
+├── build.sh                   # macOS/Linux build + install driver
+├── build.ps1                  # Windows PowerShell build + install driver
 └── uni-plan.ini               # Runtime cache config
 ```
 
@@ -601,12 +604,17 @@ uni-plan/
 
 | Step | Command |
 | --- | --- |
-| Full build + install | `./build.sh` |
+| macOS/Linux build + install | `./build.sh` |
+| Windows build + install | `.\build.ps1` |
+| macOS/Linux build + tests | `./build.sh --tests` |
+| Windows build + tests | `.\build.ps1 -Tests` |
 | Verify install | `uni-plan --version` |
-| Run unit tests | `./Build/CMake/uni-plan-tests` |
-| Manual configure (debug) | `cmake -S . -B Build/CMake -G Ninja -DCMAKE_BUILD_TYPE=Debug` |
-| Manual configure (with watch TUI) | `cmake -S . -B Build/CMake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUPLAN_WATCH=1` |
-| Manual build | `cmake --build Build/CMake -j "$(sysctl -n hw.logicalcpu)"` |
+| Verify Windows install | `uni-plan.exe --version` |
+| Run unit tests directly | `Build/CMake/uni-plan-tests(.exe)` |
+| Manual configure | `cmake --preset dev` |
+| Manual configure with tests | `cmake --preset dev-tests` |
+| Manual build | `cmake --build Build/CMake --parallel` |
+| Manual install | `cmake --install Build/CMake --prefix "$HOME"` |
 
 ## documentation_map
 
