@@ -523,6 +523,41 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelRendersDefaultAndMetricsViews)
     EXPECT_LT(EvidenceColumn, ScopeColumn);
 }
 
+TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsWideNumericLabelsVisible)
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "WideNumbers";
+    Plan.mPlanStatus = "in_progress";
+
+    UniPlan::PhaseItem Phase;
+    Phase.mPhaseKey = "1234";
+    Phase.mStatus = UniPlan::EExecutionStatus::NotStarted;
+    Phase.mScope = "Retain scope context";
+    Phase.mV4DesignChars = 199307;
+    Phase.mMetrics.mDesignChars = 199307;
+    Phase.mMetrics.mSolidWordCount = 123456;
+    Phase.mMetrics.mRecursiveWordCount = 987654;
+    Phase.mMetrics.mFieldCoveragePercent = 100;
+    Phase.mMetrics.mWorkItemCount = 12345;
+    Phase.mMetrics.mTestingRecordCount = 67890;
+    Phase.mMetrics.mFileManifestCount = 54321;
+    Phase.mMetrics.mEvidenceItemCount = 24680;
+    Plan.mPhases.push_back(Phase);
+
+    const UniPlan::PhaseDetailPanel Panel;
+    const std::string DefaultView =
+        StripAnsiCodes(RenderElementToString(Panel.Render(Plan, 0, false)));
+    const std::string MetricsView =
+        StripAnsiCodes(RenderElementToString(Panel.Render(Plan, 0, true)));
+
+    EXPECT_NE(DefaultView.find("199307"), std::string::npos);
+    EXPECT_NE(DefaultView.find("1234"), std::string::npos);
+    EXPECT_NE(MetricsView.find("199307"), std::string::npos);
+    EXPECT_NE(MetricsView.find("123456"), std::string::npos);
+    EXPECT_NE(MetricsView.find("987654"), std::string::npos);
+    EXPECT_NE(MetricsView.find("67890"), std::string::npos);
+}
+
 TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsRichMetricsComparable)
 {
     UniPlan::FWatchPlanSummary Plan;

@@ -107,16 +107,114 @@ static Element ColorStatus(const std::string &InStatus)
     return text(InStatus);
 }
 
+static constexpr int kDesignBarPreferredWidth = 10;
+static constexpr int kMetricBarPreferredWidth = 8;
+
+static int TextCellWidth(const std::string &InText)
+{
+    return static_cast<int>(InText.size());
+}
+
+static int ComputeTextColumnWidth(const std::string &InHeader,
+                                  const std::vector<std::string> &InLabels,
+                                  const int InMinimumWidth)
+{
+    int Width = std::max(InMinimumWidth, TextCellWidth(InHeader));
+    for (const std::string &Label : InLabels)
+    {
+        Width = std::max(Width, TextCellWidth(Label));
+    }
+    return Width;
+}
+
+static int ComputeGaugeColumnWidth(const std::string &InHeader,
+                                   const std::vector<std::string> &InLabels,
+                                   const int InMinimumWidth,
+                                   const int InPreferredBarWidth)
+{
+    int Width = std::max(InMinimumWidth, TextCellWidth(InHeader));
+    for (const std::string &Label : InLabels)
+    {
+        const int LabelWidth = TextCellWidth(Label);
+        const int FullGaugeWidth =
+            LabelWidth + ((InPreferredBarWidth > 0) ? InPreferredBarWidth + 1
+                                                    : 0);
+        Width = std::max(Width, FullGaugeWidth);
+    }
+    return Width;
+}
+
+static Element ValueGaugeBar(const size_t InValue, const size_t InHollow,
+                             const size_t InRich, const size_t InFillMax,
+                             const std::string &InLabel,
+                             const int InPreferredBarWidth,
+                             const int InCellWidth, const bool bCeilFill)
+{
+    if (InLabel.empty())
+    {
+        return text("");
+    }
+
+    int BarWidth = std::max(0, InPreferredBarWidth);
+    if (InCellWidth > 0)
+    {
+        const int AvailableForBar =
+            InCellWidth - TextCellWidth(InLabel) - 1;
+        BarWidth = std::min(BarWidth, std::max(0, AvailableForBar));
+    }
+
+    // Numeric labels are authoritative data; the colored bar is context.
+    // When a terminal or column is narrow, keep the number and shrink the bar.
+    if (BarWidth <= 0)
+    {
+        return text(InLabel);
+    }
+
+    const size_t Denominator = std::max<size_t>(1, InFillMax);
+    const size_t ClampedValue = std::min(InValue, Denominator);
+    int Filled = 0;
+    if (bCeilFill)
+    {
+        Filled = static_cast<int>((ClampedValue * BarWidth + Denominator - 1) /
+                                  Denominator);
+    }
+    else
+    {
+        Filled = static_cast<int>((ClampedValue * BarWidth) / Denominator);
+    }
+    if (InValue > 0 && Filled == 0)
+    {
+        Filled = 1;
+    }
+    Filled = std::min(BarWidth, std::max(0, Filled));
+    const int Empty = BarWidth - Filled;
+
+    const Color BarColor = (InValue < InHollow) ? Color::Red
+                           : (InValue < InRich) ? Color::Yellow
+                                                : Color::Green;
+    Elements Bar;
+    for (int Index = 0; Index < Filled; ++Index)
+    {
+        Bar.push_back(text("\xe2\x96\x88") | color(BarColor));
+    }
+    for (int Index = 0; Index < Empty; ++Index)
+    {
+        Bar.push_back(text("\xe2\x96\x91") | dim);
+    }
+    Bar.push_back(text(" " + InLabel));
+    return hbox(std::move(Bar));
+}
+
 // Fixed-width gauge so plans with different phase counts render at the
 // same visual length, enabling cross-row completion comparison in the
-// ACTIVE PLANS panel. Width matches kDesignBarWidth.
+// ACTIVE PLANS panel. Width matches the Design gauge's preferred width.
 static Element PhaseProgressBar(int InDone, int InTotal)
 {
     if (InTotal == 0)
     {
         return text("no phases") | dim;
     }
-    static constexpr int kPhaseProgressBarWidth = 10;
+    static constexpr int kPhaseProgressBarWidth = kDesignBarPreferredWidth;
     int Filled = (InDone * kPhaseProgressBarWidth + InTotal - 1) / InTotal;
     if (InDone > 0 && Filled == 0)
     {
@@ -152,65 +250,24 @@ static Element PhaseProgressBar(int InDone, int InTotal)
 //   • ≥ kPhaseRichMinChars  → green   ("rich", properly detailed)
 // Empty (= 0) renders as "-" to distinguish "no content" from
 // "some content but short".
-static constexpr int kDesignBarWidth = 10;
-
-static Element DesignCharsBar(size_t InChars)
+static Element DesignCharsBar(const size_t InChars, const int InCellWidth)
 {
     if (InChars == 0)
     {
         return text("-") | dim;
     }
-    // Scale fill against kPhaseRichMinChars so the bar fills at the
-    // "rich" threshold; values above still render at full width.
-    const int Filled = std::min(
-        kDesignBarWidth,
-        static_cast<int>((InChars * kDesignBarWidth + kPhaseRichMinChars - 1) /
-                         kPhaseRichMinChars));
-    const int Empty = kDesignBarWidth - Filled;
-    const auto BarColor = (InChars < kPhaseHollowChars) ? color(Color::Red)
-                          : (InChars < kPhaseRichMinChars)
-                              ? color(Color::Yellow)
-                              : color(Color::Green);
-    Elements Bar;
-    for (int Index = 0; Index < Filled; ++Index)
-    {
-        Bar.push_back(text("\xe2\x96\x88") | BarColor);
-    }
-    for (int Index = 0; Index < Empty; ++Index)
-    {
-        Bar.push_back(text("\xe2\x96\x91") | dim);
-    }
-    Bar.push_back(text(" " + std::to_string(InChars)));
-    return hbox(std::move(Bar));
+    return ValueGaugeBar(InChars, kPhaseHollowChars, kPhaseRichMinChars,
+                         kPhaseRichMinChars, std::to_string(InChars),
+                         kDesignBarPreferredWidth, InCellWidth, true);
 }
 
 static Element MetricGaugeBar(const size_t InValue, const size_t InHollow,
                               const size_t InRich, const size_t InFillMax,
-                              const std::string &InLabel)
+                              const std::string &InLabel,
+                              const int InCellWidth)
 {
-    static constexpr int kMetricBarWidth = 8;
-    const size_t Denominator = std::max<size_t>(1, InFillMax);
-    int Filled = static_cast<int>((InValue * kMetricBarWidth) / Denominator);
-    if (InValue > 0 && Filled == 0)
-    {
-        Filled = 1;
-    }
-    Filled = std::min(kMetricBarWidth, Filled);
-    const int Empty = kMetricBarWidth - Filled;
-    const auto BarColor = (InValue < InHollow) ? color(Color::Red)
-                          : (InValue < InRich) ? color(Color::Yellow)
-                                               : color(Color::Green);
-    Elements Bar;
-    for (int Index = 0; Index < Filled; ++Index)
-    {
-        Bar.push_back(text("\xe2\x96\x88") | BarColor);
-    }
-    for (int Index = 0; Index < Empty; ++Index)
-    {
-        Bar.push_back(text("\xe2\x96\x91") | dim);
-    }
-    Bar.push_back(text(" " + InLabel));
-    return hbox(std::move(Bar));
+    return ValueGaugeBar(InValue, InHollow, InRich, InFillMax, InLabel,
+                         kMetricBarPreferredWidth, InCellWidth, false);
 }
 
 struct FMetricGaugeScale
@@ -270,24 +327,28 @@ static size_t ResolveMetricFillMax(const size_t InValue,
     // the gauge becomes a relative intensity signal. Keep the weakest rich
     // row half-full so green rows still read as healthy while the stronger
     // rows remain visually distinguishable.
-    static constexpr size_t kMetricBarWidth = 8;
-    static constexpr size_t kRelativeRichBaseFill = kMetricBarWidth / 2;
+    static constexpr size_t kRelativeRichBaseFill =
+        kMetricBarPreferredWidth / 2;
     const size_t Range = InScale.mMaxValue - InScale.mMinValue;
-    const size_t ExtraWidth = kMetricBarWidth - kRelativeRichBaseFill;
+    const size_t ExtraWidth = kMetricBarPreferredWidth - kRelativeRichBaseFill;
     const size_t RelativeFill =
         kRelativeRichBaseFill +
         ((InValue - InScale.mMinValue) * ExtraWidth) / Range;
     const size_t ClampedFill =
-        std::min(kMetricBarWidth, std::max<size_t>(1, RelativeFill));
-    return std::max<size_t>(1, (InValue * kMetricBarWidth) / ClampedFill);
+        std::min(static_cast<size_t>(kMetricBarPreferredWidth),
+                 std::max<size_t>(1, RelativeFill));
+    return std::max<size_t>(
+        1, (InValue * kMetricBarPreferredWidth) / ClampedFill);
 }
 
 static Element MetricGaugeBar(const size_t InValue,
                               const FMetricGaugeScale &InScale,
-                              const std::string &InLabel)
+                              const std::string &InLabel,
+                              const int InCellWidth)
 {
     return MetricGaugeBar(InValue, InScale.mHollow, InScale.mRich,
-                          ResolveMetricFillMax(InValue, InScale), InLabel);
+                          ResolveMetricFillMax(InValue, InScale), InLabel,
+                          InCellWidth);
 }
 
 // Truncate helper removed in v0.97.0 — FTXUI renders panel content
@@ -308,6 +369,109 @@ static Elements PadGridRow(Elements InCells)
         Result.push_back(std::move(InCells[Index]));
     }
     return Result;
+}
+
+static std::string BuildPhaseTaxonomySummary(
+    const std::vector<FPhaseTaxonomy> &InTaxonomies, const int InPhaseIndex)
+{
+    for (const FPhaseTaxonomy &Tax : InTaxonomies)
+    {
+        if (Tax.mPhaseIndex != InPhaseIndex)
+        {
+            continue;
+        }
+
+        int LaneDone = 0;
+        int LaneActive = 0;
+        int LaneTodo = 0;
+        for (const FLaneRecord &Lane : Tax.mLanes)
+        {
+            if (Lane.mStatus == EExecutionStatus::Completed)
+            {
+                ++LaneDone;
+            }
+            else if (Lane.mStatus == EExecutionStatus::InProgress)
+            {
+                ++LaneActive;
+            }
+            else
+            {
+                ++LaneTodo;
+            }
+        }
+
+        int JobDone = 0;
+        int JobActive = 0;
+        int JobTodo = 0;
+        for (const FJobRecord &Job : Tax.mJobs)
+        {
+            if (Job.mStatus == EExecutionStatus::Completed)
+            {
+                ++JobDone;
+            }
+            else if (Job.mStatus == EExecutionStatus::InProgress)
+            {
+                ++JobActive;
+            }
+            else
+            {
+                ++JobTodo;
+            }
+        }
+
+        int TaskDone = 0;
+        int TaskActive = 0;
+        int TaskTodo = 0;
+        for (const FTaskRecord &Task : Tax.mTasks)
+        {
+            if (Task.mStatus == EExecutionStatus::Completed)
+            {
+                ++TaskDone;
+            }
+            else if (Task.mStatus == EExecutionStatus::InProgress)
+            {
+                ++TaskActive;
+            }
+            else
+            {
+                ++TaskTodo;
+            }
+        }
+
+        std::string Summary;
+        if (!Tax.mLanes.empty())
+        {
+            Summary += std::to_string(Tax.mLanes.size()) + "L:" +
+                       std::to_string(LaneDone) + "d " +
+                       std::to_string(LaneActive) + "a " +
+                       std::to_string(LaneTodo) + "t";
+        }
+        if (!Tax.mJobs.empty())
+        {
+            if (!Summary.empty())
+            {
+                Summary += " ";
+            }
+            Summary += std::to_string(Tax.mJobs.size()) + "J:" +
+                       std::to_string(JobDone) + "d " +
+                       std::to_string(JobActive) + "a " +
+                       std::to_string(JobTodo) + "t";
+        }
+        if (!Tax.mTasks.empty())
+        {
+            if (!Summary.empty())
+            {
+                Summary += " ";
+            }
+            Summary += std::to_string(Tax.mTasks.size()) + "T:" +
+                       std::to_string(TaskDone) + "d " +
+                       std::to_string(TaskActive) + "a " +
+                       std::to_string(TaskTodo) + "t";
+        }
+        return Summary.empty() ? "-" : Summary;
+    }
+
+    return "-";
 }
 
 // ---------------------------------------------------------------------------
@@ -596,38 +760,113 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
                       text("No plan selected") | dim);
     }
 
+    const int MaxPhases = 20;
+    const int Count = static_cast<int>(InPlan.mPhases.size());
+
+    int ScrollOffset = 0;
+    if (Count > MaxPhases && InSelectedPhaseIndex >= 0)
+    {
+        ScrollOffset = InSelectedPhaseIndex - MaxPhases / 2;
+        if (ScrollOffset < 0)
+        {
+            ScrollOffset = 0;
+        }
+        if (ScrollOffset > Count - MaxPhases)
+        {
+            ScrollOffset = Count - MaxPhases;
+        }
+    }
+    const int VisibleEnd = std::min(ScrollOffset + MaxPhases, Count);
+
+    std::vector<std::string> PhaseLabels;
+    std::vector<std::string> DefaultDesignLabels;
+    std::vector<std::string> TaxonomyLabels;
+    std::vector<std::string> MetricDesignLabels;
+    std::vector<std::string> SolidLabels;
+    std::vector<std::string> WordsLabels;
+    std::vector<std::string> FieldsLabels;
+    std::vector<std::string> WorkLabels;
+    std::vector<std::string> TestsLabels;
+    std::vector<std::string> FilesLabels;
+    std::vector<std::string> EvidenceLabels;
+    for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
+    {
+        const PhaseItem &Phase = InPlan.mPhases[static_cast<size_t>(Index)];
+        const FPhaseRuntimeMetrics &Metrics = Phase.mMetrics;
+        PhaseLabels.push_back(Phase.mPhaseKey);
+        DefaultDesignLabels.push_back(Phase.mV4DesignChars == 0
+                                          ? "-"
+                                          : std::to_string(
+                                                Phase.mV4DesignChars));
+        TaxonomyLabels.push_back(BuildPhaseTaxonomySummary(
+            InPlan.mPhaseTaxonomies, Index));
+        MetricDesignLabels.push_back(std::to_string(Metrics.mDesignChars));
+        SolidLabels.push_back(std::to_string(Metrics.mSolidWordCount));
+        WordsLabels.push_back(std::to_string(Metrics.mRecursiveWordCount));
+        FieldsLabels.push_back(
+            std::to_string(Metrics.mFieldCoveragePercent) + "%");
+        WorkLabels.push_back(std::to_string(Metrics.mWorkItemCount));
+        TestsLabels.push_back(std::to_string(Metrics.mTestingRecordCount));
+        FilesLabels.push_back(std::to_string(Metrics.mFileManifestCount));
+        EvidenceLabels.push_back(std::to_string(Metrics.mEvidenceItemCount));
+    }
+
+    const int PhaseColumnWidth =
+        ComputeTextColumnWidth("P", PhaseLabels, 3);
+    const int DefaultDesignColumnWidth = ComputeGaugeColumnWidth(
+        "Design", DefaultDesignLabels, 16, kDesignBarPreferredWidth);
+    const int TaxonomyColumnWidth =
+        ComputeTextColumnWidth("Taxonomy", TaxonomyLabels, 30);
+    const int MetricDesignColumnWidth = ComputeGaugeColumnWidth(
+        "Design", MetricDesignLabels, 14, kMetricBarPreferredWidth);
+    const int SolidColumnWidth = ComputeGaugeColumnWidth(
+        "SOLID", SolidLabels, 14, kMetricBarPreferredWidth);
+    const int WordsColumnWidth = ComputeGaugeColumnWidth(
+        "Words", WordsLabels, 14, kMetricBarPreferredWidth);
+    const int FieldsColumnWidth = ComputeGaugeColumnWidth(
+        "Fields", FieldsLabels, 14, kMetricBarPreferredWidth);
+    const int WorkColumnWidth = ComputeGaugeColumnWidth(
+        "Work", WorkLabels, 14, kMetricBarPreferredWidth);
+    const int TestsColumnWidth = ComputeGaugeColumnWidth(
+        "Tests", TestsLabels, 14, kMetricBarPreferredWidth);
+    const int FilesColumnWidth = ComputeGaugeColumnWidth(
+        "Files", FilesLabels, 14, kMetricBarPreferredWidth);
+    const int EvidenceColumnWidth = ComputeGaugeColumnWidth(
+        "Evidence", EvidenceLabels, 14, kMetricBarPreferredWidth);
+
     // gridbox layout — auto-aligns columns without Table's flex_shrink override
     std::vector<Elements> GridRows;
     if (InMetricView)
     {
         GridRows.push_back(PadGridRow({
-            text("P") | bold | size(WIDTH, EQUAL, 3),
+            text("P") | bold | size(WIDTH, EQUAL, PhaseColumnWidth),
             text("Status") | bold | size(WIDTH, EQUAL, 12),
-            text("Design") | bold | size(WIDTH, EQUAL, 14),
-            text("SOLID") | bold | size(WIDTH, EQUAL, 14),
-            text("Words") | bold | size(WIDTH, EQUAL, 14),
-            text("Fields") | bold | size(WIDTH, EQUAL, 14),
-            text("Work") | bold | size(WIDTH, EQUAL, 14),
-            text("Tests") | bold | size(WIDTH, EQUAL, 14),
-            text("Files") | bold | size(WIDTH, EQUAL, 14),
-            text("Evidence") | bold | size(WIDTH, EQUAL, 14),
+            text("Design") | bold | size(WIDTH, EQUAL,
+                                          MetricDesignColumnWidth),
+            text("SOLID") | bold | size(WIDTH, EQUAL, SolidColumnWidth),
+            text("Words") | bold | size(WIDTH, EQUAL, WordsColumnWidth),
+            text("Fields") | bold | size(WIDTH, EQUAL, FieldsColumnWidth),
+            text("Work") | bold | size(WIDTH, EQUAL, WorkColumnWidth),
+            text("Tests") | bold | size(WIDTH, EQUAL, TestsColumnWidth),
+            text("Files") | bold | size(WIDTH, EQUAL, FilesColumnWidth),
+            text("Evidence") | bold | size(WIDTH, EQUAL,
+                                            EvidenceColumnWidth),
             text("Scope") | bold | flex,
         }));
     }
     else
     {
         GridRows.push_back(PadGridRow({
-            text("P") | bold | size(WIDTH, EQUAL, 3),
+            text("P") | bold | size(WIDTH, EQUAL, PhaseColumnWidth),
             text("Status") | bold | size(WIDTH, EQUAL, 14),
-            text("Design") | bold | size(WIDTH, EQUAL, 16),
-            text("Taxonomy") | bold | size(WIDTH, EQUAL, 30),
+            text("Design") | bold | size(WIDTH, EQUAL,
+                                          DefaultDesignColumnWidth),
+            text("Taxonomy") | bold | size(WIDTH, EQUAL,
+                                            TaxonomyColumnWidth),
             text("Scope") | bold | flex,
             text("Output") | bold | flex,
         }));
     }
-
-    const int MaxPhases = 20;
-    const int Count = static_cast<int>(InPlan.mPhases.size());
 
     FMetricGaugeScale DesignScale;
     FMetricGaugeScale SolidScale;
@@ -679,22 +918,6 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
             { return InMetrics.mEvidenceItemCount; });
     }
 
-    // Scroll window
-    int ScrollOffset = 0;
-    if (Count > MaxPhases && InSelectedPhaseIndex >= 0)
-    {
-        ScrollOffset = InSelectedPhaseIndex - MaxPhases / 2;
-        if (ScrollOffset < 0)
-        {
-            ScrollOffset = 0;
-        }
-        if (ScrollOffset > Count - MaxPhases)
-        {
-            ScrollOffset = Count - MaxPhases;
-        }
-    }
-    const int VisibleEnd = std::min(ScrollOffset + MaxPhases, Count);
-
     for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
     {
         const PhaseItem &Phase = InPlan.mPhases[static_cast<size_t>(Index)];
@@ -705,125 +928,64 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         const std::string &Desc = Phase.mScope;
         const std::string &Output = Phase.mOutput;
 
-        // Taxonomy summary
-        std::string TaxSummary = "-";
-
-        for (const FPhaseTaxonomy &Tax : InPlan.mPhaseTaxonomies)
-        {
-            if (Tax.mPhaseIndex == Index)
-            {
-
-                int LD = 0, LA = 0, LT = 0;
-                for (const FLaneRecord &L : Tax.mLanes)
-                {
-                    if (L.mStatus == EExecutionStatus::Completed)
-                        LD++;
-                    else if (L.mStatus == EExecutionStatus::InProgress)
-                        LA++;
-                    else
-                        LT++;
-                }
-                int JD = 0, JA = 0, JT = 0;
-                for (const FJobRecord &J : Tax.mJobs)
-                {
-                    if (J.mStatus == EExecutionStatus::Completed)
-                        JD++;
-                    else if (J.mStatus == EExecutionStatus::InProgress)
-                        JA++;
-                    else
-                        JT++;
-                }
-                int TD = 0, TA = 0, TT = 0;
-                for (const FTaskRecord &T : Tax.mTasks)
-                {
-                    if (T.mStatus == EExecutionStatus::Completed)
-                        TD++;
-                    else if (T.mStatus == EExecutionStatus::InProgress)
-                        TA++;
-                    else
-                        TT++;
-                }
-
-                TaxSummary = "";
-                if (!Tax.mLanes.empty())
-                {
-                    TaxSummary += std::to_string(Tax.mLanes.size()) +
-                                  "L:" + std::to_string(LD) + "d " +
-                                  std::to_string(LA) + "a " +
-                                  std::to_string(LT) + "t";
-                }
-                if (!Tax.mJobs.empty())
-                {
-                    if (!TaxSummary.empty())
-                    {
-                        TaxSummary += " ";
-                    }
-                    TaxSummary += std::to_string(Tax.mJobs.size()) +
-                                  "J:" + std::to_string(JD) + "d " +
-                                  std::to_string(JA) + "a " +
-                                  std::to_string(JT) + "t";
-                }
-                if (!Tax.mTasks.empty())
-                {
-                    if (!TaxSummary.empty())
-                    {
-                        TaxSummary += " ";
-                    }
-                    TaxSummary += std::to_string(Tax.mTasks.size()) +
-                                  "T:" + std::to_string(TD) + "d " +
-                                  std::to_string(TA) + "a " +
-                                  std::to_string(TT) + "t";
-                }
-                if (TaxSummary.empty())
-                {
-                    TaxSummary = "-";
-                }
-                break;
-            }
-        }
+        const std::string TaxSummary =
+            BuildPhaseTaxonomySummary(InPlan.mPhaseTaxonomies, Index);
 
         Elements RowCells;
         if (InMetricView)
         {
             const FPhaseRuntimeMetrics &Metrics = Phase.mMetrics;
             RowCells = PadGridRow({
-                text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 3),
+                text(Marker + Phase.mPhaseKey) |
+                    size(WIDTH, EQUAL, PhaseColumnWidth),
                 ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 12),
                 MetricGaugeBar(Metrics.mDesignChars, DesignScale,
-                               std::to_string(Metrics.mDesignChars)) |
-                    size(WIDTH, EQUAL, 14),
+                               std::to_string(Metrics.mDesignChars),
+                               MetricDesignColumnWidth) |
+                    size(WIDTH, EQUAL, MetricDesignColumnWidth),
                 MetricGaugeBar(Metrics.mSolidWordCount, SolidScale,
-                               std::to_string(Metrics.mSolidWordCount)) |
-                    size(WIDTH, EQUAL, 14),
+                               std::to_string(Metrics.mSolidWordCount),
+                               SolidColumnWidth) |
+                    size(WIDTH, EQUAL, SolidColumnWidth),
                 MetricGaugeBar(Metrics.mRecursiveWordCount, WordsScale,
-                               std::to_string(Metrics.mRecursiveWordCount)) |
-                    size(WIDTH, EQUAL, 14),
+                               std::to_string(Metrics.mRecursiveWordCount),
+                               WordsColumnWidth) |
+                    size(WIDTH, EQUAL, WordsColumnWidth),
                 MetricGaugeBar(Metrics.mFieldCoveragePercent, FieldsScale,
                                std::to_string(Metrics.mFieldCoveragePercent) +
-                                   "%") |
-                    size(WIDTH, EQUAL, 14),
+                                   "%",
+                               FieldsColumnWidth) |
+                    size(WIDTH, EQUAL, FieldsColumnWidth),
                 MetricGaugeBar(Metrics.mWorkItemCount, WorkScale,
-                               std::to_string(Metrics.mWorkItemCount)) |
-                    size(WIDTH, EQUAL, 14),
+                               std::to_string(Metrics.mWorkItemCount),
+                               WorkColumnWidth) |
+                    size(WIDTH, EQUAL, WorkColumnWidth),
                 MetricGaugeBar(Metrics.mTestingRecordCount, TestsScale,
-                               std::to_string(Metrics.mTestingRecordCount)) |
-                    size(WIDTH, EQUAL, 14),
+                               std::to_string(Metrics.mTestingRecordCount),
+                               TestsColumnWidth) |
+                    size(WIDTH, EQUAL, TestsColumnWidth),
                 MetricGaugeBar(Metrics.mFileManifestCount, FilesScale,
-                               std::to_string(Metrics.mFileManifestCount)) |
-                    size(WIDTH, EQUAL, 14),
+                               std::to_string(Metrics.mFileManifestCount),
+                               FilesColumnWidth) |
+                    size(WIDTH, EQUAL, FilesColumnWidth),
                 MetricGaugeBar(Metrics.mEvidenceItemCount, EvidenceScale,
-                               std::to_string(Metrics.mEvidenceItemCount)) |
-                    size(WIDTH, EQUAL, 14),
+                               std::to_string(Metrics.mEvidenceItemCount),
+                               EvidenceColumnWidth) |
+                    size(WIDTH, EQUAL, EvidenceColumnWidth),
                 text(Desc) | dim | flex,
             });
         }
         else
         {
             RowCells = PadGridRow({
-                text(Marker + Phase.mPhaseKey) | size(WIDTH, EQUAL, 3),
+                text(Marker + Phase.mPhaseKey) |
+                    size(WIDTH, EQUAL, PhaseColumnWidth),
                 ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 14),
-                DesignCharsBar(Phase.mV4DesignChars) | size(WIDTH, EQUAL, 16),
-                text(TaxSummary) | dim | size(WIDTH, EQUAL, 30),
+                DesignCharsBar(Phase.mV4DesignChars,
+                               DefaultDesignColumnWidth) |
+                    size(WIDTH, EQUAL, DefaultDesignColumnWidth),
+                text(TaxSummary) | dim |
+                    size(WIDTH, EQUAL, TaxonomyColumnWidth),
                 text(Desc) | dim | flex,
                 text(Output) | dim | flex,
             });
