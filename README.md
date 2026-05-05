@@ -29,10 +29,10 @@ This rule is repeated in [CLAUDE.md](CLAUDE.md), [AGENTS.md](AGENTS.md), and eve
 | Build | CMake `3.20+` with Ninja generator |
 | Root namespace | `UniPlan` |
 | Version source | [Source/UniPlanCliConstants.h](Source/UniPlanCliConstants.h) → `kCliVersion` (currently `0.105.3`) |
-| Build output | `Build/CMake/uni-plan` or `Build/CMake/uni-plan.exe` |
-| Installed binary | `~/bin/uni-plan` or `%USERPROFILE%\bin\uni-plan.exe` |
+| Build output | `Build/CMake/uni-plan` on macOS/Linux, `Build/CMakeWin/uni-plan.exe` on Windows |
+| Runnable binary | `~/bin/uni-plan` on macOS/Linux; `Build/CMakeWin/uni-plan.exe` on Windows |
 | Watch mode | FTXUI terminal UI (`UPLAN_WATCH=ON` in shared presets) |
-| Tests | GoogleTest, `Build/CMake/uni-plan-tests(.exe)` |
+| Tests | GoogleTest, `Build/CMake/uni-plan-tests` or `Build/CMakeWin/uni-plan-tests.exe` |
 
 ## non_negotiable_rules
 
@@ -591,10 +591,10 @@ uni-plan/
 ├── CODING.md                  # Code style and SOLID principles
 ├── NAMING.md                  # Naming conventions
 ├── .clang-format              # Formatter config (consumed by the auto-format hook)
-├── CMakePresets.json          # Shared dev/dev-tests presets; output is Build/CMake
+├── CMakePresets.json          # dev/dev-tests → Build/CMake; dev-win/dev-win-tests → Build/CMakeWin
 ├── CMakeLists.txt             # Build configuration
 ├── build.sh                   # macOS/Linux build + install driver
-├── build.ps1                  # Windows PowerShell build + install driver
+├── build.ps1                  # Windows PowerShell build driver
 └── uni-plan.ini               # Runtime cache config
 ```
 
@@ -605,16 +605,19 @@ uni-plan/
 | Step | Command |
 | --- | --- |
 | macOS/Linux build + install | `./build.sh` |
-| Windows build + install | `.\build.ps1` |
+| Windows build | `.\build.ps1` |
 | macOS/Linux build + tests | `./build.sh --tests` |
 | Windows build + tests | `.\build.ps1 -Tests` |
-| Verify install | `uni-plan --version` |
-| Verify Windows install | `uni-plan.exe --version` |
-| Run unit tests directly | `Build/CMake/uni-plan-tests(.exe)` |
+| Verify macOS/Linux install | `uni-plan --version` |
+| Verify Windows build output | `Build\CMakeWin\uni-plan.exe --version` |
+| Run unit tests directly | `Build/CMake/uni-plan-tests` or `Build/CMakeWin/uni-plan-tests.exe` |
 | Manual configure | `cmake --preset dev` |
 | Manual configure with tests | `cmake --preset dev-tests` |
 | Manual build | `cmake --build Build/CMake --parallel` |
 | Manual install | `cmake --install Build/CMake --prefix "$HOME"` |
+| Windows manual configure | `cmake --preset dev-win` |
+| Windows manual configure with tests | `cmake --preset dev-win-tests` |
+| Windows manual build | `cmake --build Build\CMakeWin --parallel` |
 
 ## documentation_map
 

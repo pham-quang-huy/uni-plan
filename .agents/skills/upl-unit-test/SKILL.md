@@ -28,14 +28,19 @@ Do NOT report test results to the user until the coverage audit is complete and 
 # macOS/Linux: configure, build, install, and run all tests
 ./build.sh --tests
 
-# Windows PowerShell: same output/install convention
+# Windows PowerShell: builds Build\CMakeWin
 .\build.ps1 -Tests
 
-# Manual configure with tests enabled
+# macOS/Linux manual configure with tests enabled
 cmake --preset dev-tests
 
-# Manual build and run all tests
+# macOS/Linux manual build and run all tests
 cmake --build Build/CMake --parallel && ./Build/CMake/uni-plan-tests
+
+# Windows manual configure, build, and run all tests
+cmake --preset dev-win-tests
+cmake --build Build\CMakeWin --parallel
+Build\CMakeWin\uni-plan-tests.exe
 
 # Run specific test suite
 ./Build/CMake/uni-plan-tests --gtest_filter="OptionParsing.*"
@@ -107,7 +112,8 @@ This is the deliverable. "92 tests, 0 failures" alone is insufficient.
 - Object library `uni-plan-lib` compiles all Source/*.cpp except Main.cpp
 - Both `uni-plan` and `uni-plan-tests` link against it (no double compilation)
 - Google Test fetched via CMake FetchContent (v1.15.2)
-- Shared CMake presets always use `Build/CMake` on macOS/Linux and Windows
+- Shared CMake presets use `Build/CMake` on macOS/Linux and
+  `Build/CMakeWin` on Windows
 - Option `UPLAN_TESTS=OFF` by default; use `./build.sh --tests`,
   `.\build.ps1 -Tests`, or `cmake --preset dev-tests` to enable tests
 

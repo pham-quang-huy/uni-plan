@@ -19,6 +19,20 @@
       "cacheVariables": {
         "UPLAN_TESTS": "ON"
       }
+    },
+    {
+      "name": "dev-win",
+      "displayName": "Windows Debug Build",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/Build/CMakeWin"
+    },
+    {
+      "name": "dev-win-tests",
+      "displayName": "Windows Debug Build With Tests",
+      "inherits": "dev-win",
+      "cacheVariables": {
+        "UPLAN_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -29,12 +43,27 @@
     {
       "name": "dev-tests",
       "configurePreset": "dev-tests"
+    },
+    {
+      "name": "dev-win",
+      "configurePreset": "dev-win"
+    },
+    {
+      "name": "dev-win-tests",
+      "configurePreset": "dev-win-tests"
     }
   ],
   "testPresets": [
     {
       "name": "dev",
       "configurePreset": "dev-tests",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "dev-win",
+      "configurePreset": "dev-win-tests",
       "output": {
         "outputOnFailure": true
       }

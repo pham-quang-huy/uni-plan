@@ -1,8 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$Tests,
-    [switch]$Clean,
-    [switch]$NoInstall
+    [switch]$Clean
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,12 +21,12 @@ function Invoke-Checked {
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$BuildDir = Join-Path $ScriptDir "Build\CMake"
-$Preset = "dev"
+$BuildDir = Join-Path $ScriptDir "Build\CMakeWin"
+$Preset = "dev-win"
 $RunTests = $false
 
 if ($Tests) {
-    $Preset = "dev-tests"
+    $Preset = "dev-win-tests"
     $RunTests = $true
 }
 
@@ -56,17 +55,9 @@ if (!(Test-Path $Binary)) {
 Write-Host ""
 Write-Host "Built: $Binary"
 
-if (!$NoInstall) {
-    $InstallBinary = Join-Path $HOME "bin\uni-plan.exe"
-    if (Test-Path $InstallBinary) {
-        $Item = Get-Item $InstallBinary -Force
-        if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            Remove-Item $InstallBinary -Force
-        }
-    }
-    Invoke-Checked cmake --install $BuildDir --prefix $HOME --component runtime
-    Write-Host "Installed: $InstallBinary"
-}
+Write-Host ""
+Write-Host "Verifying build binary..."
+Invoke-Checked $Binary --version
 
 if ($RunTests) {
     Write-Host ""
@@ -74,4 +65,4 @@ if ($RunTests) {
     Invoke-Checked (Join-Path $BuildDir "uni-plan-tests.exe")
 }
 
-Write-Host "Run: uni-plan.exe --version"
+Write-Host "Run: $Binary --version"

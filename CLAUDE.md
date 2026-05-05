@@ -12,8 +12,8 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 - **Build system**: CMake 3.20+ with Ninja generator
 - **Watch mode**: FTXUI terminal UI (conditional via `UPLAN_WATCH` CMake option)
 - **Root namespace**: `UniPlan`
-- **Build output**: `Build/CMake/uni-plan` or `Build/CMake/uni-plan.exe`
-- **Installed binary**: `~/bin/uni-plan` or `%USERPROFILE%\bin\uni-plan.exe`
+- **Build output**: `Build/CMake/uni-plan` on macOS/Linux, `Build/CMakeWin/uni-plan.exe` on Windows
+- **Runnable binary**: `~/bin/uni-plan` on macOS/Linux; `Build/CMakeWin/uni-plan.exe` on Windows
 
 ## quick_reference
 
@@ -23,8 +23,8 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 | Build | CMake + Ninja |
 | Namespace | `UniPlan` |
 | Version source | `Source/UniPlanCliConstants.h` → `kCliVersion` |
-| Build output | `Build/CMake/uni-plan(.exe)` |
-| Installed binary | `~/bin/uni-plan` / `%USERPROFILE%\bin\uni-plan.exe` |
+| Build output | `Build/CMake/uni-plan` (macOS/Linux), `Build/CMakeWin/uni-plan.exe` (Windows) |
+| Runnable binary | `~/bin/uni-plan` (macOS/Linux), `Build/CMakeWin/uni-plan.exe` (Windows) |
 | Watch mode | FTXUI (`UPLAN_WATCH=ON` in shared presets) |
 
 ## build_commands
@@ -36,23 +36,27 @@ uni-plan is a standalone C++17 CLI tool for plan governance — managing, valida
 # macOS/Linux build + tests
 ./build.sh --tests
 
-# Manual build through shared presets
+# macOS/Linux manual build through shared presets
 cmake --preset dev
 cmake --build Build/CMake --parallel
 
-# Verify
+# Verify macOS/Linux install
 uni-plan --version
 ```
 
 ```powershell
-# Windows full build + install
+# Windows build
 .\build.ps1
 
 # Windows build + tests
 .\build.ps1 -Tests
 
-# Verify
-uni-plan.exe --version
+# Windows manual build through shared presets
+cmake --preset dev-win
+cmake --build Build\CMakeWin --parallel
+
+# Verify Windows canonical build output
+Build\CMakeWin\uni-plan.exe --version
 ```
 
 ## key_conventions
@@ -147,10 +151,10 @@ uni-plan/
 ├── CODING.md                  # Code style and SOLID principles
 ├── NAMING.md                  # Naming conventions
 ├── .clang-format              # clang-format configuration
-├── CMakePresets.json          # Shared dev/dev-tests presets; output is Build/CMake
+├── CMakePresets.json          # dev/dev-tests → Build/CMake; dev-win/dev-win-tests → Build/CMakeWin
 ├── CMakeLists.txt             # Build configuration
 ├── build.sh                   # macOS/Linux build + install script
-├── build.ps1                  # Windows PowerShell build + install script
+├── build.ps1                  # Windows PowerShell build script
 └── uni-plan.ini               # Runtime config (cache settings)
 ```
 

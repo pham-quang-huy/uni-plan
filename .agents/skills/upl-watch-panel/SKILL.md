@@ -125,7 +125,7 @@ On Windows, use the matching PowerShell entrypoint:
 
 ```powershell
 .\build.ps1
-uni-plan.exe watch --repo <test-repo>
+Build\CMakeWin\uni-plan.exe watch --repo-root <test-repo>
 ```
 
 Verify:
