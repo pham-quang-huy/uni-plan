@@ -1,5 +1,6 @@
 #include "UniPlanBundleWriteGuard.h"
 
+#include "UniPlanFileHelpers.h"
 #include "UniPlanHashHelpers.h"
 #include "UniPlanJSONIO.h"
 
@@ -8,7 +9,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <sstream>
 #include <system_error>
 #include <thread>
@@ -33,15 +33,14 @@ namespace UniPlan
 static std::uint64_t ComputeFileHashFnv1a(const fs::path &InPath,
                                           std::string &OutError)
 {
-    std::ifstream Stream(InPath, std::ios::in | std::ios::binary);
-    if (!Stream.is_open())
+    std::string Content;
+    std::string ReadError;
+    if (!TryReadFileToStringShared(InPath, Content, ReadError))
     {
-        OutError = "Cannot open for hashing: " + InPath.string();
+        OutError = "Cannot open for hashing: " + InPath.string() + " (" +
+                   ReadError + ")";
         return 0;
     }
-    std::ostringstream Buffer;
-    Buffer << Stream.rdbuf();
-    const std::string Content = Buffer.str();
     std::uint64_t State = kFnv1aSeed;
     Fnv1aUpdateString(State, Content);
     return State;
@@ -85,6 +84,80 @@ static bool ShouldInjectPreRenameFault()
     if (Val[0] == '\0' || std::strcmp(Val, "0") == 0)
         return false;
     return true;
+}
+
+static bool IsCrossDeviceRenameError(const std::error_code &InError)
+{
+    return InError == std::errc::cross_device_link;
+}
+
+static bool IsRetryableRenameError(const std::error_code &InError)
+{
+#ifdef _WIN32
+    if (InError == std::errc::permission_denied ||
+        InError == std::errc::device_or_resource_busy)
+    {
+        return true;
+    }
+    return InError.value() == ERROR_ACCESS_DENIED ||
+           InError.value() == ERROR_SHARING_VIOLATION ||
+           InError.value() == ERROR_LOCK_VIOLATION;
+#else
+    return InError == std::errc::interrupted ||
+           InError == std::errc::device_or_resource_busy;
+#endif
+}
+
+static std::string BuildAtomicReplaceError(const fs::path &InFinalPath,
+                                           const std::error_code &InError)
+{
+    if (IsCrossDeviceRenameError(InError))
+    {
+        return "Atomic rename failed across filesystems: " +
+               InFinalPath.string() +
+               ". Do not symlink Docs/Plans across filesystem boundaries; "
+               "GuardedWriteBundle refuses non-atomic fallbacks.";
+    }
+    return "Atomic rename failed: " + InFinalPath.string() + " (" +
+           InError.message() + ")";
+}
+
+bool TryAtomicReplace(const fs::path &InTmpPath, const fs::path &InFinalPath,
+                      std::string &OutError)
+{
+#ifdef _WIN32
+    constexpr int kMaxAttempts = 50;
+    const std::chrono::milliseconds RetryDelay(20);
+#else
+    constexpr int kMaxAttempts = 3;
+    const std::chrono::milliseconds RetryDelay(1);
+#endif
+
+    std::error_code LastError;
+    for (int Attempt = 1; Attempt <= kMaxAttempts; ++Attempt)
+    {
+        std::error_code RenameError;
+        fs::rename(InTmpPath, InFinalPath, RenameError);
+        if (!RenameError)
+        {
+            return true;
+        }
+        if (IsCrossDeviceRenameError(RenameError))
+        {
+            OutError = BuildAtomicReplaceError(InFinalPath, RenameError);
+            return false;
+        }
+
+        LastError = RenameError;
+        if (!IsRetryableRenameError(RenameError) || Attempt == kMaxAttempts)
+        {
+            break;
+        }
+        std::this_thread::sleep_for(RetryDelay);
+    }
+
+    OutError = BuildAtomicReplaceError(InFinalPath, LastError);
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -412,25 +485,12 @@ int GuardedWriteBundle(const FTopicBundle &InBundle, std::string &OutError)
         // MoveFileEx(REPLACE_EXISTING) — which is what fs::rename calls
         // through — can replace the target even while the handle is held.
         // The RAII destructor releases the lock when the function returns.
-        std::error_code RenErr;
-        fs::rename(TmpPath, FinalPath, RenErr);
-        if (RenErr)
+        std::string RenameError;
+        if (!TryAtomicReplace(TmpPath, FinalPath, RenameError))
         {
             std::error_code RmErr;
             fs::remove(TmpPath, RmErr);
-            if (RenErr == std::errc::cross_device_link)
-            {
-                OutError = "Atomic rename failed across filesystems: " +
-                           FinalPath.string() +
-                           ". Do not symlink Docs/Plans across filesystem "
-                           "boundaries; GuardedWriteBundle refuses non-atomic "
-                           "fallbacks.";
-            }
-            else
-            {
-                OutError = "Atomic rename failed: " + FinalPath.string() +
-                           " (" + RenErr.message() + ")";
-            }
+            OutError = RenameError;
             return 1;
         }
         return 0;
@@ -457,25 +517,12 @@ int GuardedWriteBundle(const FTopicBundle &InBundle, std::string &OutError)
         return 1;
     }
 
-    std::error_code RenErr;
-    fs::rename(TmpPath, FinalPath, RenErr);
-    if (RenErr)
+    std::string RenameError;
+    if (!TryAtomicReplace(TmpPath, FinalPath, RenameError))
     {
         std::error_code RmErr;
         fs::remove(TmpPath, RmErr);
-        if (RenErr == std::errc::cross_device_link)
-        {
-            OutError = "Atomic rename failed across filesystems: " +
-                       FinalPath.string() +
-                       ". Do not symlink Docs/Plans across filesystem "
-                       "boundaries; GuardedWriteBundle refuses non-atomic "
-                       "fallbacks.";
-        }
-        else
-        {
-            OutError = "Atomic rename failed: " + FinalPath.string() + " (" +
-                       RenErr.message() + ")";
-        }
+        OutError = RenameError;
         return 1;
     }
     return 0;

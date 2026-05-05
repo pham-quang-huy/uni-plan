@@ -24,6 +24,13 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #ifndef _WIN32
 #include <sys/wait.h>
 #include <unistd.h>
@@ -72,6 +79,57 @@ TEST_F(FBundleTestFixture, GuardRenameIsAtomic)
     ASSERT_TRUE(ReloadBundle("GuardAtomic", Reloaded));
     EXPECT_EQ(Reloaded.mMetadata.mSummary, "Mutated via GuardedWriteBundle");
 }
+
+#ifdef _WIN32
+// ---------------------------------------------------------------------------
+// 1b. WindowsRenameRetriesUntilBlockingReaderReleases — a reader that omits
+// FILE_SHARE_DELETE can transiently block replacement; the guarded writer
+// must retry while keeping the original intact.
+// ---------------------------------------------------------------------------
+TEST_F(FBundleTestFixture, GuardWindowsRenameRetriesUntilBlockingReaderReleases)
+{
+    CreateMinimalFixture("GuardWinRetry", UniPlan::ETopicStatus::NotStarted, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    const fs::path Path =
+        mRepoRoot / "Docs" / "Plans" / "GuardWinRetry.Plan.json";
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("GuardWinRetry", Bundle));
+    Bundle.mMetadata.mSummary = "Windows retry landed";
+
+    HANDLE BlockingHandle = CreateFileW(
+        Path.wstring().c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    ASSERT_NE(BlockingHandle, INVALID_HANDLE_VALUE) << GetLastError();
+
+    std::atomic<bool> WriterDone{false};
+    std::atomic<int> WriterCode{-99};
+    std::string WriterError;
+    std::thread Writer(
+        [&]()
+        {
+            WriterCode.store(
+                UniPlan::GuardedWriteBundle(Bundle, WriterError));
+            WriterDone.store(true);
+        });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+    EXPECT_FALSE(WriterDone.load())
+        << "Writer should still be retrying while delete sharing is denied";
+
+    CloseHandle(BlockingHandle);
+    Writer.join();
+
+    EXPECT_EQ(WriterCode.load(), 0) << WriterError;
+    const fs::path PlansDir = mRepoRoot / "Docs" / "Plans";
+    EXPECT_FALSE(HasTmpSibling(PlansDir, "GuardWinRetry"));
+
+    UniPlan::FTopicBundle Reloaded;
+    ASSERT_TRUE(ReloadBundle("GuardWinRetry", Reloaded));
+    EXPECT_EQ(Reloaded.mMetadata.mSummary, "Windows retry landed");
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // 2. StaleCheckDetectsOutOfBandChange — second writer's mutation is refused

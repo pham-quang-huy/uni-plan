@@ -1,4 +1,5 @@
 #include "UniPlanCommandHelp.h"
+#include "UniPlanBundleIndex.h"
 #include "UniPlanEnums.h"
 #include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
@@ -9,10 +10,10 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -42,11 +43,12 @@ static void ResolveIssueLines(const std::vector<FTopicBundle> &InBundles,
                 continue;
             if (B.mBundlePath.empty())
                 break;
-            std::ifstream Stream(B.mBundlePath);
-            if (!Stream)
+            std::string Text;
+            std::string ReadError;
+            if (!TryReadFileToStringShared(B.mBundlePath, Text, ReadError))
+            {
                 break;
-            const std::string Text((std::istreambuf_iterator<char>(Stream)),
-                                   std::istreambuf_iterator<char>());
+            }
             FJsonLineIndex Index;
             Index.Build(Text);
             It = IndexByTopic.emplace(InTopic, std::move(Index)).first;
@@ -68,52 +70,93 @@ static void ResolveIssueLines(const std::vector<FTopicBundle> &InBundles,
     }
 }
 
+static std::vector<FTopicBundle>
+BuildReferenceBundleStubs(const fs::path &InRepoRoot,
+                          std::vector<std::string> &InOutWarnings)
+{
+    FBundleFileIndexResult Index;
+    std::string IndexError;
+    if (!TryBuildBundleFileIndex(InRepoRoot, Index, IndexError))
+    {
+        InOutWarnings.push_back(IndexError);
+        return LoadAllBundles(InRepoRoot, InOutWarnings);
+    }
+
+    InOutWarnings.insert(InOutWarnings.end(), Index.mWarnings.begin(),
+                         Index.mWarnings.end());
+
+    std::vector<FTopicBundle> ReferenceBundles;
+    ReferenceBundles.reserve(Index.mBundles.size());
+    for (const FBundleFileIndexEntry &Entry : Index.mBundles)
+    {
+        FTopicBundle Bundle;
+        Bundle.mTopicKey = Entry.mTopicKey;
+        Bundle.mBundlePath = Entry.mFingerprint.mPath;
+        ReferenceBundles.push_back(std::move(Bundle));
+    }
+    return ReferenceBundles;
+}
+
+static bool TryLoadBundlesForValidate(const fs::path &InRepoRoot,
+                                      const FBundleValidateOptions &InOptions,
+                                      std::vector<FTopicBundle> &OutBundles,
+                                      std::vector<FTopicBundle> &OutReferences,
+                                      std::vector<std::string> &InOutWarnings)
+{
+    OutBundles.clear();
+    OutReferences.clear();
+
+    if (InOptions.mTopic.empty())
+    {
+        OutBundles = LoadAllBundles(InRepoRoot, InOutWarnings);
+        OutReferences = OutBundles;
+        return true;
+    }
+
+    FTopicBundle TargetBundle;
+    std::string LoadError;
+    if (!TryLoadBundleByTopic(InRepoRoot, InOptions.mTopic, TargetBundle,
+                              LoadError))
+    {
+        return false;
+    }
+
+    OutBundles.push_back(std::move(TargetBundle));
+    OutReferences = BuildReferenceBundleStubs(InRepoRoot, InOutWarnings);
+    return true;
+}
+
 static int RunBundleValidateJson(const fs::path &InRepoRoot,
                                  const FBundleValidateOptions &InOptions)
 {
     std::vector<std::string> BundleWarnings;
-    // Always load all bundles so cross-topic evaluators (e.g.
-    // topic_ref_integrity) can resolve references against the full
-    // topic-key registry, even under --topic filtering. Scoping is
-    // applied to the emitted output below rather than to the loaded
-    // bundle set.
-    std::vector<FTopicBundle> Bundles =
-        LoadAllBundles(InRepoRoot, BundleWarnings);
-
-    if (!InOptions.mTopic.empty())
+    std::vector<FTopicBundle> Bundles;
+    std::vector<FTopicBundle> ReferenceBundles;
+    const bool bLoaded =
+        TryLoadBundlesForValidate(InRepoRoot, InOptions, Bundles,
+                                  ReferenceBundles, BundleWarnings);
+    if (!bLoaded)
     {
-        bool bFound = false;
-        for (const FTopicBundle &B : Bundles)
-        {
-            if (B.mTopicKey == InOptions.mTopic)
-            {
-                bFound = true;
-                break;
-            }
-        }
-        if (!bFound)
-        {
-            const std::string UTC = GetUtcNow();
-            PrintJsonHeader(kValidateSchema, UTC, InRepoRoot.string());
-            EmitJsonField("topic", InOptions.mTopic);
-            EmitJsonFieldBool("valid", false);
-            std::cout << "\"issues\":[{";
-            EmitJsonField("id", "load_failure");
-            EmitJsonField("severity", "error_major");
-            EmitJsonFieldBool("ok", false);
-            EmitJsonField("detail",
-                          "topic not found in repo: " + InOptions.mTopic,
-                          false);
-            std::cout << "}],";
-            PrintJsonClose(BundleWarnings);
-            return 1;
-        }
+        const std::string UTC = GetUtcNow();
+        PrintJsonHeader(kValidateSchema, UTC, InRepoRoot.string());
+        EmitJsonField("topic", InOptions.mTopic);
+        EmitJsonFieldBool("valid", false);
+        std::cout << "\"issues\":[{";
+        EmitJsonField("id", "load_failure");
+        EmitJsonField("severity", "error_major");
+        EmitJsonFieldBool("ok", false);
+        EmitJsonField("detail",
+                      "topic not found in repo: " + InOptions.mTopic, false);
+        std::cout << "}],";
+        PrintJsonClose(BundleWarnings);
+        return 1;
     }
 
     std::vector<ValidateCheck> Checks =
         InOptions.mTopic.empty()
             ? ValidateAllBundles(Bundles, InRepoRoot)
-            : ValidateTopicBundle(Bundles, InRepoRoot, InOptions.mTopic);
+            : ValidateTopicBundleWithReferences(Bundles.front(),
+                                                ReferenceBundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // When --topic scopes the output, drop checks for other topics so
@@ -201,8 +244,8 @@ static int RunBundleValidateJson(const fs::path &InRepoRoot,
     {
         const FTopicBundle &B = Bundles[BI];
         // Under --topic scope, the summary only reports the target
-        // topic; other bundles are loaded solely for cross-topic
-        // integrity checks.
+        // topic; cross-topic integrity checks use lightweight reference
+        // stubs instead of full bundle deserialization.
         if (!InOptions.mTopic.empty() && B.mTopicKey != InOptions.mTopic)
             continue;
         if (bTopicEmitted)
@@ -295,35 +338,23 @@ static int RunBundleValidateHuman(const fs::path &InRepoRoot,
                                   const FBundleValidateOptions &InOptions)
 {
     std::vector<std::string> BundleWarnings;
-    // See RunBundleValidateJson for the full-load rationale: cross-topic
-    // evaluators need the complete topic-key registry even under
-    // --topic scope.
-    std::vector<FTopicBundle> Bundles =
-        LoadAllBundles(InRepoRoot, BundleWarnings);
-
-    if (!InOptions.mTopic.empty())
+    std::vector<FTopicBundle> Bundles;
+    std::vector<FTopicBundle> ReferenceBundles;
+    const bool bLoaded =
+        TryLoadBundlesForValidate(InRepoRoot, InOptions, Bundles,
+                                  ReferenceBundles, BundleWarnings);
+    if (!bLoaded)
     {
-        bool bFound = false;
-        for (const FTopicBundle &B : Bundles)
-        {
-            if (B.mTopicKey == InOptions.mTopic)
-            {
-                bFound = true;
-                break;
-            }
-        }
-        if (!bFound)
-        {
-            std::cerr << kColorRed << "FAIL" << kColorReset << " "
-                      << InOptions.mTopic << ": topic not found in repo\n";
-            return 1;
-        }
+        std::cerr << kColorRed << "FAIL" << kColorReset << " "
+                  << InOptions.mTopic << ": topic not found in repo\n";
+        return 1;
     }
 
     std::vector<ValidateCheck> Checks =
         InOptions.mTopic.empty()
             ? ValidateAllBundles(Bundles, InRepoRoot)
-            : ValidateTopicBundle(Bundles, InRepoRoot, InOptions.mTopic);
+            : ValidateTopicBundleWithReferences(Bundles.front(),
+                                                ReferenceBundles, InRepoRoot);
     ResolveIssueLines(Bundles, Checks);
 
     // Filter checks to target topic when --topic scopes the output.

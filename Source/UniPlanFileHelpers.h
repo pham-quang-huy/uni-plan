@@ -3,12 +3,22 @@
 #include "UniPlanStringHelpers.h" // for Trim, used by LegacyMdContentLineCount
 #include "UniPlanTypes.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 #ifdef __APPLE__
 #include <climits>
@@ -114,18 +124,77 @@ inline bool TryReadFileLines(const fs::path &InPath,
     return true;
 }
 
-// TryReadFileToString — slurp the entire file into OutContents, preserving
-// every byte (including trailing newlines and any shell-metachars — no
-// interpretation, no expansion). Used by the `--<field>-file <path>` option
-// family to bypass shell-double-quote expansion hazards that $VAR / $(…) /
-// backtick content would otherwise trigger on a --<field> "<string>" path.
-//
-// Opens the file in binary mode so CR/LF are preserved verbatim. Returns
-// true on success. On failure sets OutError to a short diagnostic and
-// leaves OutContents untouched.
-inline bool TryReadFileToString(const fs::path &InPath,
-                                std::string &OutContents, std::string &OutError)
+// TryReadFileToStringShared — shared byte-preserving read primitive for
+// plan bundles and field-file inputs. Windows opens with delete sharing so
+// read-only CLI sessions do not block GuardedWriteBundle's atomic replace.
+// POSIX keeps byte-for-byte stream reads, where open readers already coexist
+// with atomic rename.
+inline bool TryReadFileToStringShared(const fs::path &InPath,
+                                      std::string &OutContents,
+                                      std::string &OutError)
 {
+#ifdef _WIN32
+    const std::wstring WidePath = InPath.wstring();
+    HANDLE FileHandle = CreateFileW(
+        WidePath.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (FileHandle == INVALID_HANDLE_VALUE)
+    {
+        OutError = "unable to open file: " + InPath.string() +
+                   " (win32 " + std::to_string(GetLastError()) + ")";
+        return false;
+    }
+
+    LARGE_INTEGER FileSize;
+    if (!GetFileSizeEx(FileHandle, &FileSize))
+    {
+        const DWORD Error = GetLastError();
+        CloseHandle(FileHandle);
+        OutError = "unable to size file: " + InPath.string() + " (win32 " +
+                   std::to_string(Error) + ")";
+        return false;
+    }
+    if (FileSize.QuadPart < 0 ||
+        static_cast<unsigned long long>(FileSize.QuadPart) >
+            static_cast<unsigned long long>(
+                (std::numeric_limits<size_t>::max)()))
+    {
+        CloseHandle(FileHandle);
+        OutError = "file too large to read: " + InPath.string();
+        return false;
+    }
+
+    std::string Bytes;
+    Bytes.resize(static_cast<size_t>(FileSize.QuadPart));
+    size_t Offset = 0;
+    while (Offset < Bytes.size())
+    {
+        const size_t Remaining = Bytes.size() - Offset;
+        const DWORD Chunk = static_cast<DWORD>(
+            std::min<size_t>(Remaining,
+                             (std::numeric_limits<DWORD>::max)()));
+        DWORD Read = 0;
+        if (!ReadFile(FileHandle, &Bytes[Offset], Chunk, &Read, nullptr))
+        {
+            const DWORD Error = GetLastError();
+            CloseHandle(FileHandle);
+            OutError = "file read failure: " + InPath.string() + " (win32 " +
+                       std::to_string(Error) + ")";
+            return false;
+        }
+        if (Read == 0)
+        {
+            CloseHandle(FileHandle);
+            OutError = "file read failure: unexpected EOF: " + InPath.string();
+            return false;
+        }
+        Offset += static_cast<size_t>(Read);
+    }
+    CloseHandle(FileHandle);
+    OutContents = std::move(Bytes);
+    return true;
+#else
     std::ifstream Input(InPath, std::ios::binary);
     if (!Input.is_open())
     {
@@ -141,6 +210,22 @@ inline bool TryReadFileToString(const fs::path &InPath,
     }
     OutContents = Buffer.str();
     return true;
+#endif
+}
+
+// TryReadFileToString — slurp the entire file into OutContents, preserving
+// every byte (including trailing newlines and any shell-metachars — no
+// interpretation, no expansion). Used by the `--<field>-file <path>` option
+// family to bypass shell-double-quote expansion hazards that $VAR / $(…) /
+// backtick content would otherwise trigger on a --<field> "<string>" path.
+//
+// Opens the file in binary mode so CR/LF are preserved verbatim. Returns
+// true on success. On failure sets OutError to a short diagnostic and
+// leaves OutContents untouched.
+inline bool TryReadFileToString(const fs::path &InPath,
+                                std::string &OutContents, std::string &OutError)
+{
+    return TryReadFileToStringShared(InPath, OutContents, OutError);
 }
 
 inline void PrintRepoInfo(const fs::path &InRepoRoot)

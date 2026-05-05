@@ -1,4 +1,5 @@
 #include "UniPlanJSONIO.h"
+#include "UniPlanFileHelpers.h"
 #include "UniPlanJSON.h"
 #include "UniPlanSchemaValidation.h"
 
@@ -1544,16 +1545,15 @@ bool TryReadTopicBundle(const fs::path &InPath, FTopicBundle &OutBundle,
 {
     try
     {
-        std::ifstream Stream(InPath);
-        if (!Stream.is_open())
+        std::string Content;
+        std::string ReadError;
+        if (!TryReadFileToStringShared(InPath, Content, ReadError))
         {
-            OutError = "Failed to open file: " + InPath.string();
+            OutError =
+                "Failed to read file: " + InPath.string() + " (" + ReadError +
+                ")";
             return false;
         }
-
-        std::ostringstream Buffer;
-        Buffer << Stream.rdbuf();
-        const std::string Content = Buffer.str();
 
         if (Content.empty())
         {

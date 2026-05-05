@@ -617,6 +617,30 @@ static void FindTopicPlanJsonReferences(const std::string &InContent,
     }
 }
 
+static bool TryFindSmartTypography(const std::string &InContent,
+                                   std::string &OutMatch)
+{
+    static constexpr std::array<const char *, 6> kSequences = {
+        "\xE2\x80\x98", "\xE2\x80\x99", "\xE2\x80\x9C",
+        "\xE2\x80\x9D", "\xE2\x80\x93", "\xE2\x80\x94"};
+    for (size_t Pos = 0; Pos + 3 <= InContent.size(); ++Pos)
+    {
+        if (static_cast<unsigned char>(InContent[Pos]) != 0xE2)
+        {
+            continue;
+        }
+        for (const char *rpSequence : kSequences)
+        {
+            if (InContent.compare(Pos, 3, rpSequence) == 0)
+            {
+                OutMatch = InContent.substr(Pos, 3);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Content-hygiene helper: scan one prose string and emit a single failure
 // when the pattern hits. High-volume simple checks route through
@@ -657,6 +681,16 @@ ScanProseField(const std::string &InTopic, const std::string &InPath,
     {
         std::string Match;
         if (TryFindHardcodedEndpoint(InContent, Match))
+        {
+            Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
+                 InDetailPrefix + Match);
+        }
+        return;
+    }
+    if (InCheckID == "no_smart_quotes")
+    {
+        std::string Match;
+        if (TryFindSmartTypography(InContent, Match))
         {
             Fail(OutChecks, InCheckID, InSeverity, InTopic, InPath,
                  InDetailPrefix + Match);

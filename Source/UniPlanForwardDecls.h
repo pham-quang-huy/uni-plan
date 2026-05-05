@@ -269,6 +269,10 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
 std::vector<ValidateCheck>
 ValidateTopicBundle(const std::vector<FTopicBundle> &InAllBundles,
                     const fs::path &InRepoRoot, const std::string &InTopicKey);
+std::vector<ValidateCheck> ValidateTopicBundleWithReferences(
+    const FTopicBundle &InTargetBundle,
+    const std::vector<FTopicBundle> &InReferenceBundles,
+    const fs::path &InRepoRoot);
 
 // Shared validation helper — emits a failure entry with the given id,
 // severity, topic, path, and detail. Defined in UniPlanValidation.cpp;

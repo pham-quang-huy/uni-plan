@@ -1092,6 +1092,17 @@ ValidateAllBundles(const std::vector<FTopicBundle> &InBundles,
     return ValidateBundlesWithReferences(InBundles, InBundles, InRepoRoot);
 }
 
+std::vector<ValidateCheck> ValidateTopicBundleWithReferences(
+    const FTopicBundle &InTargetBundle,
+    const std::vector<FTopicBundle> &InReferenceBundles,
+    const fs::path &InRepoRoot)
+{
+    std::vector<FTopicBundle> TargetBundles;
+    TargetBundles.push_back(InTargetBundle);
+    return ValidateBundlesWithReferences(TargetBundles, InReferenceBundles,
+                                         InRepoRoot);
+}
+
 std::vector<ValidateCheck>
 ValidateTopicBundle(const std::vector<FTopicBundle> &InAllBundles,
                     const fs::path &InRepoRoot, const std::string &InTopicKey)

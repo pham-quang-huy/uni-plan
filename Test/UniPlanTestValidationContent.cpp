@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <string>
 #include <vector>
 
 // ===================================================================
@@ -312,6 +314,35 @@ TEST_F(FBundleTestFixture, NoSmartQuotesCleanBundlePasses)
     StopCapture();
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(CountIssuesWithId(Json, "no_smart_quotes"), 0);
+}
+
+TEST_F(FBundleTestFixture, NoSmartQuotesLargeAsciiCorpusStaysFast)
+{
+    CreateMinimalFixture("T", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, false);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("T", Bundle));
+
+    const std::string LargeAscii(1200000, 'a');
+    Bundle.mMetadata.mSummary = LargeAscii;
+    Bundle.mPhases[0].mDesign.mInvestigation = LargeAscii;
+    WriteBundle(mRepoRoot, "T", Bundle);
+
+    const auto Start = std::chrono::steady_clock::now();
+    StartCapture();
+    const int Code = UniPlan::RunBundleValidateCommand(
+        {"--topic", "T", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    const auto Elapsed = std::chrono::steady_clock::now() - Start;
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Code, 0);
+    EXPECT_EQ(CountIssuesWithId(Json, "no_smart_quotes"), 0);
+    EXPECT_LT(
+        std::chrono::duration_cast<std::chrono::milliseconds>(Elapsed).count(),
+        5000)
+        << "Large ASCII prose should use the manual smart-quote scanner";
 }
 
 // -------------------------------------------------------------------

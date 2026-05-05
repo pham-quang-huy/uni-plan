@@ -70,6 +70,13 @@ bool VerifyReadSessionUnderLock(const fs::path &InPath,
                                 const FBundleReadSession &InSession,
                                 std::string &OutError);
 
+// Same-directory tmp-to-final atomic replacement. Refuses copy fallbacks;
+// cross-device rename is a hard failure. Windows retries transient sharing
+// failures so readers that temporarily lack delete sharing do not make the
+// guarded mutation fail spuriously.
+bool TryAtomicReplace(const fs::path &InTmpPath, const fs::path &InFinalPath,
+                      std::string &OutError);
+
 // ---------------------------------------------------------------------------
 // The mutation-path write. Locks, verifies (if mbValid), serializes to a
 // sibling temp, fsyncs, atomically renames into place. Returns 0 on success
