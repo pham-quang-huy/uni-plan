@@ -4058,8 +4058,8 @@ Element WatchStatusBar::Render(
         text("  |  Lint: " + Lint) | dim,
         filler(),
         text("q=quit  a/A=plan  n/N=non-active  p/P=phase  d=metrics  "
-             "F5=phase  F12=code  [/]=side scroll  w/W=wave  l/L=lane  f/F=files  "
-             "r=refresh") |
+             "F5=phase  F6=files  F12=code  [/]=side scroll  "
+             "w/W=wave  l/L=lane  r=refresh") |
             dim,
         text("  "),
     });

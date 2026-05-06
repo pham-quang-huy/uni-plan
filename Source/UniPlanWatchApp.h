@@ -1,26 +1,18 @@
 #pragma once
 
 #include "UniPlanTypes.h"
+#include "UniPlanWatchInteraction.h"
 #include "UniPlanWatchPanels.h"
-#include "UniPlanWatchScroll.h"
 #include "UniPlanWatchSnapshot.h"
 
 #include <atomic>
 #include <condition_variable>
-#include <cstdint>
 #include <mutex>
 #include <string>
 #include <thread>
 
 namespace UniPlan
 {
-
-enum class EWatchSidePane : uint8_t
-{
-    None,
-    PhaseDetails,
-    CodeSnippets
-};
 
 class DocWatchApp
 {
@@ -37,13 +29,6 @@ class DocWatchApp
   private:
     void RequestStop();
     bool WaitForNextPoll();
-    void StepPhaseSelection(int InPhaseCount, int InDelta);
-    void ResetPlanScopedScroll();
-    void ResetPhaseScopedScroll();
-    void ResetSelectedPhaseDependentScroll();
-    void ResetSidePaneScroll();
-    void ToggleSidePane(EWatchSidePane InPane);
-    bool ScrollCurrentSidePane(int InDelta);
     const FWatchPlanSummary *ResolveSelectedPlan() const;
     const FPhaseTaxonomy *
     ResolveSelectedPhaseTaxonomy(const FWatchPlanSummary &InPlan) const;
@@ -60,19 +45,15 @@ class DocWatchApp
     std::thread mDataThread;
     std::mutex mStopMutex;
     std::condition_variable mStopCondition;
+    FWatchInteractionState mInteraction{};
     int mTickCount = 0;
     int mSelectedPlanIndex = 0;
     int mSelectedNonActiveIndex = -1;
-    FWatchScrollState mScrollState{};
     bool mbActiveBlockFocused = true;
-    int mSelectedPhaseIndex = -1;
-    int mSelectedWaveIndex = -1;
-    int mSelectedLaneIndex = -1;
     bool mbShowPhaseMetricView = false;
     // Focus mode (toggled via `): hides the left overview pane and the plan
     // detail row of the right pane to give execution detail more space.
     bool mbFocusMode = false;
-    EWatchSidePane mSidePane = EWatchSidePane::None;
     std::atomic<bool> mbForceRefresh{false};
 };
 

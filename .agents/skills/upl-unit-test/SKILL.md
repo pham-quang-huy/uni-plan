@@ -1,6 +1,6 @@
 ---
 name: upl-unit-test
-description: Build and run unit tests for all uni-plan CLI commands. Use this skill to verify command correctness, run the full test suite, add new tests, or debug test failures. Covers option parsing, query commands, mutations, semantic lifecycle, evidence, and entity commands.
+description: Build and run unit tests for uni-plan CLI commands and watch-mode behavior. Use this skill to verify command correctness, run the full test suite, add tests, or debug failures. Covers option parsing, query commands, mutations, semantic lifecycle, evidence, entity commands, watch panels, watch interaction state, and watch performance caches.
 implicit_invocation: true
 ---
 
@@ -10,21 +10,39 @@ Build and run the uni-plan test suite, add new tests, or debug failures.
 
 ## Mandatory: Coverage Audit After Every Run
 
-After building and running tests, you MUST perform a coverage audit. Use the coverage audit agent when the current runtime explicitly allows subagents; otherwise perform the audit manually from the command catalog/help registry plus the `Test/UniPlanTest*.cpp` inventory before reporting results.
+After building and running tests, you MUST perform a coverage audit. Use the
+coverage audit agent only when the current runtime explicitly allows
+subagents; otherwise perform the audit manually before reporting results.
 
-Build the command inventory from `Source/UniPlanCommandCatalog.cpp` and
-`Source/UniPlanCommandHelp.cpp`, using `Source/UniPlanForwardDecls.h` only to
-map registered leaf commands to implementation runners. Many leaves are tested
-through dispatch wrappers (`RunTopicCommand`, `RunBundlePhaseCommand`,
-`RunBundleChangelogCommand`, etc.) rather than by direct `Run*Command` calls;
-count those wrapper tests for the routed leaf they exercise.
+Audit the surface that changed:
 
-```
-Agent({
-  description: "Audit test coverage",
-  subagent_type: "Explore",
-  prompt: "Read .claude/agents/upl-agent-senior-tester.md for your full instructions. Then execute the audit workflow: (1) Read Source/UniPlanCommandCatalog.cpp, Source/UniPlanCommandHelp.cpp, and Source/UniPlanForwardDecls.h to build the complete registered leaf-command inventory. (2) Read all Test/UniPlanTest*.cpp files to build the test inventory, mapping wrapper calls like RunTopicCommand({\"status\", ...}) to the routed leaf. (3) Produce a coverage matrix with columns: Command, Type, Happy, Negative, Bundle, Changelog, Gate Msg — marking Y or N for each. (4) Flag any N as a gap with the test file and test name that should be added."
-})
+- CLI command changes: build the command inventory from
+  `Source/UniPlanCommandCatalog.cpp` and `Source/UniPlanCommandHelp.cpp`, using
+  `Source/UniPlanForwardDecls.h` only to map registered leaf commands to
+  implementation runners.
+- Watch-mode changes: audit `Source/UniPlanWatchApp.cpp`,
+  `Source/UniPlanWatchInteraction.*`, `Source/UniPlanWatchPanels.*`,
+  `Source/UniPlanWatchScroll.*`, and `Source/UniPlanWatchSnapshot.*` against
+  `Test/UniPlanTestWatchPerformance.cpp`.
+
+Many CLI leaves are tested through dispatch wrappers (`RunTopicCommand`,
+`RunBundlePhaseCommand`, `RunBundleChangelogCommand`, etc.) rather than by
+direct `Run*Command` calls; count those wrapper tests for the routed leaf they
+exercise.
+
+When subagents are explicitly allowed, delegate this bounded audit to an
+explorer:
+
+```text
+Read .claude/agents/upl-agent-senior-tester.md for your full instructions.
+Then execute the audit workflow: (1) Read Source/UniPlanCommandCatalog.cpp,
+Source/UniPlanCommandHelp.cpp, and Source/UniPlanForwardDecls.h to build the
+complete registered leaf-command inventory. (2) Read all
+Test/UniPlanTest*.cpp files to build the test inventory, mapping wrapper calls
+like RunTopicCommand({"status", ...}) to the routed leaf. (3) Produce a
+coverage matrix with columns: Command, Type, Happy, Negative, Bundle,
+Changelog, Gate Msg — marking Y or N for each. (4) Flag any N as a gap with
+the test file and test name that should be added.
 ```
 
 Do NOT report test results to the user until the coverage audit is complete and you have reviewed its matrix. If the matrix shows gaps, fix them before reporting.
@@ -39,7 +57,7 @@ Do NOT report test results to the user until the coverage audit is complete and 
 .\build.ps1 -Tests
 
 # Windows from a plain PowerShell: invoke VS 18 DevCmd inline first
-cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Tests'
+cmd.exe /c 'call "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Tests'
 
 # macOS/Linux manual configure with tests enabled
 cmake --preset dev-tests
@@ -76,6 +94,7 @@ cd Build\CMakeWin && ctest --output-on-failure
 | **Evidence shortcuts** | `Test/UniPlanTestEvidence.cpp` | SampleTopic fixture |
 | **Entity coverage** | `Test/UniPlanTestEntity.cpp` | SampleTopic fixture |
 | **Content-hygiene validation** | `Test/UniPlanTestValidationContent.cpp` | Minimal fixtures, regex-pattern injection, 13 content-hygiene checks + `--strict` gate |
+| **Watch mode** | `Test/UniPlanTestWatchPerformance.cpp` | Snapshot projection, panels, interaction state, scroll, wrapping, cache, viewport rendering |
 
 ## Coverage Requirements (MANDATORY)
 
@@ -92,6 +111,20 @@ cd Build\CMakeWin && ctest --output-on-failure
 | **Evidence command** | Happy path (entry appended, phase index correct) + bounds check (out-of-range → exit 1) |
 | **Entity command** | Happy path (record appended, changelog appended) + invalid enum (exit 1) + bounds check (exit 1) |
 
+### Watch-mode minimum coverage
+
+When changing `uni-plan watch`, cover the behavior at the smallest stable
+boundary:
+
+| Watch surface | Required tests |
+|---|---|
+| **Snapshot projection** | Typed fields copied from `FTopicBundle` / `FPhaseRecord`; no raw `.Plan.json` parsing |
+| **Panel rendering** | Title, empty state, line gutters, colors/backgrounds, scroll indicators, narrow-width wrapping |
+| **Interaction state** | Key-equivalent operations for selection, side-pane toggles, scroll direction, and reset scope |
+| **Scroll behavior** | One visual line at a time; edge-scroll only when selected row leaves the viewport |
+| **Cache/virtualization** | Layout cache reuse on scroll/render-only passes; cache invalidation on generation/topic/phase/width changes |
+| **Cross-platform drawing** | Screen draw helpers sanitize control glyphs and respect stencil clipping |
+
 ### Coverage audit checklist
 
 Run this BEFORE declaring tests complete:
@@ -106,6 +139,17 @@ For EVERY registered CLI leaf command:
 [ ] For queries: JSON field names match actual command output
 ```
 
+For EVERY changed watch surface:
+
+```
+[ ] Public behavior is tested through a stable panel/helper boundary
+[ ] Scroll offsets are tested for both forward and backward movement
+[ ] Reset scope is tested so unrelated scroll state is preserved
+[ ] Cache reuse and invalidation are tested when layout caching changes
+[ ] Rendering tests assert visible text plus relevant color/background pixels
+[ ] Windows and macOS/Linux behavior stays in shared C++ code paths
+```
+
 ### Post-test report format
 
 After writing or modifying tests, report a **coverage matrix** — not just a pass count:
@@ -115,6 +159,16 @@ After writing or modifying tests, report a **coverage matrix** — not just a pa
 |---------|-------|----------|--------|-----------|----------|
 | topic start | Y | Y | Y | Y | N/A |
 | phase start | Y | Y (x2) | Y | Y | Y |
+...
+```
+
+For watch-mode changes, add a second matrix:
+
+```
+| Surface | Behavior | Render | Scroll | Cache | Reset |
+|---------|----------|--------|--------|-------|-------|
+| side pane interaction | Y | N/A | Y | N/A | Y |
+| phase list | Y | Y | Y | Y | Y |
 ...
 ```
 

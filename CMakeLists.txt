@@ -71,6 +71,7 @@ target_include_directories(uni-plan-lib PUBLIC
 if(UPLAN_WATCH)
     target_sources(uni-plan-lib PRIVATE
         Source/UniPlanWatchApp.cpp
+        Source/UniPlanWatchInteraction.cpp
         Source/UniPlanWatchPanels.cpp
         Source/UniPlanWatchScroll.cpp
         Source/UniPlanWatchSnapshot.cpp

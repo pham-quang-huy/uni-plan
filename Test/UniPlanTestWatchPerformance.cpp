@@ -9,6 +9,7 @@
 
 #if defined(UPLAN_WATCH)
 
+#include "UniPlanWatchInteraction.h"
 #include "UniPlanWatchPanels.h"
 
 #include <ftxui/dom/node.hpp>
@@ -978,6 +979,123 @@ TEST_F(FBundleTestFixture, WatchCacheReportsMalformedBundleWarning)
     EXPECT_TRUE(HasWarningContaining(Snapshot, "Broken.Plan.json"));
 }
 
+TEST(WatchInteraction, PhaseNavigationKeepsPhaseListScrollStable)
+{
+    UniPlan::FWatchInteractionState State;
+    State.mSelectedPhaseIndex = -1;
+    State.mSelectedWaveIndex = 2;
+    State.mSelectedLaneIndex = 3;
+    State.mScrollState.mPhaseList.mOffset = 7;
+    State.mScrollState.mPhaseList.mMaxOffset = 10;
+    State.mScrollState.mLanes.mOffset = 4;
+    State.mScrollState.mFileManifest.mOffset = 5;
+    State.mScrollState.mPhaseDetails.mOffset = 6;
+    State.mScrollState.mCodeSnippets.mOffset = 8;
+
+    UniPlan::StepWatchPhaseSelection(State, 5, -1);
+
+    EXPECT_EQ(State.mSelectedPhaseIndex, 4);
+    EXPECT_EQ(State.mSelectedWaveIndex, -1);
+    EXPECT_EQ(State.mSelectedLaneIndex, -1);
+    EXPECT_EQ(State.mScrollState.mPhaseList.mOffset, 7);
+    EXPECT_EQ(State.mScrollState.mPhaseList.mMaxOffset, 10);
+    EXPECT_EQ(State.mScrollState.mLanes.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mFileManifest.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mPhaseDetails.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mOffset, 0);
+
+    UniPlan::StepWatchPhaseSelection(State, 5, -1);
+    EXPECT_EQ(State.mSelectedPhaseIndex, 3);
+
+    UniPlan::StepWatchPhaseSelection(State, 5, 1);
+    EXPECT_EQ(State.mSelectedPhaseIndex, 4);
+}
+
+TEST(WatchInteraction, PlanScopedResetClearsPhaseSelectionAndPhaseScroll)
+{
+    UniPlan::FWatchInteractionState State;
+    State.mSelectedPhaseIndex = 3;
+    State.mSelectedWaveIndex = 2;
+    State.mSelectedLaneIndex = 1;
+    State.mScrollState.mActivePlans.mOffset = 9;
+    State.mScrollState.mNonActivePlans.mOffset = 8;
+    State.mScrollState.mPhaseList.mOffset = 7;
+    State.mScrollState.mLanes.mOffset = 6;
+    State.mScrollState.mFileManifest.mOffset = 5;
+    State.mScrollState.mPhaseDetails.mOffset = 4;
+    State.mScrollState.mCodeSnippets.mOffset = 3;
+
+    UniPlan::ResetWatchPlanScopedScroll(State);
+
+    EXPECT_EQ(State.mSelectedPhaseIndex, -1);
+    EXPECT_EQ(State.mSelectedWaveIndex, -1);
+    EXPECT_EQ(State.mSelectedLaneIndex, -1);
+    EXPECT_EQ(State.mScrollState.mActivePlans.mOffset, 9);
+    EXPECT_EQ(State.mScrollState.mNonActivePlans.mOffset, 8);
+    EXPECT_EQ(State.mScrollState.mPhaseList.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mLanes.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mFileManifest.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mPhaseDetails.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mOffset, 0);
+}
+
+TEST(WatchInteraction, SidePaneToggleIsExclusiveAndResetsOpenedPane)
+{
+    UniPlan::FWatchInteractionState State;
+    State.mScrollState.mPhaseDetails.mOffset = 5;
+    State.mScrollState.mPhaseDetails.mMaxOffset = 9;
+    State.mScrollState.mFileManifest.mOffset = 7;
+    State.mScrollState.mFileManifest.mMaxOffset = 13;
+    State.mScrollState.mCodeSnippets.mOffset = 6;
+    State.mScrollState.mCodeSnippets.mMaxOffset = 11;
+
+    UniPlan::ToggleWatchSidePane(State, UniPlan::EWatchSidePane::PhaseDetails);
+
+    EXPECT_EQ(State.mSidePane, UniPlan::EWatchSidePane::PhaseDetails);
+    EXPECT_EQ(State.mScrollState.mPhaseDetails.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mPhaseDetails.mMaxOffset, 0);
+    EXPECT_EQ(State.mScrollState.mFileManifest.mOffset, 7);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mOffset, 6);
+
+    UniPlan::ToggleWatchSidePane(State, UniPlan::EWatchSidePane::FileManifest);
+
+    EXPECT_EQ(State.mSidePane, UniPlan::EWatchSidePane::FileManifest);
+    EXPECT_EQ(State.mScrollState.mFileManifest.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mFileManifest.mMaxOffset, 0);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mOffset, 6);
+
+    UniPlan::ToggleWatchSidePane(State, UniPlan::EWatchSidePane::CodeSnippets);
+
+    EXPECT_EQ(State.mSidePane, UniPlan::EWatchSidePane::CodeSnippets);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mMaxOffset, 0);
+    EXPECT_EQ(State.mScrollState.mPhaseDetails.mOffset, 0);
+
+    State.mScrollState.mCodeSnippets.mOffset = 4;
+    UniPlan::ToggleWatchSidePane(State, UniPlan::EWatchSidePane::CodeSnippets);
+
+    EXPECT_EQ(State.mSidePane, UniPlan::EWatchSidePane::None);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mOffset, 4);
+}
+
+TEST(WatchInteraction, SidePaneScrollTargetsOnlyVisiblePane)
+{
+    UniPlan::FWatchInteractionState State;
+
+    EXPECT_FALSE(UniPlan::ScrollWatchSidePane(State, 1));
+
+    UniPlan::ToggleWatchSidePane(State, UniPlan::EWatchSidePane::FileManifest);
+    EXPECT_TRUE(UniPlan::ScrollWatchSidePane(State, 1));
+    EXPECT_EQ(State.mScrollState.mFileManifest.mOffset, 1);
+    EXPECT_EQ(State.mScrollState.mCodeSnippets.mOffset, 0);
+    EXPECT_EQ(State.mScrollState.mPhaseDetails.mOffset, 0);
+
+    EXPECT_TRUE(UniPlan::ScrollWatchSidePane(State, -1));
+    EXPECT_EQ(State.mScrollState.mFileManifest.mOffset, 0);
+    EXPECT_TRUE(UniPlan::ScrollWatchSidePane(State, -1));
+    EXPECT_EQ(State.mScrollState.mFileManifest.mOffset, 0);
+}
+
 TEST_F(FBundleTestFixture, PlanNavigatorPanelsUseEdgeScroll)
 {
     const UniPlan::ActivePlansPanel ActivePanel;
@@ -1796,7 +1914,9 @@ TEST_F(FBundleTestFixture, WatchStatusBarListsSidePaneKeys)
 
     EXPECT_EQ(Rendered.find("s=schema"), std::string::npos);
     EXPECT_EQ(Rendered.find("i=impl"), std::string::npos);
+    EXPECT_EQ(Rendered.find("f/F=files"), std::string::npos);
     EXPECT_NE(Rendered.find("F5=phase"), std::string::npos);
+    EXPECT_NE(Rendered.find("F6=files"), std::string::npos);
     EXPECT_NE(Rendered.find("F12=code"), std::string::npos);
     EXPECT_NE(Rendered.find("[/]=side scroll"), std::string::npos);
     EXPECT_NE(Rendered.find("Disc:"), std::string::npos);
