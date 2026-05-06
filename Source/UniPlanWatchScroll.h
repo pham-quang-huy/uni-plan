@@ -21,9 +21,10 @@ struct FWatchScrollState
 {
     FWatchScrollRegionState mActivePlans;
     FWatchScrollRegionState mNonActivePlans;
-    FWatchScrollRegionState mPhaseDetail;
+    FWatchScrollRegionState mPhaseList;
     FWatchScrollRegionState mLanes;
     FWatchScrollRegionState mFileManifest;
+    FWatchScrollRegionState mPhaseDetails;
     FWatchScrollRegionState mCodeSnippets;
 };
 

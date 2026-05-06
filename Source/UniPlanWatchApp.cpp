@@ -13,6 +13,7 @@
 #include <ftxui/screen/color.hpp>
 #include <ftxui/screen/screen.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -26,7 +27,51 @@ namespace UniPlan
 namespace
 {
 static constexpr int kNavigatorPaneWidth = 50;
-static constexpr int kMiddlePaneWidthWithCode = 150;
+static constexpr int kMiddlePaneWidthWithSidePane = 150;
+
+struct FWatchSidePaneBinding
+{
+    EWatchSidePane mPane = EWatchSidePane::None;
+    ftxui::Event mToggleEvent = ftxui::Event::Custom;
+    FWatchScrollRegionState FWatchScrollState::*mpScrollState = nullptr;
+};
+
+static const std::array<FWatchSidePaneBinding, 2> &WatchSidePaneBindings()
+{
+    static const std::array<FWatchSidePaneBinding, 2> Bindings = {{
+        {EWatchSidePane::PhaseDetails, ftxui::Event::F5,
+         &FWatchScrollState::mPhaseDetails},
+        {EWatchSidePane::CodeSnippets, ftxui::Event::F12,
+         &FWatchScrollState::mCodeSnippets},
+    }};
+    return Bindings;
+}
+
+static const FWatchSidePaneBinding *
+FindWatchSidePaneBinding(const EWatchSidePane InPane)
+{
+    for (const FWatchSidePaneBinding &Binding : WatchSidePaneBindings())
+    {
+        if (Binding.mPane == InPane)
+        {
+            return &Binding;
+        }
+    }
+    return nullptr;
+}
+
+static const FWatchSidePaneBinding *
+FindWatchSidePaneToggle(const ftxui::Event &InEvent)
+{
+    for (const FWatchSidePaneBinding &Binding : WatchSidePaneBindings())
+    {
+        if (Binding.mToggleEvent == InEvent)
+        {
+            return &Binding;
+        }
+    }
+    return nullptr;
+}
 
 class EqualHeightFlexNode : public ftxui::Node
 {
@@ -97,6 +142,137 @@ bool DocWatchApp::WaitForNextPoll()
     return mRunning.load(std::memory_order_relaxed);
 }
 
+void DocWatchApp::StepPhaseSelection(const int InPhaseCount, const int InDelta)
+{
+    if (InPhaseCount <= 0 || InDelta == 0)
+    {
+        return;
+    }
+
+    if (mSelectedPhaseIndex < 0)
+    {
+        mSelectedPhaseIndex = InDelta < 0 ? InPhaseCount : -1;
+    }
+
+    mSelectedPhaseIndex =
+        (mSelectedPhaseIndex + InDelta + InPhaseCount) % InPhaseCount;
+    mSelectedWaveIndex = -1;
+    mSelectedLaneIndex = -1;
+    ResetSelectedPhaseDependentScroll();
+}
+
+void DocWatchApp::ResetSidePaneScroll()
+{
+    for (const FWatchSidePaneBinding &Binding : WatchSidePaneBindings())
+    {
+        if (Binding.mpScrollState != nullptr)
+        {
+            (mScrollState.*(Binding.mpScrollState)).Reset();
+        }
+    }
+}
+
+void DocWatchApp::ResetPhaseScopedScroll()
+{
+    mScrollState.mPhaseList.Reset();
+    ResetSelectedPhaseDependentScroll();
+}
+
+void DocWatchApp::ResetSelectedPhaseDependentScroll()
+{
+    mScrollState.mLanes.Reset();
+    mScrollState.mFileManifest.Reset();
+    ResetSidePaneScroll();
+}
+
+void DocWatchApp::ResetPlanScopedScroll()
+{
+    mSelectedPhaseIndex = -1;
+    mSelectedWaveIndex = -1;
+    mSelectedLaneIndex = -1;
+    ResetPhaseScopedScroll();
+}
+
+void DocWatchApp::ToggleSidePane(const EWatchSidePane InPane)
+{
+    const FWatchSidePaneBinding *rpBinding = FindWatchSidePaneBinding(InPane);
+    if (rpBinding == nullptr || rpBinding->mpScrollState == nullptr)
+    {
+        return;
+    }
+
+    if (mSidePane == InPane)
+    {
+        mSidePane = EWatchSidePane::None;
+        return;
+    }
+
+    mSidePane = InPane;
+    (mScrollState.*(rpBinding->mpScrollState)).Reset();
+}
+
+bool DocWatchApp::ScrollCurrentSidePane(const int InDelta)
+{
+    const FWatchSidePaneBinding *rpBinding = FindWatchSidePaneBinding(mSidePane);
+    if (rpBinding == nullptr || rpBinding->mpScrollState == nullptr)
+    {
+        return false;
+    }
+
+    FWatchScrollRegionState &ScrollState =
+        mScrollState.*(rpBinding->mpScrollState);
+    if (InDelta < 0)
+    {
+        if (ScrollState.mOffset > 0)
+        {
+            --ScrollState.mOffset;
+        }
+        return true;
+    }
+    if (InDelta > 0)
+    {
+        ++ScrollState.mOffset;
+        return true;
+    }
+    return false;
+}
+
+const FWatchPlanSummary *DocWatchApp::ResolveSelectedPlan() const
+{
+    if (mbActiveBlockFocused && mSelectedPlanIndex >= 0 &&
+        mSelectedPlanIndex < static_cast<int>(mSnapshot.mActivePlans.size()))
+    {
+        return &mSnapshot.mActivePlans[static_cast<size_t>(mSelectedPlanIndex)];
+    }
+    if (!mbActiveBlockFocused && mSelectedNonActiveIndex >= 0 &&
+        mSelectedNonActiveIndex <
+            static_cast<int>(mSnapshot.mNonActivePlans.size()))
+    {
+        return &mSnapshot.mNonActivePlans[static_cast<size_t>(
+            mSelectedNonActiveIndex)];
+    }
+    return nullptr;
+}
+
+const FPhaseTaxonomy *DocWatchApp::ResolveSelectedPhaseTaxonomy(
+    const FWatchPlanSummary &InPlan) const
+{
+    if (mSelectedPhaseIndex < 0 ||
+        mSelectedPhaseIndex >= static_cast<int>(InPlan.mPhases.size()))
+    {
+        return nullptr;
+    }
+
+    for (const FPhaseTaxonomy &Taxonomy : InPlan.mPhaseTaxonomies)
+    {
+        if (Taxonomy.mPhaseIndex == mSelectedPhaseIndex)
+        {
+            return &Taxonomy;
+        }
+    }
+    return nullptr;
+}
+
 int DocWatchApp::Run()
 {
     using namespace ftxui;
@@ -110,56 +286,25 @@ int DocWatchApp::Run()
     ValidationPanel PanelValidation;
     LintPanel PanelLint;
     ActivePlansPanel PanelActivePlans;
-    PhaseDetailPanel PanelPhaseDetail;
+    PhaseListPanel PanelPhaseList;
     BlockersPanel PanelBlockers;
     NonActivePlansPanel PanelNonActive;
     ValidationFailPanel PanelValidationFail;
     ExecutionTaxonomyPanel PanelTaxonomy;
     FileManifestPanel PanelFileManifest;
     CodeSnippetPanel PanelCodeSnippet;
+    PhaseDetailsPanel PanelPhaseDetails;
     PlanDetailPanel PanelPlanDetail;
     WatchStatusBar PanelStatusBar;
 
     auto dashboard = Renderer(
         [&]
         {
-            // Resolve selected plan from whichever block is focused
-            FWatchPlanSummary SelectedPlan;
-            if (mbActiveBlockFocused && mSelectedPlanIndex >= 0 &&
-                mSelectedPlanIndex <
-                    static_cast<int>(mSnapshot.mActivePlans.size()))
-            {
-                SelectedPlan =
-                    mSnapshot
-                        .mActivePlans[static_cast<size_t>(mSelectedPlanIndex)];
-            }
-            else if (!mbActiveBlockFocused && mSelectedNonActiveIndex >= 0 &&
-                     mSelectedNonActiveIndex <
-                         static_cast<int>(mSnapshot.mNonActivePlans.size()))
-            {
-                SelectedPlan = mSnapshot.mNonActivePlans[static_cast<size_t>(
-                    mSelectedNonActiveIndex)];
-            }
-
-            // ── LEFT PANE (navigator) ─────────────────────────────
-            auto leftRow1 = PanelInventory.Render(mSnapshot.mInventory);
-            auto leftRow2 = hbox({
-                PanelValidation.Render(mSnapshot.mValidation) | flex,
-                PanelLint.Render(mSnapshot.mLint) | flex,
-            });
-            auto leftRow3 = PanelActivePlans.Render(mSnapshot.mActivePlans,
-                                                    mSelectedPlanIndex,
-                                                    mScrollState.mActivePlans);
-            auto leftRow4 = PanelNonActive.Render(mSnapshot.mNonActivePlans,
-                                                  mSelectedNonActiveIndex,
-                                                  mScrollState.mNonActivePlans);
-
-            auto leftPane = vbox({
-                leftRow1,
-                leftRow2,
-                leftRow3 | EqualHeightFlex(),
-                leftRow4 | EqualHeightFlex(),
-            });
+            const FWatchPlanSummary EmptyPlan;
+            const FPhaseTaxonomy EmptyTaxonomy;
+            const FWatchPlanSummary *rpSelectedPlan = ResolveSelectedPlan();
+            const FWatchPlanSummary &SelectedPlan =
+                rpSelectedPlan == nullptr ? EmptyPlan : *rpSelectedPlan;
 
             // Auto-select the newest in_progress phase; otherwise select the
             // newest phase so the descending detail panel opens at the top.
@@ -184,35 +329,26 @@ int DocWatchApp::Run()
             }
 
             // ── RIGHT PANE (detail for selected plan) ─────────────
-            auto rightRow1 = PanelPhaseDetail.Render(
+            auto rightRow1 = PanelPhaseList.Render(
                 SelectedPlan, mSelectedPhaseIndex, mbShowPhaseMetricView,
-                mScrollState.mPhaseDetail);
+                mScrollState.mPhaseList, mPanelRenderCache.mPhaseList,
+                mSnapshotGeneration);
+
+            // Resolve selected phase taxonomy for phase-scoped detail panels.
+            const FPhaseTaxonomy *rpSelectedTaxonomy =
+                ResolveSelectedPhaseTaxonomy(SelectedPlan);
+            const FPhaseTaxonomy &SelectedTaxonomy =
+                rpSelectedTaxonomy == nullptr ? EmptyTaxonomy
+                                              : *rpSelectedTaxonomy;
+
             auto rightRow2 = PanelTaxonomy.Render(
                 SelectedPlan, mSelectedPhaseIndex, mSelectedWaveIndex,
-                mSelectedLaneIndex, mbFocusMode, mScrollState.mLanes);
-
-            // Resolve selected phase taxonomy for file manifest
-            FPhaseTaxonomy SelectedTaxonomy;
-            if (mSelectedPhaseIndex >= 0 &&
-                mSelectedPhaseIndex <
-                    static_cast<int>(SelectedPlan.mPhases.size()))
-            {
-                for (const FPhaseTaxonomy &T : SelectedPlan.mPhaseTaxonomies)
-                {
-                    if (T.mPhaseIndex == mSelectedPhaseIndex)
-                    {
-                        SelectedTaxonomy = T;
-                        break;
-                    }
-                }
-            }
-            auto rightRow3 =
-                PanelFileManifest.Render(SelectedTaxonomy,
-                                         mScrollState.mFileManifest);
-            auto rightRow4 = PanelBlockers.Render(mSnapshot.mAllBlockers);
-            auto rightRow5 = PanelValidationFail.Render(mSnapshot.mValidation);
-
-            auto rightRow0 = PanelPlanDetail.Render(SelectedPlan);
+                mSelectedLaneIndex, mbFocusMode, mScrollState.mLanes,
+                mPanelRenderCache.mExecutionTaxonomy, mSnapshotGeneration);
+            auto rightRow3 = PanelFileManifest.Render(
+                SelectedPlan.mTopicKey, SelectedTaxonomy,
+                mScrollState.mFileManifest, mPanelRenderCache.mFileManifest,
+                mSnapshotGeneration);
 
             // Focus mode drops the plan-detail header row and surfaces the
             // BLOCKERS + VALIDATION FAILURES row; default mode hides both
@@ -220,7 +356,7 @@ int DocWatchApp::Run()
             Elements RightPaneRows;
             if (!mbFocusMode)
             {
-                RightPaneRows.push_back(rightRow0);
+                RightPaneRows.push_back(PanelPlanDetail.Render(SelectedPlan));
             }
             RightPaneRows.push_back(rightRow1);
             RightPaneRows.push_back(rightRow2);
@@ -228,8 +364,8 @@ int DocWatchApp::Run()
             if (mbFocusMode)
             {
                 RightPaneRows.push_back(hbox({
-                    rightRow4 | flex,
-                    rightRow5 | flex,
+                    PanelBlockers.Render(mSnapshot.mAllBlockers) | flex,
+                    PanelValidationFail.Render(mSnapshot.mValidation) | flex,
                 }));
             }
             auto rightPane = vbox(std::move(RightPaneRows));
@@ -252,20 +388,48 @@ int DocWatchApp::Run()
             Elements MainRow;
             if (!mbFocusMode)
             {
-                MainRow.push_back(leftPane |
+                auto LeftPane = vbox({
+                    PanelInventory.Render(mSnapshot.mInventory),
+                    hbox({
+                        PanelValidation.Render(mSnapshot.mValidation) | flex,
+                        PanelLint.Render(mSnapshot.mLint) | flex,
+                    }),
+                    PanelActivePlans.Render(mSnapshot.mActivePlans,
+                                            mSelectedPlanIndex,
+                                            mScrollState.mActivePlans) |
+                        EqualHeightFlex(),
+                    PanelNonActive.Render(mSnapshot.mNonActivePlans,
+                                          mSelectedNonActiveIndex,
+                                          mScrollState.mNonActivePlans) |
+                        EqualHeightFlex(),
+                });
+                MainRow.push_back(LeftPane |
                                   size(WIDTH, EQUAL, kNavigatorPaneWidth));
                 MainRow.push_back(separator());
             }
-            if (mbShowCodePane)
+            if (mSidePane != EWatchSidePane::None)
             {
-                auto codePane = PanelCodeSnippet.Render(
-                    SelectedPlan, mSelectedPhaseIndex,
-                    mScrollState.mCodeSnippets);
+                Element SidePane;
+                if (mSidePane == EWatchSidePane::PhaseDetails)
+                {
+                    SidePane = PanelPhaseDetails.Render(
+                        SelectedPlan, mSelectedPhaseIndex, SelectedTaxonomy,
+                        mScrollState.mPhaseDetails,
+                        mPanelRenderCache.mPhaseDetails, mSnapshotGeneration);
+                }
+                else
+                {
+                    SidePane = PanelCodeSnippet.Render(
+                        SelectedPlan, mSelectedPhaseIndex,
+                        mScrollState.mCodeSnippets,
+                        mPanelRenderCache.mCodeSnippets,
+                        mSnapshotGeneration);
+                }
                 MainRow.push_back(rightPane |
                                   size(WIDTH, EQUAL,
-                                       kMiddlePaneWidthWithCode));
+                                       kMiddlePaneWidthWithSidePane));
                 MainRow.push_back(separator());
-                MainRow.push_back(codePane | flex);
+                MainRow.push_back(SidePane | flex);
             }
             else
             {
@@ -298,13 +462,7 @@ int DocWatchApp::Run()
             {
                 mbActiveBlockFocused = true;
                 mSelectedNonActiveIndex = -1;
-                mSelectedPhaseIndex = -1;
-                mSelectedWaveIndex = -1;
-                mSelectedLaneIndex = -1;
-                mScrollState.mPhaseDetail.Reset();
-                mScrollState.mLanes.Reset();
-                mScrollState.mFileManifest.Reset();
-                mScrollState.mCodeSnippets.Reset();
+                ResetPlanScopedScroll();
                 if (!mSnapshot.mActivePlans.empty())
                 {
                     mSelectedPlanIndex =
@@ -317,13 +475,7 @@ int DocWatchApp::Run()
             {
                 mbActiveBlockFocused = true;
                 mSelectedNonActiveIndex = -1;
-                mSelectedPhaseIndex = -1;
-                mSelectedWaveIndex = -1;
-                mSelectedLaneIndex = -1;
-                mScrollState.mPhaseDetail.Reset();
-                mScrollState.mLanes.Reset();
-                mScrollState.mFileManifest.Reset();
-                mScrollState.mCodeSnippets.Reset();
+                ResetPlanScopedScroll();
                 if (!mSnapshot.mActivePlans.empty())
                 {
                     mSelectedPlanIndex =
@@ -337,13 +489,7 @@ int DocWatchApp::Run()
             {
                 mbActiveBlockFocused = false;
                 mSelectedPlanIndex = -1;
-                mSelectedPhaseIndex = -1;
-                mSelectedWaveIndex = -1;
-                mSelectedLaneIndex = -1;
-                mScrollState.mPhaseDetail.Reset();
-                mScrollState.mLanes.Reset();
-                mScrollState.mFileManifest.Reset();
-                mScrollState.mCodeSnippets.Reset();
+                ResetPlanScopedScroll();
                 if (!mSnapshot.mNonActivePlans.empty())
                 {
                     if (mSelectedNonActiveIndex < 0)
@@ -360,13 +506,7 @@ int DocWatchApp::Run()
             {
                 mbActiveBlockFocused = false;
                 mSelectedPlanIndex = -1;
-                mSelectedPhaseIndex = -1;
-                mSelectedWaveIndex = -1;
-                mSelectedLaneIndex = -1;
-                mScrollState.mPhaseDetail.Reset();
-                mScrollState.mLanes.Reset();
-                mScrollState.mFileManifest.Reset();
-                mScrollState.mCodeSnippets.Reset();
+                ResetPlanScopedScroll();
                 if (!mSnapshot.mNonActivePlans.empty())
                 {
                     if (mSelectedNonActiveIndex < 0)
@@ -381,78 +521,38 @@ int DocWatchApp::Run()
                 }
                 return true;
             }
-            // Resolve selected plan for keyboard navigation
-            FWatchPlanSummary KeySelectedPlan;
-            if (mbActiveBlockFocused && mSelectedPlanIndex >= 0 &&
-                mSelectedPlanIndex <
-                    static_cast<int>(mSnapshot.mActivePlans.size()))
+            const FWatchPlanSummary *rpKeySelectedPlan =
+                ResolveSelectedPlan();
+            const auto ResolveKeyTaxonomy =
+                [this, rpKeySelectedPlan]() -> const FPhaseTaxonomy *
             {
-                KeySelectedPlan =
-                    mSnapshot
-                        .mActivePlans[static_cast<size_t>(mSelectedPlanIndex)];
-            }
-            else if (!mbActiveBlockFocused && mSelectedNonActiveIndex >= 0 &&
-                     mSelectedNonActiveIndex <
-                         static_cast<int>(mSnapshot.mNonActivePlans.size()))
-            {
-                KeySelectedPlan = mSnapshot.mNonActivePlans[static_cast<size_t>(
-                    mSelectedNonActiveIndex)];
-            }
+                return rpKeySelectedPlan == nullptr
+                           ? nullptr
+                           : ResolveSelectedPhaseTaxonomy(*rpKeySelectedPlan);
+            };
 
             if (InEvent == Event::Character('p'))
             {
                 const int PhaseCount =
-                    static_cast<int>(KeySelectedPlan.mPhases.size());
-                if (PhaseCount > 0)
-                {
-                    mSelectedPhaseIndex =
-                        (mSelectedPhaseIndex + 1) % PhaseCount;
-                    mSelectedWaveIndex = -1;
-                    mSelectedLaneIndex = -1;
-                    mScrollState.mLanes.Reset();
-                    mScrollState.mFileManifest.Reset();
-                    mScrollState.mCodeSnippets.Reset();
-                }
+                    rpKeySelectedPlan == nullptr
+                        ? 0
+                        : static_cast<int>(rpKeySelectedPlan->mPhases.size());
+                StepPhaseSelection(PhaseCount, -1);
                 return true;
             }
             if (InEvent == Event::Character('P'))
             {
                 const int PhaseCount =
-                    static_cast<int>(KeySelectedPlan.mPhases.size());
-                if (PhaseCount > 0)
-                {
-                    if (mSelectedPhaseIndex < 0)
-                    {
-                        mSelectedPhaseIndex = PhaseCount;
-                    }
-                    mSelectedPhaseIndex =
-                        (mSelectedPhaseIndex - 1 + PhaseCount) % PhaseCount;
-                    mSelectedLaneIndex = -1;
-                    mScrollState.mLanes.Reset();
-                    mScrollState.mFileManifest.Reset();
-                    mScrollState.mCodeSnippets.Reset();
-                }
+                    rpKeySelectedPlan == nullptr
+                        ? 0
+                        : static_cast<int>(rpKeySelectedPlan->mPhases.size());
+                StepPhaseSelection(PhaseCount, 1);
                 return true;
             }
 
             if (InEvent == Event::Character('w'))
             {
-                const FPhaseTaxonomy *rpTax = nullptr;
-                if (mSelectedPhaseIndex >= 0 &&
-                    mSelectedPhaseIndex <
-                        static_cast<int>(KeySelectedPlan.mPhases.size()))
-                {
-
-                    for (const FPhaseTaxonomy &T :
-                         KeySelectedPlan.mPhaseTaxonomies)
-                    {
-                        if (T.mPhaseIndex == mSelectedPhaseIndex)
-                        {
-                            rpTax = &T;
-                            break;
-                        }
-                    }
-                }
+                const FPhaseTaxonomy *rpTax = ResolveKeyTaxonomy();
                 if (rpTax != nullptr && rpTax->mWaveCount > 0)
                 {
                     mSelectedWaveIndex =
@@ -462,22 +562,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('W'))
             {
-                const FPhaseTaxonomy *rpTax = nullptr;
-                if (mSelectedPhaseIndex >= 0 &&
-                    mSelectedPhaseIndex <
-                        static_cast<int>(KeySelectedPlan.mPhases.size()))
-                {
-
-                    for (const FPhaseTaxonomy &T :
-                         KeySelectedPlan.mPhaseTaxonomies)
-                    {
-                        if (T.mPhaseIndex == mSelectedPhaseIndex)
-                        {
-                            rpTax = &T;
-                            break;
-                        }
-                    }
-                }
+                const FPhaseTaxonomy *rpTax = ResolveKeyTaxonomy();
                 if (rpTax != nullptr && rpTax->mWaveCount > 0)
                 {
                     mSelectedWaveIndex =
@@ -488,22 +573,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('l'))
             {
-                const FPhaseTaxonomy *rpTax = nullptr;
-                if (mSelectedPhaseIndex >= 0 &&
-                    mSelectedPhaseIndex <
-                        static_cast<int>(KeySelectedPlan.mPhases.size()))
-                {
-
-                    for (const FPhaseTaxonomy &T :
-                         KeySelectedPlan.mPhaseTaxonomies)
-                    {
-                        if (T.mPhaseIndex == mSelectedPhaseIndex)
-                        {
-                            rpTax = &T;
-                            break;
-                        }
-                    }
-                }
+                const FPhaseTaxonomy *rpTax = ResolveKeyTaxonomy();
                 if (rpTax != nullptr && !rpTax->mLanes.empty())
                 {
                     mSelectedLaneIndex = (mSelectedLaneIndex + 1) %
@@ -513,22 +583,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('L'))
             {
-                const FPhaseTaxonomy *rpTax = nullptr;
-                if (mSelectedPhaseIndex >= 0 &&
-                    mSelectedPhaseIndex <
-                        static_cast<int>(KeySelectedPlan.mPhases.size()))
-                {
-
-                    for (const FPhaseTaxonomy &T :
-                         KeySelectedPlan.mPhaseTaxonomies)
-                    {
-                        if (T.mPhaseIndex == mSelectedPhaseIndex)
-                        {
-                            rpTax = &T;
-                            break;
-                        }
-                    }
-                }
+                const FPhaseTaxonomy *rpTax = ResolveKeyTaxonomy();
                 if (rpTax != nullptr && !rpTax->mLanes.empty())
                 {
                     const int LaneCount =
@@ -540,22 +595,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('f'))
             {
-                const FPhaseTaxonomy *rpTax = nullptr;
-                if (mSelectedPhaseIndex >= 0 &&
-                    mSelectedPhaseIndex <
-                        static_cast<int>(KeySelectedPlan.mPhases.size()))
-                {
-
-                    for (const FPhaseTaxonomy &T :
-                         KeySelectedPlan.mPhaseTaxonomies)
-                    {
-                        if (T.mPhaseIndex == mSelectedPhaseIndex)
-                        {
-                            rpTax = &T;
-                            break;
-                        }
-                    }
-                }
+                const FPhaseTaxonomy *rpTax = ResolveKeyTaxonomy();
                 if (rpTax != nullptr && !rpTax->mFileManifest.empty())
                 {
                     ++mScrollState.mFileManifest.mOffset;
@@ -564,22 +604,7 @@ int DocWatchApp::Run()
             }
             if (InEvent == Event::Character('F'))
             {
-                const FPhaseTaxonomy *rpTax = nullptr;
-                if (mSelectedPhaseIndex >= 0 &&
-                    mSelectedPhaseIndex <
-                        static_cast<int>(KeySelectedPlan.mPhases.size()))
-                {
-
-                    for (const FPhaseTaxonomy &T :
-                         KeySelectedPlan.mPhaseTaxonomies)
-                    {
-                        if (T.mPhaseIndex == mSelectedPhaseIndex)
-                        {
-                            rpTax = &T;
-                            break;
-                        }
-                    }
-                }
+                const FPhaseTaxonomy *rpTax = ResolveKeyTaxonomy();
                 if (rpTax != nullptr && !rpTax->mFileManifest.empty())
                 {
                     if (mScrollState.mFileManifest.mOffset > 0)
@@ -594,27 +619,19 @@ int DocWatchApp::Run()
                 mbShowPhaseMetricView = !mbShowPhaseMetricView;
                 return true;
             }
-            if (InEvent == Event::F12)
+            if (const FWatchSidePaneBinding *rpBinding =
+                    FindWatchSidePaneToggle(InEvent))
             {
-                mbShowCodePane = !mbShowCodePane;
-                if (mbShowCodePane)
-                {
-                    mScrollState.mCodeSnippets.Reset();
-                }
+                ToggleSidePane(rpBinding->mPane);
                 return true;
             }
-            if (mbShowCodePane && InEvent == Event::Character('['))
+            if (InEvent == Event::Character('['))
             {
-                if (mScrollState.mCodeSnippets.mOffset > 0)
-                {
-                    --mScrollState.mCodeSnippets.mOffset;
-                }
-                return true;
+                return ScrollCurrentSidePane(-1);
             }
-            if (mbShowCodePane && InEvent == Event::Character(']'))
+            if (InEvent == Event::Character(']'))
             {
-                ++mScrollState.mCodeSnippets.mOffset;
-                return true;
+                return ScrollCurrentSidePane(1);
             }
             if (InEvent == Event::Character('`'))
             {
@@ -641,6 +658,7 @@ int DocWatchApp::Run()
                     [this, Snap = std::move(InSnapshot)]() mutable
                     {
                         mSnapshot = std::move(Snap);
+                        ++mSnapshotGeneration;
                         mTickCount++;
                     });
                 screen.PostEvent(ftxui::Event::Custom);

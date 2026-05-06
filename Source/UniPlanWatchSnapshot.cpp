@@ -19,6 +19,8 @@
 namespace UniPlan
 {
 
+static constexpr int kWatchFullDiscoveryPollInterval = 20;
+
 static void SplitLines(const std::string &InText,
                        std::vector<std::string> &OutLines)
 {
@@ -42,7 +44,7 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
 
     // Build PhaseItem list from bundle phases. Pure V4 projection — every
     // column the watch TUI shows reads typed members off FPhaseRecord.
-    // Runtime metrics feed the PHASE DETAIL `Design` column and metrics
+    // Runtime metrics feed the PHASE LIST `Design` column and metrics
     // view. They are computed from the loaded bundle only and never written
     // back into .Plan.json.
     for (size_t I = 0; I < InBundle.mPhases.size(); ++I)
@@ -56,7 +58,23 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
         Item.mOutput = Phase.mOutput;
         Item.mDone = Phase.mLifecycle.mDone;
         Item.mRemaining = Phase.mLifecycle.mRemaining;
+        Item.mBlockers = Phase.mLifecycle.mBlockers;
+        Item.mStartedAt = Phase.mLifecycle.mStartedAt;
+        Item.mCompletedAt = Phase.mLifecycle.mCompletedAt;
+        Item.mAgentContext = Phase.mLifecycle.mAgentContext;
+        Item.mInvestigation = Phase.mDesign.mInvestigation;
+        Item.mReadinessGate = Phase.mDesign.mReadinessGate;
+        Item.mHandoff = Phase.mDesign.mHandoff;
+        Item.mCodeEntityContract = Phase.mDesign.mCodeEntityContract;
+        Item.mBestPractices = Phase.mDesign.mBestPractices;
+        Item.mMultiPlatforming = Phase.mDesign.mMultiPlatforming;
+        Item.mDependencies = Phase.mDesign.mDependencies;
+        Item.mValidationCommands = Phase.mDesign.mValidationCommands;
+        Item.mTesting = Phase.mTesting;
         Item.mCodeSnippets = Phase.mDesign.mCodeSnippets;
+        Item.mbNoFileManifest = Phase.mbNoFileManifest;
+        Item.mFileManifestSkipReason = Phase.mFileManifestSkipReason;
+        Item.mOrigin = Phase.mOrigin;
         Item.mMetrics = ComputePhaseDepthMetrics(InBundle, I);
         Item.mV4DesignChars = Item.mMetrics.mDesignChars;
         Summary.mPhases.push_back(std::move(Item));
@@ -313,22 +331,35 @@ FDocWatchSnapshot BuildWatchSnapshotCached(
     const fs::path RepoRoot = NormalizeRepoRootPath(InRepoRoot);
 
     const auto DiscoveryStart = std::chrono::steady_clock::now();
-    FBundleFileIndexResult BundleIndex;
-    std::string BundleIndexError;
-    if (!TryBuildBundleFileIndex(RepoRoot, BundleIndex, BundleIndexError))
+    FWatchFileIndexResult FileIndex;
+    std::string FileIndexError;
+    bool bUsedFastDiscovery = false;
+    if (InUseCache && !InForceRefresh && InOutCache.mbFileIndexValid &&
+        InOutCache.mPollsSinceFullDiscovery <
+            kWatchFullDiscoveryPollInterval)
     {
-        throw std::runtime_error(BundleIndexError);
+        bUsedFastDiscovery = TryRefreshWatchFileIndexFast(
+            RepoRoot, InOutCache.mFileIndex, FileIndex, FileIndexError);
     }
+    if (!bUsedFastDiscovery)
+    {
+        FileIndexError.clear();
+        if (!TryBuildWatchFileIndex(RepoRoot, FileIndex, FileIndexError))
+        {
+            throw std::runtime_error(FileIndexError);
+        }
+        InOutCache.mPollsSinceFullDiscovery = 0;
+    }
+    else
+    {
+        ++InOutCache.mPollsSinceFullDiscovery;
+    }
+
+    FBundleFileIndexResult BundleIndex = FileIndex.mBundleIndex;
+    FMarkdownFileIndexResult MarkdownIndex = FileIndex.mMarkdownIndex;
     Snapshot.mWarnings.insert(Snapshot.mWarnings.end(),
                               BundleIndex.mWarnings.begin(),
                               BundleIndex.mWarnings.end());
-
-    FMarkdownFileIndexResult MarkdownIndex;
-    std::string MarkdownIndexError;
-    if (!TryBuildMarkdownFileIndex(RepoRoot, MarkdownIndex, MarkdownIndexError))
-    {
-        throw std::runtime_error(MarkdownIndexError);
-    }
     Snapshot.mWarnings.insert(Snapshot.mWarnings.end(),
                               MarkdownIndex.mWarnings.begin(),
                               MarkdownIndex.mWarnings.end());
@@ -478,6 +509,8 @@ FDocWatchSnapshot BuildWatchSnapshotCached(
 
     if (InUseCache)
     {
+        InOutCache.mFileIndex = std::move(FileIndex);
+        InOutCache.mbFileIndexValid = true;
         InOutCache.mBundleSignature = BundleIndex.mSignature;
         InOutCache.mMarkdownSignature = MarkdownIndex.mSignature;
         InOutCache.mbBundleSignatureValid = true;

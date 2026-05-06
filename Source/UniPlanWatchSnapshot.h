@@ -175,8 +175,11 @@ struct FWatchCachedBundle
 struct FWatchSnapshotCache
 {
     std::map<std::string, FWatchCachedBundle> mBundlesByPath;
+    FWatchFileIndexResult mFileIndex;
     uint64_t mBundleSignature = 0;
     uint64_t mMarkdownSignature = 0;
+    int mPollsSinceFullDiscovery = 0;
+    bool mbFileIndexValid = false;
     bool mbBundleSignatureValid = false;
     bool mbMarkdownSignatureValid = false;
     bool mbValidationValid = false;

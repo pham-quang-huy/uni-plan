@@ -2,6 +2,7 @@
 
 #include "UniPlanEnums.h"
 #include "UniPlanPhaseMetrics.h"
+#include "UniPlanTopicTypes.h"
 
 #include <cstdint>
 #include <string>
@@ -142,7 +143,7 @@ struct BlockerItem
 // mOutput, mDone, mRemaining) — no key/value bag and no V3 fuzzy-match
 // heuristics. Populated by BuildPlanSummaryFromBundle from FPhaseRecord.
 //
-// `mV4DesignChars` drives the default PHASE DETAIL `Design` column. The
+// `mV4DesignChars` drives the default PHASE LIST `Design` column. The
 // full `mMetrics` payload drives the metrics view and the `phase metric`
 // CLI command. Both are runtime projections computed from existing bundle
 // fields; no metric is persisted into .Plan.json.
@@ -155,7 +156,23 @@ struct PhaseItem
     std::string mOutput;
     std::string mDone;
     std::string mRemaining;
+    std::string mBlockers;
+    std::string mStartedAt;
+    std::string mCompletedAt;
+    std::string mAgentContext;
+    std::string mInvestigation;
+    std::string mReadinessGate;
+    std::string mHandoff;
+    std::string mCodeEntityContract;
+    std::string mBestPractices;
+    std::string mMultiPlatforming;
+    std::vector<FBundleReference> mDependencies;
+    std::vector<FValidationCommand> mValidationCommands;
+    std::vector<FTestingRecord> mTesting;
     std::string mCodeSnippets;
+    bool mbNoFileManifest = false;
+    std::string mFileManifestSkipReason;
+    EPhaseOrigin mOrigin = EPhaseOrigin::NativeV4;
     size_t mV4DesignChars = 0; // ComputePhaseDesignChars(FPhaseRecord)
     FPhaseRuntimeMetrics mMetrics;
 };

@@ -352,7 +352,7 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "--all-phases]\n"
         "                             [--status <filter>] [--human]\n\n",
         "Compute runtime-only phase depth metrics for AI audits and the\n"
-        "watch PHASE DETAIL metrics view. This command never writes metrics\n"
+        "watch PHASE LIST metrics view. This command never writes metrics\n"
         "into .Plan.json and does not require a plan schema migration. JSON\n"
         "rows include advisory bloat counters: largest_design_field_chars,\n"
         "repeated_design_block_count, and design_bloat_ratio.\n\n",

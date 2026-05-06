@@ -38,6 +38,12 @@ struct FMarkdownFileIndexResult
     uint64_t mSignature = 0;
 };
 
+struct FWatchFileIndexResult
+{
+    FBundleFileIndexResult mBundleIndex;
+    FMarkdownFileIndexResult mMarkdownIndex;
+};
+
 bool operator==(const FFileFingerprint &InLeft,
                 const FFileFingerprint &InRight);
 bool operator!=(const FFileFingerprint &InLeft,
@@ -49,5 +55,12 @@ bool TryBuildBundleFileIndex(const fs::path &InRepoRoot,
 bool TryBuildMarkdownFileIndex(const fs::path &InRepoRoot,
                                FMarkdownFileIndexResult &OutIndex,
                                std::string &OutError);
+bool TryBuildWatchFileIndex(const fs::path &InRepoRoot,
+                            FWatchFileIndexResult &OutIndex,
+                            std::string &OutError);
+bool TryRefreshWatchFileIndexFast(const fs::path &InRepoRoot,
+                                  const FWatchFileIndexResult &InCachedIndex,
+                                  FWatchFileIndexResult &OutIndex,
+                                  std::string &OutError);
 
 } // namespace UniPlan

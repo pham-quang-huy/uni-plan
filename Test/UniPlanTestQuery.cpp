@@ -1993,7 +1993,7 @@ TEST_F(FBundleTestFixture, CatalogAdvertisesTypedArrayAndGraphCommands)
 
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["schema"].get<std::string>(), "uni-plan-catalog-v1");
-    EXPECT_EQ(Json["cli_version"].get<std::string>(), "0.109.0");
+    EXPECT_EQ(Json["cli_version"].get<std::string>(), UniPlan::kCliVersion);
 
     ASSERT_NE(FindCatalogSubcommand(Json, "priority-grouping", "add"),
               nullptr);

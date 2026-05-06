@@ -1,4 +1,5 @@
 #include "UniPlanWatchScroll.h"
+#include "UniPlanWatchScreenDraw.h"
 
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
@@ -18,30 +19,13 @@ namespace UniPlan
 namespace
 {
 
-static bool IsDrawableCell(const ftxui::Screen &InScreen, const int InX,
-                           const int InY)
-{
-    return InX >= 0 && InX < InScreen.dimx() && InY >= 0 &&
-           InY < InScreen.dimy() && InX >= InScreen.stencil.x_min &&
-           InX <= InScreen.stencil.x_max && InY >= InScreen.stencil.y_min &&
-           InY <= InScreen.stencil.y_max;
-}
-
 static void DrawDimText(ftxui::Screen &InScreen, const int InX,
                         const int InY, const std::string &InText)
 {
-    int X = InX;
-    for (const std::string &Glyph : ftxui::Utf8ToGlyphs(InText))
-    {
-        if (IsDrawableCell(InScreen, X, InY))
-        {
-            ftxui::Pixel &Cell = InScreen.PixelAt(X, InY);
-            Cell.character = Glyph;
-            Cell.foreground_color = ftxui::Color::GrayDark;
-            Cell.dim = true;
-        }
-        ++X;
-    }
+    DrawWatchScreenText(
+        InScreen, InX, InY, InText,
+        FWatchScreenTextStyle{ftxui::Color::GrayDark, ftxui::Color::Default,
+                              true, false, false});
 }
 
 class ScrollFrameNode : public ftxui::Node
@@ -146,7 +130,7 @@ class ScrollFrameNode : public ftxui::Node
                              const std::string &InLabel) const
     {
         DrawDimText(InScreen, box_.x_min, InY,
-                    "  " + InArrow + " " + std::to_string(InCount) + " " +
+                    InArrow + " " + std::to_string(InCount) + " " +
                         InLabel);
     }
 

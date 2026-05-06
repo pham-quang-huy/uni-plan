@@ -1100,7 +1100,7 @@ int RunTestingListCommand(const std::vector<std::string> &InArgs,
 // tests and downstream tooling that emit add-command previews.
 static void SuppressUnusedWarning_CrudHelpers()
 {
-    (void)StatusOrDefault;
+    (void)&StatusOrDefault;
 }
 
 } // namespace UniPlan

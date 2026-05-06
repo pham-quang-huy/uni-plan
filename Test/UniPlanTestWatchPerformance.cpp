@@ -12,6 +12,7 @@
 #include "UniPlanWatchPanels.h"
 
 #include <ftxui/dom/node.hpp>
+#include <ftxui/screen/color.hpp>
 #include <ftxui/screen/screen.hpp>
 
 namespace
@@ -67,6 +68,19 @@ bool HasWarningContaining(const UniPlan::FDocWatchSnapshot &InSnapshot,
     for (const std::string &Warning : InSnapshot.mWarnings)
     {
         if (Warning.find(InNeedle) != std::string::npos)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool BundleIndexContainsTopic(const UniPlan::FBundleFileIndexResult &InIndex,
+                              const std::string &InTopic)
+{
+    for (const UniPlan::FBundleFileIndexEntry &Entry : InIndex.mBundles)
+    {
+        if (Entry.mTopicKey == InTopic)
         {
             return true;
         }
@@ -165,6 +179,127 @@ bool TryFindTextDim(const ftxui::Screen &InScreen,
     return false;
 }
 
+bool TryFindTextForeground(const ftxui::Screen &InScreen,
+                           const std::string &InNeedle,
+                           ftxui::Color &OutColor)
+{
+    const int NeedleCells = static_cast<int>(InNeedle.size());
+    for (int Y = 0; Y < InScreen.dimy(); ++Y)
+    {
+        for (int X = 0; X + NeedleCells <= InScreen.dimx(); ++X)
+        {
+            bool bMatched = true;
+            for (int Index = 0; Index < NeedleCells; ++Index)
+            {
+                const std::string Expected(
+                    1, InNeedle[static_cast<size_t>(Index)]);
+                if (InScreen.PixelAt(X + Index, Y).character != Expected)
+                {
+                    bMatched = false;
+                    break;
+                }
+            }
+            if (bMatched)
+            {
+                OutColor = InScreen.PixelAt(X, Y).foreground_color;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool TryFindTextBackground(const ftxui::Screen &InScreen,
+                           const std::string &InNeedle,
+                           ftxui::Color &OutColor)
+{
+    const int NeedleCells = static_cast<int>(InNeedle.size());
+    for (int Y = 0; Y < InScreen.dimy(); ++Y)
+    {
+        for (int X = 0; X + NeedleCells <= InScreen.dimx(); ++X)
+        {
+            bool bMatched = true;
+            for (int Index = 0; Index < NeedleCells; ++Index)
+            {
+                const std::string Expected(
+                    1, InNeedle[static_cast<size_t>(Index)]);
+                if (InScreen.PixelAt(X + Index, Y).character != Expected)
+                {
+                    bMatched = false;
+                    break;
+                }
+            }
+            if (bMatched)
+            {
+                OutColor = InScreen.PixelAt(X, Y).background_color;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool TryFindTextBackgroundAfter(const ftxui::Screen &InScreen,
+                                const std::string &InNeedle,
+                                const int InCellsAfter,
+                                ftxui::Color &OutColor)
+{
+    const int NeedleCells = static_cast<int>(InNeedle.size());
+    for (int Y = 0; Y < InScreen.dimy(); ++Y)
+    {
+        for (int X = 0; X + NeedleCells <= InScreen.dimx(); ++X)
+        {
+            bool bMatched = true;
+            for (int Index = 0; Index < NeedleCells; ++Index)
+            {
+                const std::string Expected(
+                    1, InNeedle[static_cast<size_t>(Index)]);
+                if (InScreen.PixelAt(X + Index, Y).character != Expected)
+                {
+                    bMatched = false;
+                    break;
+                }
+            }
+            if (bMatched)
+            {
+                const int TargetX = X + NeedleCells + InCellsAfter;
+                if (TargetX >= InScreen.dimx())
+                {
+                    return false;
+                }
+                OutColor = InScreen.PixelAt(TargetX, Y).background_color;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ScreenHasControlGlyph(const ftxui::Screen &InScreen)
+{
+    for (int Y = 0; Y < InScreen.dimy(); ++Y)
+    {
+        for (int X = 0; X < InScreen.dimx(); ++X)
+        {
+            for (const unsigned char Character :
+                 InScreen.PixelAt(X, Y).character)
+            {
+                if (Character < 0x20 || Character == 0x7f)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+ftxui::Color PhaseDetailsCodeBackgroundForTest()
+{
+    return ftxui::Color(static_cast<uint8_t>(0), static_cast<uint8_t>(24),
+                        static_cast<uint8_t>(40));
+}
+
 std::vector<UniPlan::FWatchPlanSummary>
 MakeWatchPlanRows(const std::string &InPrefix, const std::string &InStatus,
                   int InCount)
@@ -191,7 +326,7 @@ MakeWatchPlanRows(const std::string &InPrefix, const std::string &InStatus,
     return Plans;
 }
 
-UniPlan::FWatchPlanSummary MakePhaseDetailPlan(const int InPhaseCount)
+UniPlan::FWatchPlanSummary MakePhaseListPlan(const int InPhaseCount)
 {
     UniPlan::FWatchPlanSummary Plan;
     Plan.mTopicKey = "PhaseScroll";
@@ -216,7 +351,7 @@ UniPlan::FWatchPlanSummary MakePhaseDetailPlan(const int InPhaseCount)
 
 UniPlan::FWatchPlanSummary MakeLaneTaxonomyPlan(const int InLaneCount)
 {
-    UniPlan::FWatchPlanSummary Plan = MakePhaseDetailPlan(1);
+    UniPlan::FWatchPlanSummary Plan = MakePhaseListPlan(1);
     Plan.mTopicKey = "LaneScroll";
 
     UniPlan::FPhaseTaxonomy Taxonomy;
@@ -235,6 +370,58 @@ UniPlan::FWatchPlanSummary MakeLaneTaxonomyPlan(const int InLaneCount)
     return Plan;
 }
 
+UniPlan::FWatchPlanSummary MakeRichTaxonomyPlan(const int InLaneCount,
+                                                const int InJobsPerLane,
+                                                const int InTasksPerJob)
+{
+    UniPlan::FWatchPlanSummary Plan = MakePhaseListPlan(1);
+    Plan.mTopicKey = "TaxonomyCache";
+
+    UniPlan::FPhaseTaxonomy Taxonomy;
+    Taxonomy.mPhaseIndex = 0;
+    Taxonomy.mWaveCount = 2;
+    for (int LaneIndex = 0; LaneIndex < InLaneCount; ++LaneIndex)
+    {
+        UniPlan::FLaneRecord Lane;
+        Lane.mStatus = LaneIndex % 2 == 0
+                           ? UniPlan::EExecutionStatus::Completed
+                           : UniPlan::EExecutionStatus::InProgress;
+        Lane.mScope = "Lane scope " + std::to_string(LaneIndex);
+        Lane.mExitCriteria = "Lane exit " + std::to_string(LaneIndex);
+        Taxonomy.mLanes.push_back(std::move(Lane));
+
+        for (int JobIndex = 0; JobIndex < InJobsPerLane; ++JobIndex)
+        {
+            UniPlan::FJobRecord Job;
+            Job.mWave = JobIndex % 2;
+            Job.mLane = LaneIndex;
+            Job.mStatus = JobIndex % 3 == 0
+                              ? UniPlan::EExecutionStatus::Completed
+                              : UniPlan::EExecutionStatus::NotStarted;
+            Job.mScope = "Job scope L" + std::to_string(LaneIndex) + " J" +
+                         std::to_string(JobIndex);
+
+            for (int TaskIndex = 0; TaskIndex < InTasksPerJob; ++TaskIndex)
+            {
+                UniPlan::FTaskRecord Task;
+                Task.mStatus = TaskIndex % 2 == 0
+                                   ? UniPlan::EExecutionStatus::Completed
+                                   : UniPlan::EExecutionStatus::NotStarted;
+                Task.mDescription =
+                    "Task description " + std::to_string(TaskIndex);
+                Task.mEvidence =
+                    "Task evidence " + std::to_string(TaskIndex);
+                Job.mTasks.push_back(Task);
+                Taxonomy.mTasks.push_back(std::move(Task));
+            }
+            Taxonomy.mJobs.push_back(std::move(Job));
+        }
+    }
+
+    Plan.mPhaseTaxonomies.push_back(std::move(Taxonomy));
+    return Plan;
+}
+
 UniPlan::FWatchPlanSummary MakeCodeSnippetPlan(const std::string &InSnippets)
 {
     UniPlan::FWatchPlanSummary Plan;
@@ -248,6 +435,134 @@ UniPlan::FWatchPlanSummary MakeCodeSnippetPlan(const std::string &InSnippets)
     Phase.mStatusRaw = "in_progress";
     Phase.mCodeSnippets = InSnippets;
     Plan.mPhases.push_back(std::move(Phase));
+
+    return Plan;
+}
+
+UniPlan::FWatchPlanSummary MakePhaseDetailsPlan()
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "PhaseSide";
+    Plan.mPlanStatus = "in_progress";
+    Plan.mPhaseCount = 1;
+
+    UniPlan::PhaseItem Phase;
+    Phase.mPhaseKey = "0";
+    Phase.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Phase.mStatusRaw = "in_progress";
+    Phase.mScope =
+        "Build a durable side pane for selected phase details";
+    Phase.mOutput = "Phase details render from typed snapshot fields";
+    Phase.mDone = "Panel plumbing implemented";
+    Phase.mRemaining = "Cross-platform verification";
+    Phase.mBlockers = "No blocker";
+    Phase.mStartedAt = "2026-05-06T08:00:00Z";
+    Phase.mCompletedAt = "";
+    Phase.mAgentContext = "Use the watch panel architecture";
+    Phase.mInvestigation = "Side panes need replace-one-at-a-time behavior";
+    Phase.mCodeEntityContract = "No raw JSON access in watch projection";
+    Phase.mBestPractices = "Keep panels stateless";
+    Phase.mMultiPlatforming = "Windows and macOS share render code";
+    Phase.mReadinessGate = "Tests cover gutter and scroll behavior";
+    Phase.mHandoff = "F5 opens phase details, F12 opens code";
+    Phase.mCodeSnippets = "```cpp\nint RawCodeSentinel = 1;\n```";
+    Phase.mV4DesignChars = 1234;
+
+    UniPlan::FBundleReference Dependency;
+    Dependency.mKind = UniPlan::EDependencyKind::Phase;
+    Dependency.mTopic = "Audio";
+    Dependency.mPhase = 2;
+    Dependency.mNote = "phase detail dependency";
+    Phase.mDependencies.push_back(std::move(Dependency));
+
+    UniPlan::FValidationCommand Command;
+    Command.mPlatform = UniPlan::EPlatformScope::Windows;
+    Command.mCommand = ".\\build.ps1 -Tests";
+    Command.mDescription = "Windows test suite passes";
+    Phase.mValidationCommands.push_back(std::move(Command));
+
+    UniPlan::FTestingRecord Testing;
+    Testing.mActor = UniPlan::ETestingActor::Automated;
+    Testing.mSession = "watch-panel";
+    Testing.mStep = "Render side pane";
+    Testing.mAction = "Open F5";
+    Testing.mExpected = "Phase details visible";
+    Testing.mEvidence = "unit test";
+    Phase.mTesting.push_back(std::move(Testing));
+
+    Plan.mPhases.push_back(std::move(Phase));
+
+    UniPlan::FPhaseTaxonomy Taxonomy;
+    Taxonomy.mPhaseIndex = 0;
+    Taxonomy.mWaveCount = 1;
+
+    UniPlan::FLaneRecord Lane;
+    Lane.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Lane.mScope = "Lane scope";
+    Lane.mExitCriteria = "Lane exit";
+    Taxonomy.mLanes.push_back(std::move(Lane));
+
+    UniPlan::FTaskRecord Task;
+    Task.mStatus = UniPlan::EExecutionStatus::NotStarted;
+    Task.mDescription = "Task description";
+    Task.mEvidence = "Task evidence";
+    Task.mNotes = "Task notes";
+
+    UniPlan::FJobRecord Job;
+    Job.mWave = 0;
+    Job.mLane = 0;
+    Job.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Job.mScope = "Job scope";
+    Job.mOutput = "Job output";
+    Job.mExitCriteria = "Job exit";
+    Job.mStartedAt = "2026-05-06T08:05:00Z";
+    Job.mTasks.push_back(Task);
+    Taxonomy.mJobs.push_back(std::move(Job));
+    Taxonomy.mTasks.push_back(std::move(Task));
+
+    UniPlan::FFileManifestItem File;
+    File.mAction = UniPlan::EFileAction::Modify;
+    File.mFilePath = "Source/PhaseSide.cpp";
+    File.mDescription = "phase side pane implementation";
+    Taxonomy.mFileManifest.push_back(std::move(File));
+
+    Plan.mPhaseTaxonomies.push_back(std::move(Taxonomy));
+    return Plan;
+}
+
+UniPlan::FWatchPlanSummary MakePlanDetailWrapPlan()
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "WrapPlan";
+    Plan.mPlanStatus = "in_progress";
+    Plan.mPhaseCount = 1;
+    Plan.mSummaryLines.push_back(
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda");
+    Plan.mGoalStatements.push_back(
+        "Extend the renderer with stable word wrapping for readable panels");
+    Plan.mNonGoalStatements.push_back(
+        "Do not mutate stored prose or add ellipsis truncation");
+
+    UniPlan::FRiskEntry Risk;
+    Risk.mSeverity = UniPlan::ERiskSeverity::High;
+    Risk.mStatus = UniPlan::ERiskStatus::Open;
+    Risk.mStatement =
+        "Plan detail prose can overflow narrow panes unless wrapping works";
+    Plan.mRiskEntries.push_back(std::move(Risk));
+
+    UniPlan::FNextActionEntry Action;
+    Action.mOrder = 1;
+    Action.mStatus = UniPlan::EActionStatus::Pending;
+    Action.mStatement =
+        "Verify continuation rows keep words whole while using blank gutters";
+    Plan.mNextActionEntries.push_back(std::move(Action));
+
+    UniPlan::FAcceptanceCriterionEntry Criterion;
+    Criterion.mId = "WRAP-AC1";
+    Criterion.mStatus = UniPlan::ECriterionStatus::Met;
+    Criterion.mStatement =
+        "Wrapped plan detail text renders with line numbers and no padding";
+    Plan.mAcceptanceCriteria.push_back(std::move(Criterion));
 
     return Plan;
 }
@@ -710,10 +1025,10 @@ TEST_F(FBundleTestFixture, PlanNavigatorPanelsUseEdgeScroll)
 
 TEST_F(FBundleTestFixture, SelectedRowPanelsUseEdgeScroll)
 {
-    const UniPlan::PhaseDetailPanel PhasePanel;
+    const UniPlan::PhaseListPanel PhasePanel;
     const UniPlan::ExecutionTaxonomyPanel TaxonomyPanel;
 
-    const UniPlan::FWatchPlanSummary PhasePlan = MakePhaseDetailPlan(30);
+    const UniPlan::FWatchPlanSummary PhasePlan = MakePhaseListPlan(30);
     UniPlan::FWatchScrollRegionState PhaseScroll;
     const std::string PhaseBeforeEdge =
         StripAnsiCodes(RenderElementToString(
@@ -766,6 +1081,59 @@ TEST_F(FBundleTestFixture, SelectedRowPanelsUseEdgeScroll)
     EXPECT_NE(LaneAfterEdge.find("above"), std::string::npos);
 }
 
+TEST_F(FBundleTestFixture, ExecutionTaxonomyPanelNonFocusSkipsRowModels)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakeRichTaxonomyPlan(8, 4, 3);
+    const UniPlan::ExecutionTaxonomyPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    UniPlan::FWatchExecutionTaxonomyLayoutCache Cache;
+
+    const std::string Rendered = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Plan, 0, -1, -1, false, ScrollState, Cache, 44), 120,
+        5));
+
+    EXPECT_EQ(Cache.mBuildCount, 0);
+    EXPECT_TRUE(Cache.mLanes.empty());
+    EXPECT_TRUE(Cache.mJobs.empty());
+    EXPECT_TRUE(Cache.mTasks.empty());
+    EXPECT_NE(Rendered.find("8 lanes"), std::string::npos);
+    EXPECT_NE(Rendered.find("32 jobs"), std::string::npos);
+    EXPECT_EQ(Rendered.find("[L]ANES"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, ExecutionTaxonomyPanelFocusReusesRowModels)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakeRichTaxonomyPlan(4, 3, 2);
+    const UniPlan::ExecutionTaxonomyPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    UniPlan::FWatchExecutionTaxonomyLayoutCache Cache;
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, -1, -1, true, ScrollState, Cache, 45), 140,
+        28);
+    ASSERT_EQ(Cache.mBuildCount, 1);
+    EXPECT_EQ(Cache.mLanes.size(), 4);
+    EXPECT_EQ(Cache.mJobs.size(), 12);
+    EXPECT_EQ(Cache.mTasks.size(), 24);
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, -1, -1, true, ScrollState, Cache, 45), 140,
+        28);
+    EXPECT_EQ(Cache.mBuildCount, 1);
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, -1, 2, true, ScrollState, Cache, 45), 140,
+        28);
+    EXPECT_EQ(Cache.mBuildCount, 2);
+    EXPECT_EQ(Cache.mJobs.size(), 3);
+    EXPECT_EQ(Cache.mTasks.size(), 6);
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, -1, 2, true, ScrollState, Cache, 46), 140,
+        28);
+    EXPECT_EQ(Cache.mBuildCount, 3);
+}
+
 TEST_F(FBundleTestFixture, FileManifestPanelScrollIndicatorsAreStable)
 {
     const UniPlan::FileManifestPanel Panel;
@@ -779,10 +1147,45 @@ TEST_F(FBundleTestFixture, FileManifestPanelScrollIndicatorsAreStable)
     EXPECT_NE(First.find("FILES: P1 (12)"), std::string::npos);
     EXPECT_NE(First.find("File-00.cpp"), std::string::npos);
     EXPECT_NE(First.find("below"), std::string::npos);
+    EXPECT_NE(First.find("\xe2\x86\x93 "), std::string::npos);
+    EXPECT_EQ(First.find("  \xe2\x86\x93"), std::string::npos);
 
     const std::string Second = StripAnsiCodes(RenderElementToString(
         Panel.Render(Taxonomy, ScrollState), 80, 8));
     EXPECT_EQ(Second, First);
+}
+
+TEST_F(FBundleTestFixture, FileManifestPanelCachesAndVirtualizesViewport)
+{
+    const UniPlan::FileManifestPanel Panel;
+    const UniPlan::FPhaseTaxonomy Taxonomy = MakeFileManifestTaxonomy(40);
+    UniPlan::FWatchScrollRegionState ScrollState;
+    UniPlan::FWatchFileManifestLayoutCache Cache;
+
+    const std::string First = StripAnsiCodes(RenderElementToString(
+        Panel.Render("FileCache", Taxonomy, ScrollState, Cache, 50), 80, 8));
+    ASSERT_EQ(Cache.mBuildCount, 1);
+    ASSERT_EQ(Cache.mVisualBuildCount, 1);
+    EXPECT_NE(First.find("File-00.cpp"), std::string::npos);
+    EXPECT_EQ(First.find("File-39.cpp"), std::string::npos);
+    EXPECT_GT(ScrollState.mMaxOffset, 0);
+
+    const std::string Second = StripAnsiCodes(RenderElementToString(
+        Panel.Render("FileCache", Taxonomy, ScrollState, Cache, 50), 80, 8));
+    EXPECT_EQ(Cache.mBuildCount, 1);
+    EXPECT_EQ(Cache.mVisualBuildCount, 1);
+    EXPECT_EQ(Second, First);
+
+    ScrollState.mOffset = 1;
+    const std::string Scrolled = StripAnsiCodes(RenderElementToString(
+        Panel.Render("FileCache", Taxonomy, ScrollState, Cache, 50), 80, 8));
+    EXPECT_EQ(Cache.mBuildCount, 1);
+    EXPECT_EQ(Cache.mVisualBuildCount, 1);
+    EXPECT_NE(Scrolled.find("above"), std::string::npos);
+
+    RenderElementToString(
+        Panel.Render("FileCache", Taxonomy, ScrollState, Cache, 51), 80, 8);
+    EXPECT_EQ(Cache.mBuildCount, 2);
 }
 
 TEST_F(FBundleTestFixture, WatchSnapshotKeepsManifestOnlyPhaseTaxonomy)
@@ -860,6 +1263,57 @@ TEST_F(FBundleTestFixture, WatchSnapshotProjectsPhaseCodeSnippets)
     ASSERT_NE(Plan, nullptr);
     ASSERT_FALSE(Plan->mPhases.empty());
     EXPECT_EQ(Plan->mPhases[0].mCodeSnippets, Snippets);
+}
+
+TEST_F(FBundleTestFixture, WatchSnapshotProjectsPhaseDetailsFields)
+{
+    CreateMinimalFixture("PhaseDetails", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "PhaseDetails", "--phase", "0",
+         "--scope", "Snapshot scope",
+         "--output", "Snapshot output",
+         "--done", "Snapshot done",
+         "--remaining", "Snapshot remaining",
+         "--blockers", "Snapshot blocker",
+         "--investigation", "Snapshot investigation",
+         "--code-entity-contract", "Snapshot contract",
+         "--best-practices", "Snapshot practices",
+         "--multi-platforming", "Snapshot platform notes",
+         "--readiness-gate", "Snapshot readiness",
+         "--handoff", "Snapshot handoff",
+         "--no-file-manifest", "true",
+         "--no-file-manifest-reason", "Snapshot no files",
+         "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0) << mCapturedStderr;
+
+    UniPlan::FWatchSnapshotCache Cache;
+    const UniPlan::FDocWatchSnapshot Snapshot =
+        UniPlan::BuildWatchSnapshotCached(mRepoRoot.string(), true, "", false,
+                                          Cache, true);
+    const UniPlan::FWatchPlanSummary *Plan =
+        FindPlan(Snapshot, "PhaseDetails");
+    ASSERT_NE(Plan, nullptr);
+    ASSERT_FALSE(Plan->mPhases.empty());
+    const UniPlan::PhaseItem &Phase = Plan->mPhases[0];
+
+    EXPECT_EQ(Phase.mScope, "Snapshot scope");
+    EXPECT_EQ(Phase.mOutput, "Snapshot output");
+    EXPECT_EQ(Phase.mDone, "Snapshot done");
+    EXPECT_EQ(Phase.mRemaining, "Snapshot remaining");
+    EXPECT_EQ(Phase.mBlockers, "Snapshot blocker");
+    EXPECT_EQ(Phase.mInvestigation, "Snapshot investigation");
+    EXPECT_EQ(Phase.mCodeEntityContract, "Snapshot contract");
+    EXPECT_EQ(Phase.mBestPractices, "Snapshot practices");
+    EXPECT_EQ(Phase.mMultiPlatforming, "Snapshot platform notes");
+    EXPECT_EQ(Phase.mReadinessGate, "Snapshot readiness");
+    EXPECT_EQ(Phase.mHandoff, "Snapshot handoff");
+    EXPECT_TRUE(Phase.mbNoFileManifest);
+    EXPECT_EQ(Phase.mFileManifestSkipReason, "Snapshot no files");
 }
 
 TEST_F(FBundleTestFixture, CodeSnippetPanelRendersLineNumbersAndTitle)
@@ -975,11 +1429,8 @@ TEST_F(FBundleTestFixture, CodeSnippetPanelWrapsAndScrollsOneVisualLine)
 {
     const std::string Snippet =
         "first\n"
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n"
+        "alpha bravo charlie delta echo foxtrot golf hotel india juliet "
+        "kilo lima mike november oscar papa quebec romeo sierra tango\n"
         "final sentinel WRAPTAIL";
     const UniPlan::FWatchPlanSummary Plan = MakeCodeSnippetPlan(Snippet);
 
@@ -990,12 +1441,16 @@ TEST_F(FBundleTestFixture, CodeSnippetPanelWrapsAndScrollsOneVisualLine)
     ASSERT_GT(ScrollState.mMaxOffset, 0);
     EXPECT_EQ(ScrollState.mOffset, 0);
     EXPECT_NE(First.find("below"), std::string::npos);
+    EXPECT_NE(First.find("\xe2\x86\x93 "), std::string::npos);
+    EXPECT_EQ(First.find("  \xe2\x86\x93"), std::string::npos);
 
     ++ScrollState.mOffset;
     const std::string Second = StripAnsiCodes(
         RenderElementToString(Panel.Render(Plan, 0, ScrollState), 36, 7));
     EXPECT_EQ(ScrollState.mOffset, 1);
     EXPECT_NE(Second.find("above"), std::string::npos);
+    EXPECT_NE(Second.find("\xe2\x86\x91 "), std::string::npos);
+    EXPECT_EQ(Second.find("  \xe2\x86\x91"), std::string::npos);
 
     ScrollState.mOffset = 999;
     const std::string Last = StripAnsiCodes(
@@ -1005,7 +1460,331 @@ TEST_F(FBundleTestFixture, CodeSnippetPanelWrapsAndScrollsOneVisualLine)
     EXPECT_EQ(Last.find("..."), std::string::npos);
 }
 
-TEST_F(FBundleTestFixture, WatchStatusBarListsCodePaneKeys)
+TEST_F(FBundleTestFixture, CodeSnippetPanelCachesWrappedRows)
+{
+    const std::string Snippet =
+        "first\n"
+        "alpha bravo charlie delta echo foxtrot golf hotel india juliet "
+        "kilo lima mike november oscar papa quebec romeo sierra tango\n"
+        "final sentinel";
+    const UniPlan::FWatchPlanSummary Plan = MakeCodeSnippetPlan(Snippet);
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    UniPlan::FWatchCodeSnippetLayoutCache Cache;
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, ScrollState, Cache, 60), 36, 7);
+    ASSERT_EQ(Cache.mLogicalBuildCount, 1);
+    ASSERT_EQ(Cache.mVisualBuildCount, 1);
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, ScrollState, Cache, 60), 36, 7);
+    EXPECT_EQ(Cache.mLogicalBuildCount, 1);
+    EXPECT_EQ(Cache.mVisualBuildCount, 1);
+
+    ++ScrollState.mOffset;
+    RenderElementToString(
+        Panel.Render(Plan, 0, ScrollState, Cache, 60), 36, 7);
+    EXPECT_EQ(Cache.mLogicalBuildCount, 1);
+    EXPECT_EQ(Cache.mVisualBuildCount, 1);
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, ScrollState, Cache, 60), 52, 7);
+    EXPECT_EQ(Cache.mLogicalBuildCount, 1);
+    EXPECT_EQ(Cache.mVisualBuildCount, 2);
+
+    RenderElementToString(
+        Panel.Render(Plan, 0, ScrollState, Cache, 61), 52, 7);
+    EXPECT_EQ(Cache.mLogicalBuildCount, 2);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelDoesNotSplitLongSingleToken)
+{
+    const std::string Snippet =
+        "first\n"
+        "SUPERSIZEDTOKENWITHOUTANYSPACESORWORDWRAPPOINTS1234567890\n"
+        "final";
+    const UniPlan::FWatchPlanSummary Plan = MakeCodeSnippetPlan(Snippet);
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const std::string Rendered = StripAnsiCodes(
+        RenderElementToString(Panel.Render(Plan, 0, ScrollState), 34, 8));
+
+    EXPECT_EQ(ScrollState.mMaxOffset, 0);
+    EXPECT_EQ(Rendered.find("below"), std::string::npos);
+    EXPECT_EQ(Rendered.find("..."), std::string::npos);
+    EXPECT_NE(Rendered.find("SUPERSIZEDTOKEN"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseDetailsPanelRendersTypedContent)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakePhaseDetailsPlan();
+    ASSERT_FALSE(Plan.mPhaseTaxonomies.empty());
+
+    const UniPlan::PhaseDetailsPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const ftxui::Screen Screen = RenderElementToScreen(
+        Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0], ScrollState), 150,
+        140);
+    const std::string Rendered = StripAnsiCodes(Screen.ToString());
+
+    EXPECT_NE(Rendered.find("PHASE DETAILS: PhaseSide P0"),
+              std::string::npos);
+    EXPECT_NE(Rendered.find("1 overview"), std::string::npos);
+    EXPECT_NE(Rendered.find("status"), std::string::npos);
+    EXPECT_NE(Rendered.find("in_progress"), std::string::npos);
+    EXPECT_EQ(Rendered.find("Status: in_progress"), std::string::npos);
+    EXPECT_NE(Rendered.find("Build a durable side pane"),
+              std::string::npos);
+    EXPECT_EQ(Rendered.find("Scope: Build a durable side pane"),
+              std::string::npos);
+    EXPECT_NE(Rendered.find("Side panes need"),
+              std::string::npos);
+    EXPECT_EQ(Rendered.find("Investigation: Side panes need"),
+              std::string::npos);
+    EXPECT_NE(Rendered.find("code_entity_contract"), std::string::npos);
+    EXPECT_NE(Rendered.find("best_practices"), std::string::npos);
+    EXPECT_NE(Rendered.find("design_chars"), std::string::npos);
+    EXPECT_NE(Rendered.find("multi_platforming"), std::string::npos);
+    EXPECT_NE(Rendered.find("readiness_gate"), std::string::npos);
+    EXPECT_NE(Rendered.find("code_snippets"), std::string::npos);
+    EXPECT_EQ(Rendered.find("Code entity contract"), std::string::npos);
+    EXPECT_EQ(Rendered.find("Best practices"), std::string::npos);
+    EXPECT_EQ(Rendered.find("Multi-platforming"), std::string::npos);
+    EXPECT_EQ(Rendered.find("Readiness gate"), std::string::npos);
+    EXPECT_NE(Rendered.find("topic=Audio"), std::string::npos);
+    EXPECT_NE(Rendered.find("command=.\\build.ps1 -Tests"),
+              std::string::npos);
+    EXPECT_NE(Rendered.find("L0"), std::string::npos);
+    EXPECT_NE(Rendered.find("J0"), std::string::npos);
+    EXPECT_NE(Rendered.find("T0"), std::string::npos);
+    EXPECT_NE(Rendered.find("actor=automated"), std::string::npos);
+    EXPECT_NE(Rendered.find("path=Source/PhaseSide.cpp"),
+              std::string::npos);
+    EXPECT_NE(Rendered.find("3 lines; press F12"),
+              std::string::npos);
+    EXPECT_EQ(Rendered.find("Code snippets: 3 lines; press F12"),
+              std::string::npos);
+    EXPECT_EQ(Rendered.find("RawCodeSentinel"), std::string::npos);
+
+    ftxui::Color Foreground;
+    ASSERT_TRUE(
+        TryFindTextForeground(Screen, "code_entity_contract", Foreground));
+    EXPECT_EQ(Foreground, ftxui::Color::CyanLight);
+    ASSERT_TRUE(TryFindTextForeground(Screen, "best_practices", Foreground));
+    EXPECT_EQ(Foreground, ftxui::Color::CyanLight);
+    ASSERT_TRUE(TryFindTextForeground(Screen, "design_chars", Foreground));
+    EXPECT_EQ(Foreground, ftxui::Color::Yellow);
+    ASSERT_TRUE(TryFindTextForeground(Screen, "code_snippets", Foreground));
+    EXPECT_EQ(Foreground, ftxui::Color::Yellow);
+    ASSERT_TRUE(TryFindTextForeground(Screen, "overview", Foreground));
+    EXPECT_EQ(Foreground, ftxui::Color::Yellow);
+
+    const std::string LeftBorder = "\xe2\x94\x82";
+    const std::string Rule = "\xe2\x94\x80";
+    EXPECT_NE(Rendered.find(LeftBorder + Rule + Rule + Rule),
+              std::string::npos);
+    EXPECT_EQ(Rendered.find(LeftBorder + " " + Rule), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseDetailsPanelHighlightsTaggedFenceBodies)
+{
+    UniPlan::FWatchPlanSummary Plan = MakePhaseDetailsPlan();
+    Plan.mPhases[0].mInvestigation =
+        "intro prose\n"
+        "```cpp\n"
+        "int phase_detail_cpp_body = 1;\n"
+        "```\n"
+        "```python\n"
+        "phase_detail_python_body()\n"
+        "```\n"
+        "```bash\n"
+        "phase_detail_bash_body\n"
+        "```\n"
+        "```json\n"
+        "{\"phase_detail_json_body\": true}\n"
+        "```\n"
+        "inline `phase_detail_inline_ticks`\n"
+        "```\n"
+        "phase_detail_untagged_body\n"
+        "```";
+
+    const UniPlan::PhaseDetailsPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const ftxui::Screen Screen = RenderElementToScreen(
+        Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0], ScrollState), 150,
+        160);
+
+    const ftxui::Color CodeBackground = PhaseDetailsCodeBackgroundForTest();
+    ftxui::Color Background;
+    ASSERT_TRUE(TryFindTextBackground(Screen, "int phase_detail_cpp_body",
+                                      Background));
+    EXPECT_EQ(Background, CodeBackground);
+    EXPECT_NE(Background, ftxui::Color::BlueLight);
+    ASSERT_TRUE(TryFindTextBackground(Screen, "phase_detail_python_body",
+                                      Background));
+    EXPECT_EQ(Background, CodeBackground);
+    ASSERT_TRUE(TryFindTextBackground(Screen, "phase_detail_bash_body",
+                                      Background));
+    EXPECT_EQ(Background, CodeBackground);
+    ASSERT_TRUE(TryFindTextBackground(Screen, "phase_detail_json_body",
+                                      Background));
+    EXPECT_EQ(Background, CodeBackground);
+    ASSERT_TRUE(TryFindTextBackgroundAfter(Screen, "phase_detail_bash_body",
+                                           8, Background));
+    EXPECT_EQ(Background, CodeBackground);
+
+    ASSERT_TRUE(TryFindTextBackground(Screen, "```cpp", Background));
+    EXPECT_EQ(Background, ftxui::Color::Default);
+    ASSERT_TRUE(TryFindTextBackground(Screen, "inline `phase_detail_inline",
+                                      Background));
+    EXPECT_EQ(Background, ftxui::Color::Default);
+    ASSERT_TRUE(TryFindTextBackground(Screen, "phase_detail_untagged_body",
+                                      Background));
+    EXPECT_EQ(Background, ftxui::Color::Default);
+}
+
+TEST_F(FBundleTestFixture,
+       PhaseDetailsPanelHighlightsWrappedUnclosedTaggedFenceBodies)
+{
+    UniPlan::FWatchPlanSummary Plan = MakePhaseDetailsPlan();
+    Plan.mPhases[0].mScope =
+        "```python\n"
+        "phase_detail_wrap_start alpha bravo charlie delta echo foxtrot "
+        "golf hotel india juliet kilo phase_detail_wrap_tail";
+
+    const UniPlan::PhaseDetailsPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const ftxui::Screen Screen = RenderElementToScreen(
+        Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0], ScrollState), 56,
+        140);
+
+    const ftxui::Color CodeBackground = PhaseDetailsCodeBackgroundForTest();
+    ftxui::Color Background;
+    ASSERT_TRUE(TryFindTextBackground(Screen, "```python", Background));
+    EXPECT_EQ(Background, ftxui::Color::Default);
+    ASSERT_TRUE(TryFindTextBackground(Screen, "phase_detail_wrap_start",
+                                      Background));
+    EXPECT_EQ(Background, CodeBackground);
+    ASSERT_TRUE(TryFindTextBackground(Screen, "phase_detail_wrap_tail",
+                                      Background));
+    EXPECT_EQ(Background, CodeBackground);
+}
+
+TEST_F(FBundleTestFixture, PhaseDetailsPanelRendersEmptyState)
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "EmptyPhase";
+    const UniPlan::FPhaseTaxonomy Taxonomy;
+    const UniPlan::PhaseDetailsPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    ScrollState.mOffset = 9;
+    ScrollState.mMaxOffset = 12;
+
+    const std::string Rendered = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Plan, 0, Taxonomy, ScrollState), 70, 8));
+
+    EXPECT_NE(Rendered.find("No phase selected"), std::string::npos);
+    EXPECT_EQ(ScrollState.mOffset, 0);
+    EXPECT_EQ(ScrollState.mMaxOffset, 0);
+}
+
+TEST_F(FBundleTestFixture, PhaseDetailsPanelWrapsAndScrollsOneVisualLine)
+{
+    UniPlan::FWatchPlanSummary Plan = MakePhaseDetailsPlan();
+    Plan.mPhases[0].mScope =
+        "alpha bravo charlie delta echo foxtrot golf hotel india juliet "
+        "kilo lima mike november oscar papa quebec romeo sierra tango";
+    Plan.mPhases[0].mRemaining =
+        "SUPERSIZEDTOKENWITHOUTANYSPACESORWORDWRAPPOINTS1234567890";
+
+    const UniPlan::PhaseDetailsPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const std::string First = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0], ScrollState), 48,
+        9));
+
+    ASSERT_GT(ScrollState.mMaxOffset, 0);
+    EXPECT_EQ(ScrollState.mOffset, 0);
+    EXPECT_NE(First.find("below"), std::string::npos);
+    EXPECT_NE(First.find("\xe2\x86\x93 "), std::string::npos);
+    EXPECT_EQ(First.find("  \xe2\x86\x93"), std::string::npos);
+    EXPECT_EQ(First.find("..."), std::string::npos);
+
+    ++ScrollState.mOffset;
+    const std::string Second = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0], ScrollState), 48,
+        9));
+    EXPECT_EQ(ScrollState.mOffset, 1);
+    EXPECT_NE(Second.find("above"), std::string::npos);
+    EXPECT_NE(Second.find("\xe2\x86\x91 "), std::string::npos);
+    EXPECT_EQ(Second.find("  \xe2\x86\x91"), std::string::npos);
+
+    UniPlan::FWatchScrollRegionState FullScrollState;
+    const std::string Full = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0], FullScrollState), 48,
+        40));
+    EXPECT_NE(Full.find("SUPERSIZEDTOKEN"), std::string::npos);
+    EXPECT_EQ(Full.find("..."), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseDetailsPanelReusesLayoutAcrossScroll)
+{
+    UniPlan::FWatchPlanSummary Plan = MakePhaseDetailsPlan();
+    Plan.mPhases[0].mScope =
+        "alpha bravo charlie delta echo foxtrot golf hotel india juliet "
+        "kilo lima mike november oscar papa quebec romeo sierra tango";
+
+    const UniPlan::PhaseDetailsPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    UniPlan::FWatchProseLayoutCache Cache;
+
+    RenderElementToString(Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0],
+                                       ScrollState, Cache, 7),
+                          48, 9);
+    ASSERT_EQ(Cache.mLogicalBuildCount, 1);
+    ASSERT_EQ(Cache.mVisualBuildCount, 1);
+    ASSERT_GT(ScrollState.mMaxOffset, 0);
+
+    ++ScrollState.mOffset;
+    RenderElementToString(Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0],
+                                       ScrollState, Cache, 7),
+                          48, 9);
+    EXPECT_EQ(Cache.mLogicalBuildCount, 1);
+    EXPECT_EQ(Cache.mVisualBuildCount, 1);
+    EXPECT_EQ(ScrollState.mOffset, 1);
+
+    RenderElementToString(Panel.Render(Plan, 0, Plan.mPhaseTaxonomies[0],
+                                       ScrollState, Cache, 8),
+                          48, 9);
+    EXPECT_EQ(Cache.mLogicalBuildCount, 2);
+    EXPECT_EQ(Cache.mVisualBuildCount, 2);
+}
+
+TEST_F(FBundleTestFixture, PlanDetailPanelWrapsProseWithLineGutters)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakePlanDetailWrapPlan();
+
+    const UniPlan::PlanDetailPanel Panel;
+    const std::string Rendered =
+        StripAnsiCodes(RenderElementToString(Panel.Render(Plan), 76, 20));
+
+    EXPECT_NE(Rendered.find("1 Summary"), std::string::npos);
+    EXPECT_NE(Rendered.find("2 alpha beta gamma"), std::string::npos);
+    EXPECT_NE(Rendered.find("3 Goals"), std::string::npos);
+    EXPECT_NE(Rendered.find("\xe2\x97\x8f Extend"), std::string::npos);
+    EXPECT_NE(Rendered.find("1 Risks"), std::string::npos);
+    EXPECT_NE(Rendered.find("[high/open] Plan"), std::string::npos);
+    EXPECT_NE(Rendered.find("Acceptance Criteria"), std::string::npos);
+    EXPECT_EQ(Rendered.find("  Summary"), std::string::npos);
+    EXPECT_EQ(Rendered.find("    \xe2\x97\x8f"), std::string::npos);
+    EXPECT_EQ(Rendered.find("    [high/open]"), std::string::npos);
+    EXPECT_EQ(Rendered.find("..."), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, WatchStatusBarListsSidePaneKeys)
 {
     const UniPlan::WatchStatusBar Panel;
     UniPlan::FWatchInventoryCounters Counters;
@@ -1013,15 +1792,71 @@ TEST_F(FBundleTestFixture, WatchStatusBarListsCodePaneKeys)
 
     const std::string Rendered =
         StripAnsiCodes(RenderElementToString(Panel.Render(
-            "0.109.0", "now", 23, 150, Counters, Performance)));
+            UniPlan::kCliVersion, "now", 23, 150, Counters, Performance)));
 
     EXPECT_EQ(Rendered.find("s=schema"), std::string::npos);
     EXPECT_EQ(Rendered.find("i=impl"), std::string::npos);
+    EXPECT_NE(Rendered.find("F5=phase"), std::string::npos);
     EXPECT_NE(Rendered.find("F12=code"), std::string::npos);
-    EXPECT_NE(Rendered.find("[=up ]=down"), std::string::npos);
+    EXPECT_NE(Rendered.find("[/]=side scroll"), std::string::npos);
+    EXPECT_NE(Rendered.find("Disc:"), std::string::npos);
 }
 
-TEST_F(FBundleTestFixture, PhaseDetailPanelRendersDefaultAndMetricsViews)
+TEST_F(FBundleTestFixture, WatchFileIndexMatchesSeparateIndexes)
+{
+    CreateMinimalFixture("Alpha", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    fs::create_directories(mRepoRoot / "Docs");
+    WriteTextFile(mRepoRoot / "Docs" / "README.md", "# Alpha\n");
+
+    UniPlan::FBundleFileIndexResult BundleIndex;
+    UniPlan::FMarkdownFileIndexResult MarkdownIndex;
+    UniPlan::FWatchFileIndexResult WatchIndex;
+    std::string Error;
+
+    ASSERT_TRUE(
+        UniPlan::TryBuildBundleFileIndex(mRepoRoot, BundleIndex, Error))
+        << Error;
+    ASSERT_TRUE(
+        UniPlan::TryBuildMarkdownFileIndex(mRepoRoot, MarkdownIndex, Error))
+        << Error;
+    ASSERT_TRUE(UniPlan::TryBuildWatchFileIndex(mRepoRoot, WatchIndex, Error))
+        << Error;
+
+    EXPECT_EQ(WatchIndex.mBundleIndex.mSignature, BundleIndex.mSignature);
+    EXPECT_EQ(WatchIndex.mMarkdownIndex.mSignature, MarkdownIndex.mSignature);
+    EXPECT_EQ(WatchIndex.mBundleIndex.mBundles.size(),
+              BundleIndex.mBundles.size());
+    EXPECT_EQ(WatchIndex.mMarkdownIndex.mFiles.size(),
+              MarkdownIndex.mFiles.size());
+}
+
+TEST_F(FBundleTestFixture, WatchFileIndexFastRefreshFindsCanonicalPlanAdds)
+{
+    CreateMinimalFixture("Alpha", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+
+    UniPlan::FWatchFileIndexResult InitialIndex;
+    UniPlan::FWatchFileIndexResult FastIndex;
+    std::string Error;
+    ASSERT_TRUE(
+        UniPlan::TryBuildWatchFileIndex(mRepoRoot, InitialIndex, Error))
+        << Error;
+    ASSERT_TRUE(BundleIndexContainsTopic(InitialIndex.mBundleIndex, "Alpha"));
+
+    CreateMinimalFixture("Beta", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+    ASSERT_TRUE(UniPlan::TryRefreshWatchFileIndexFast(
+        mRepoRoot, InitialIndex, FastIndex, Error))
+        << Error;
+
+    EXPECT_TRUE(BundleIndexContainsTopic(FastIndex.mBundleIndex, "Alpha"));
+    EXPECT_TRUE(BundleIndexContainsTopic(FastIndex.mBundleIndex, "Beta"));
+    EXPECT_NE(FastIndex.mBundleIndex.mSignature,
+              InitialIndex.mBundleIndex.mSignature);
+}
+
+TEST_F(FBundleTestFixture, PhaseListPanelRendersDefaultAndMetricsViews)
 {
     CreateMinimalFixture("Alpha", UniPlan::ETopicStatus::InProgress, 1,
                          UniPlan::EExecutionStatus::NotStarted, true);
@@ -1033,14 +1868,16 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelRendersDefaultAndMetricsViews)
     const UniPlan::FWatchPlanSummary *Plan = FindPlan(Snapshot, "Alpha");
     ASSERT_NE(Plan, nullptr);
 
-    const UniPlan::PhaseDetailPanel Panel;
+    const UniPlan::PhaseListPanel Panel;
     UniPlan::FWatchScrollRegionState ScrollState;
     const std::string DefaultView =
         RenderElementToString(Panel.Render(*Plan, 0, false, ScrollState));
     const std::string MetricsView =
         RenderElementToString(Panel.Render(*Plan, 0, true, ScrollState));
+    const std::string PlainDefaultView = StripAnsiCodes(DefaultView);
     const std::string PlainMetricsView = StripAnsiCodes(MetricsView);
 
+    EXPECT_NE(PlainDefaultView.find("[P]HASE LIST"), std::string::npos);
     EXPECT_NE(DefaultView.find("Design"), std::string::npos);
     EXPECT_NE(DefaultView.find("Taxonomy"), std::string::npos);
     EXPECT_NE(DefaultView.find("Scope"), std::string::npos);
@@ -1057,7 +1894,31 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelRendersDefaultAndMetricsViews)
     EXPECT_LT(EvidenceColumn, ScopeColumn);
 }
 
-TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsWideNumericLabelsVisible)
+TEST_F(FBundleTestFixture, PhaseListPanelSanitizesMultilineCellGlyphs)
+{
+    UniPlan::FWatchPlanSummary Plan = MakePhaseListPlan(32);
+    constexpr int TargetPhaseIndex = 14;
+    Plan.mTopicKey = "ControlGlyphs";
+    Plan.mPhases[static_cast<size_t>(TargetPhaseIndex)].mScope =
+        "Scope first line\nScope second line\rScope third line\tTabbed";
+    Plan.mPhases[static_cast<size_t>(TargetPhaseIndex)].mOutput =
+        "Output first line\nOutput second line\x1b[31m";
+
+    const UniPlan::PhaseListPanel Panel;
+    UniPlan::FWatchScrollRegionState DefaultScroll;
+    DefaultScroll.mOffset = 5;
+    const ftxui::Screen DefaultScreen = RenderElementToScreen(
+        Panel.Render(Plan, TargetPhaseIndex, false, DefaultScroll), 150, 25);
+    EXPECT_FALSE(ScreenHasControlGlyph(DefaultScreen));
+
+    UniPlan::FWatchScrollRegionState MetricScroll;
+    MetricScroll.mOffset = 5;
+    const ftxui::Screen MetricScreen = RenderElementToScreen(
+        Panel.Render(Plan, TargetPhaseIndex, true, MetricScroll), 150, 25);
+    EXPECT_FALSE(ScreenHasControlGlyph(MetricScreen));
+}
+
+TEST_F(FBundleTestFixture, PhaseListPanelKeepsWideNumericLabelsVisible)
 {
     UniPlan::FWatchPlanSummary Plan;
     Plan.mTopicKey = "WideNumbers";
@@ -1078,7 +1939,7 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsWideNumericLabelsVisible)
     Phase.mMetrics.mEvidenceItemCount = 24680;
     Plan.mPhases.push_back(Phase);
 
-    const UniPlan::PhaseDetailPanel Panel;
+    const UniPlan::PhaseListPanel Panel;
     UniPlan::FWatchScrollRegionState ScrollState;
     const std::string DefaultView =
         StripAnsiCodes(
@@ -1095,7 +1956,7 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsWideNumericLabelsVisible)
     EXPECT_NE(MetricsView.find("67890"), std::string::npos);
 }
 
-TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsRichMetricsComparable)
+TEST_F(FBundleTestFixture, PhaseListPanelKeepsRichMetricsComparable)
 {
     UniPlan::FWatchPlanSummary Plan;
     Plan.mTopicKey = "Scale";
@@ -1127,7 +1988,7 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsRichMetricsComparable)
     Plan.mPhases.push_back(Low);
     Plan.mPhases.push_back(High);
 
-    const UniPlan::PhaseDetailPanel Panel;
+    const UniPlan::PhaseListPanel Panel;
     UniPlan::FWatchScrollRegionState ScrollState;
     const std::string MetricsView =
         RenderElementToString(Panel.Render(Plan, 0, true, ScrollState));
@@ -1137,8 +1998,38 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsRichMetricsComparable)
     EXPECT_NE(MetricsView.find("\xe2\x96\x91"), std::string::npos);
 }
 
+TEST_F(FBundleTestFixture, PhaseListPanelReusesRowsAndVirtualizesViewport)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakePhaseListPlan(80);
+    const UniPlan::PhaseListPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    UniPlan::FWatchPhaseListLayoutCache Cache;
+
+    const std::string First = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Plan, 79, false, ScrollState, Cache, 11), 100, 12));
+    ASSERT_EQ(Cache.mBuildCount, 1);
+    EXPECT_EQ(ScrollState.mOffset, 0);
+    EXPECT_NE(First.find("Scope-79"), std::string::npos);
+    EXPECT_NE(First.find("Scope-78"), std::string::npos);
+    EXPECT_EQ(First.find("Scope-20"), std::string::npos);
+
+    const std::string Second = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Plan, 79, false, ScrollState, Cache, 11), 100, 12));
+    EXPECT_EQ(Cache.mBuildCount, 1);
+    EXPECT_EQ(Second, First);
+
+    RenderElementToString(
+        Panel.Render(Plan, 60, false, ScrollState, Cache, 11), 100, 12);
+    EXPECT_EQ(Cache.mBuildCount, 1);
+    EXPECT_GT(ScrollState.mOffset, 0);
+
+    RenderElementToString(
+        Panel.Render(Plan, 60, false, ScrollState, Cache, 12), 100, 12);
+    EXPECT_EQ(Cache.mBuildCount, 2);
+}
+
 TEST_F(FBundleTestFixture,
-       PhaseDetailPanelDoesNotSaturateFieldWorkAndTestBaselines)
+       PhaseListPanelDoesNotSaturateFieldWorkAndTestBaselines)
 {
     UniPlan::FWatchPlanSummary Plan;
     Plan.mTopicKey = "Scale";
@@ -1153,7 +2044,7 @@ TEST_F(FBundleTestFixture,
     Phase.mMetrics.mTestingRecordCount = 3;
     Plan.mPhases.push_back(Phase);
 
-    const UniPlan::PhaseDetailPanel Panel;
+    const UniPlan::PhaseListPanel Panel;
     UniPlan::FWatchScrollRegionState ScrollState;
     const std::string MetricsView =
         RenderElementToString(Panel.Render(Plan, 0, true, ScrollState));

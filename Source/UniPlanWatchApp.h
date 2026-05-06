@@ -1,17 +1,26 @@
 #pragma once
 
 #include "UniPlanTypes.h"
+#include "UniPlanWatchPanels.h"
 #include "UniPlanWatchScroll.h"
 #include "UniPlanWatchSnapshot.h"
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <thread>
 
 namespace UniPlan
 {
+
+enum class EWatchSidePane : uint8_t
+{
+    None,
+    PhaseDetails,
+    CodeSnippets
+};
 
 class DocWatchApp
 {
@@ -28,6 +37,16 @@ class DocWatchApp
   private:
     void RequestStop();
     bool WaitForNextPoll();
+    void StepPhaseSelection(int InPhaseCount, int InDelta);
+    void ResetPlanScopedScroll();
+    void ResetPhaseScopedScroll();
+    void ResetSelectedPhaseDependentScroll();
+    void ResetSidePaneScroll();
+    void ToggleSidePane(EWatchSidePane InPane);
+    bool ScrollCurrentSidePane(int InDelta);
+    const FWatchPlanSummary *ResolveSelectedPlan() const;
+    const FPhaseTaxonomy *
+    ResolveSelectedPhaseTaxonomy(const FWatchPlanSummary &InPlan) const;
 
     std::string mRepoRoot;
     DocConfig mConfig;
@@ -35,6 +54,8 @@ class DocWatchApp
 
     FDocWatchSnapshot mSnapshot{};
     FWatchSnapshotCache mSnapshotCache{};
+    FWatchPanelRenderCache mPanelRenderCache{};
+    uint64_t mSnapshotGeneration = 0;
     std::atomic<bool> mRunning{false};
     std::thread mDataThread;
     std::mutex mStopMutex;
@@ -51,7 +72,7 @@ class DocWatchApp
     // Focus mode (toggled via `): hides the left overview pane and the plan
     // detail row of the right pane to give execution detail more space.
     bool mbFocusMode = false;
-    bool mbShowCodePane = false;
+    EWatchSidePane mSidePane = EWatchSidePane::None;
     std::atomic<bool> mbForceRefresh{false};
 };
 

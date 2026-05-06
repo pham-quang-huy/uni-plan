@@ -214,7 +214,7 @@ struct FTopicBundle
 // every design material field. Mirrors `v4_design_chars` from the
 // `legacy-gap` schema — a single honest measure of "how much plan has
 // been authored for this phase." Used by the watch TUI to drive the
-// PHASE DETAIL `Design` column and by `legacy-gap` to categorize
+// PHASE LIST `Design` column and by `legacy-gap` to categorize
 // phases along the hollow / thin / rich spectrum.
 inline size_t ComputePhaseDesignChars(const FPhaseRecord &InPhase)
 {
