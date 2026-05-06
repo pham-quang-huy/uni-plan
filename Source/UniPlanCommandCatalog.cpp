@@ -1,4 +1,5 @@
 #include "UniPlanCliConstants.h"
+#include "UniPlanCommandHelp.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanJSONHelpers.h"
 #include "UniPlanOptionTypes.h"
@@ -646,7 +647,7 @@ static std::vector<FCatalogVerb> BuildCatalog()
     Verbs.push_back(
         {"migrate",
          "Eager bundle normalization after typed-array schema change.",
-         {{"query", kMutationSchema, {}, {"topic"}, {}, {0, 1, 2}}}});
+         {{"query", kMigrateSchema, {}, {"topic", "apply"}, {}, {0, 1, 2}}}});
     Verbs.push_back({"cache",
                      "Cache directory / size / config.",
                      {{"info", kCacheInfoSchema, {}, {"human"}, {}, {0, 2}},
@@ -657,13 +658,15 @@ static std::vector<FCatalogVerb> BuildCatalog()
                        {"dir", "enabled", "verbose", "human"},
                        {},
                        {0, 2}}}});
+#ifdef UPLAN_WATCH
     Verbs.push_back(
         {"watch",
          "Terminal dashboard of every topic's current state.",
-         {{"query", kMutationSchema, {}, {"repo-root"}, {}, {0, 1, 2}}}});
+         {{"query", nullptr, {}, {"repo-root"}, {}, {0, 1, 2}}}});
+#endif
     Verbs.push_back({"_catalog",
                      "Machine-readable CLI surface dump (v0.93.0+).",
-                     {{"query", kCatalogSchema, {}, {}, {}, {0}}}});
+                     {{"query", kCatalogSchema, {}, {"json"}, {}, {0, 2}}}});
 
     return Verbs;
 }
@@ -671,9 +674,16 @@ static std::vector<FCatalogVerb> BuildCatalog()
 int RunCatalogCommand(const std::vector<std::string> &InArgs,
                       const std::string & /*InRepoRoot*/)
 {
-    // --help is already captured by DispatchSubcommand's --help probe,
-    // but _catalog also accepts --json (a no-op today since JSON is the
-    // only output form). Reject anything else.
+    // _catalog is a direct handler rather than a DispatchSubcommand group,
+    // so it must own its help fast-path.
+    if (ContainsHelpFlag(InArgs))
+    {
+        PrintCommandUsage(std::cout, "_catalog");
+        return 0;
+    }
+
+    // _catalog also accepts --json (a no-op today since JSON is the only
+    // output form). Reject anything else.
     for (const std::string &Token : InArgs)
     {
         if (Token == "--json")

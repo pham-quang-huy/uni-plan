@@ -1,5 +1,6 @@
 #include "UniPlanBundleWriteGuard.h"
 #include "UniPlanCliConstants.h"
+#include "UniPlanCommandHelp.h"
 #include "UniPlanCommandMutationCommon.h"
 #include "UniPlanForwardDecls.h"
 #include "UniPlanHelpers.h"
@@ -97,7 +98,7 @@ void EmitFindingsJson(const std::vector<FMigrateFinding> &InFindings,
                       const std::string &InRepoRoot)
 {
     const std::string UTC = GetUtcNow();
-    PrintJsonHeader("uni-plan-migrate-v1", UTC, InRepoRoot);
+    PrintJsonHeader(kMigrateSchema, UTC, InRepoRoot);
     EmitJsonFieldBool("apply", InApplied);
     EmitJsonFieldSizeT("scanned_count", InFindings.size());
     EmitJsonFieldSizeT("rewritten_count", InRewritten);
@@ -129,6 +130,12 @@ void EmitFindingsJson(const std::vector<FMigrateFinding> &InFindings,
 int RunMigrateCommand(const std::vector<std::string> &InArgs,
                       const std::string &InRepoRoot)
 {
+    if (ContainsHelpFlag(InArgs))
+    {
+        PrintCommandUsage(std::cout, "migrate");
+        return 0;
+    }
+
     // Parse flags: accept --topic, --apply, --repo-root plus common options.
     BaseOptions Common;
     const auto Remaining = ConsumeCommonOptions(InArgs, Common, false);

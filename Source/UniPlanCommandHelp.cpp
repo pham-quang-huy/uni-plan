@@ -41,6 +41,15 @@ static constexpr const char *kFileFlagFooter =
     "backticks,\n"
     "  quotes, or newlines.\n";
 
+static constexpr const char *kExitCodesQuery =
+    "  0   Success\n"
+    "  2   Usage error (missing required flag, invalid enum, etc.)\n";
+
+static constexpr const char *kExitCodesRuntime =
+    "  0   Success\n"
+    "  1   Runtime error (I/O, missing bundle, etc.)\n"
+    "  2   Usage error (missing required flag, invalid enum, etc.)\n";
+
 // ===========================================================================
 // Subcommand-level help registries (v0.85.0 Commit 2).
 //
@@ -2323,6 +2332,10 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan timeline --topic MultiPlatforming\n"
         "  uni-plan timeline --topic X --phase 6\n"
         "  uni-plan timeline --topic X --since 2026-04-01 --human\n",
+        nullptr,
+        0,
+        kTimelineSchema,
+        kExitCodesQuery,
     },
     {
         "blockers",
@@ -2335,6 +2348,10 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "Examples:\n"
         "  uni-plan blockers\n"
         "  uni-plan blockers --topic MultiPlatforming --human\n",
+        nullptr,
+        0,
+        kBlockersSchema,
+        kExitCodesQuery,
     },
     {
         "validate",
@@ -2352,6 +2369,10 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan validate\n"
         "  uni-plan validate --topic MultiPlatforming\n"
         "  uni-plan validate --strict --human\n",
+        nullptr,
+        0,
+        kValidateSchema,
+        kExitCodesRuntime,
     },
     {
         "legacy-gap",
@@ -2381,6 +2402,10 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan legacy-gap --human\n"
         "  uni-plan legacy-gap --topic CycleRefactor --human\n"
         "  uni-plan legacy-gap --category legacy_rich --human\n",
+        nullptr,
+        0,
+        kLegacyGapSchema,
+        kExitCodesQuery,
     },
     {
         "lane",
@@ -2661,6 +2686,30 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan graph\n"
         "  uni-plan graph --topic ECS\n"
         "  uni-plan graph --topic ECS --depth 2\n",
+        nullptr,
+        0,
+        kGraphSchema,
+        kExitCodesRuntime,
+    },
+    {
+        "migrate",
+        "Usage: uni-plan migrate v4-prose-to-arrays [--topic <T>] "
+        "[--apply]\n\n",
+        "Report or apply eager normalization for legacy prose fields that\n"
+        "now live as typed arrays. Dry-run is the default; --apply rewrites\n"
+        "matching bundles through the guarded bundle writer.\n\n",
+        nullptr,
+        "  v4-prose-to-arrays      Required migration mode\n"
+        "  --topic <T>             Limit the scan to one topic\n"
+        "  --apply                 Rewrite matching bundles instead of dry-run\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan migrate v4-prose-to-arrays\n"
+        "  uni-plan migrate v4-prose-to-arrays --topic ECS --apply\n",
+        nullptr,
+        0,
+        kMigrateSchema,
+        kExitCodesRuntime,
     },
     {
         "cache",
@@ -2707,8 +2756,28 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "Examples:\n"
         "  uni-plan watch\n"
         "  uni-plan watch --repo-root /path/to/repo\n",
+        nullptr,
+        0,
+        nullptr,
+        kExitCodesRuntime,
     },
 #endif
+    {
+        "_catalog",
+        "Usage: uni-plan _catalog [--json]\n\n",
+        "Emit the machine-readable CLI verb, subcommand, flag, schema, and\n"
+        "exit-code catalog. JSON is the only output form; --json is accepted\n"
+        "for explicit callers.\n\n",
+        nullptr,
+        "  --json                  Explicit JSON output (default)\n",
+        nullptr,
+        "Examples:\n"
+        "  uni-plan _catalog --json\n",
+        nullptr,
+        0,
+        kCatalogSchema,
+        kExitCodesQuery,
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -2782,6 +2851,18 @@ void PrintCommandUsage(std::ostream &Out, const std::string &InCommand,
         if (Entry.mExamples != nullptr)
         {
             Out << Entry.mExamples;
+        }
+        if (Entry.mpSubcommands == nullptr)
+        {
+            if (Entry.mOutputSchema != nullptr)
+            {
+                Out << "\nOutput (JSON):\n"
+                    << "  schema: " << Entry.mOutputSchema << "\n";
+            }
+            if (Entry.mExitCodes != nullptr)
+            {
+                Out << "\nExit codes:\n" << Entry.mExitCodes << "\n";
+            }
         }
         return;
     }

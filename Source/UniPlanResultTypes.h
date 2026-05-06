@@ -220,6 +220,8 @@ struct FCommandHelpEntry
     // compile — trailing fields zero-init to {nullptr, 0}.
     const FSubcommandHelpEntry *mpSubcommands = nullptr;
     size_t mSubcommandCount = 0;
+    const char *mOutputSchema = nullptr;
+    const char *mExitCodes = nullptr;
 };
 
 // ---------------------------------------------------------------------------

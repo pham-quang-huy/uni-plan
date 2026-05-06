@@ -176,6 +176,10 @@ static constexpr const char *kManifestSuggestSchema =
 // `--help` prose.
 static constexpr const char *kCatalogSchema = "uni-plan-catalog-v1";
 
+// Migrate command schema. Emitted by `uni-plan migrate v4-prose-to-arrays`
+// when reporting legacy prose-field array normalization candidates.
+static constexpr const char *kMigrateSchema = "uni-plan-migrate-v1";
+
 // Phase sync-execution schema (v0.102.0). Emitted by `uni-plan phase
 // sync-execution` — reports the child→parent rollups applied (or the ones
 // that would be applied under --dry-run) to reconcile lane / job status

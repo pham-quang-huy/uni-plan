@@ -1,5 +1,6 @@
 #include "UniPlanCommandHelp.h"
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJSON.h"
 #include "UniPlanTypes.h"
 
 #include <gtest/gtest.h>
@@ -179,6 +180,9 @@ TEST(HelpRouting, SingleCommandHelpExitsZeroStdoutOnly)
         {"timeline", &UniPlan::RunBundleTimelineCommand},
         {"blockers", &UniPlan::RunBundleBlockersCommand},
         {"legacy-gap", &UniPlan::RunLegacyGapCommand},
+        {"graph", &UniPlan::RunGraphCommand},
+        {"migrate", &UniPlan::RunMigrateCommand},
+        {"_catalog", &UniPlan::RunCatalogCommand},
     };
     for (const FCase &C : Cases)
     {
@@ -350,21 +354,19 @@ TEST(HelpContent, EveryLeafEmitsExitCodes)
     }
 }
 
-// Direct smoke test of PrintCommandUsage — covers every current
-// kCommandHelp name to guard against an entry being accidentally
-// dropped from the registry.
+// Direct smoke test of PrintCommandUsage — covers every catalog group to guard
+// against an entry being accidentally dropped from the help registry.
 TEST(HelpRouting, PrintCommandUsageCoversEveryRegisteredGroup)
 {
-    const char *Groups[] = {
-        "topic",        "phase",    "job",      "task",     "changelog",
-        "verification", "timeline", "blockers", "validate", "legacy-gap",
-        "lane",         "testing",  "manifest", "cache",
-#ifdef UPLAN_WATCH
-        "watch",
-#endif
-    };
-    for (const char *Name : Groups)
+    const auto Result = CaptureDispatcher(&UniPlan::RunCatalogCommand,
+                                          {"--json"});
+    ASSERT_EQ(Result.mExitCode, 0);
+    const nlohmann::json Catalog = nlohmann::json::parse(Result.mStdout);
+    ASSERT_TRUE(Catalog.contains("verbs"));
+
+    for (const auto &Verb : Catalog["verbs"])
     {
+        const std::string Name = Verb.value("name", "");
         std::ostringstream Out;
         UniPlan::PrintCommandUsage(Out, Name);
         const std::string S = Out.str();
@@ -374,63 +376,47 @@ TEST(HelpRouting, PrintCommandUsageCoversEveryRegisteredGroup)
     }
 }
 
-// v0.85.0 Commit 3 coverage guard. Every command/subcommand reachable
-// through the dispatch table must have a matching help entry — a new
-// command landing without `--help` prose mechanically fails this.
+// Coverage guard. The machine-readable catalog is the public command
+// inventory, so every catalog leaf must have targeted help with exit-code
+// prose and the advertised output schema.
 TEST(HelpCoverage, EveryDispatchTargetHasHelpEntry)
 {
-    // Top-level groups whose --help path we've wired in Commits 1-3.
-    struct FGroup
-    {
-        const char *mName;
-        std::vector<const char *> mExpectedSubcommands;
-    };
-    const std::vector<FGroup> Groups = {
-        {"topic",
-         {"list", "get", "set", "start", "complete", "block", "status"}},
-        {"phase",
-         {"list", "get", "metric", "set", "add", "remove", "normalize", "start",
-          "complete", "block", "unblock", "progress", "complete-jobs", "log",
-          "verify", "next", "readiness", "wave-status", "drift"}},
-        {"job", {"set"}},
-        {"task", {"set"}},
-        {"changelog", {"query", "add", "set", "remove"}},
-        {"verification", {"query", "add", "set"}},
-        {"lane", {"set", "add"}},
-        {"testing", {"add", "set"}},
-        {"manifest", {"add", "remove", "list", "set"}},
-        {"cache", {"info", "clear", "config"}},
-    };
+    const auto Result = CaptureDispatcher(&UniPlan::RunCatalogCommand,
+                                          {"--json"});
+    ASSERT_EQ(Result.mExitCode, 0);
+    ASSERT_TRUE(Result.mStderr.empty());
 
-    for (const FGroup &G : Groups)
-    {
-        // Group-level help must print something.
-        std::ostringstream GOut;
-        UniPlan::PrintCommandUsage(GOut, G.mName);
-        EXPECT_FALSE(GOut.str().empty()) << "group: " << G.mName;
+    const nlohmann::json Catalog = nlohmann::json::parse(Result.mStdout);
+    ASSERT_TRUE(Catalog.contains("verbs"));
+    ASSERT_TRUE(Catalog["verbs"].is_array());
 
-        // Every subcommand must resolve to a leaf block that is
-        // distinguishable from the group block. We check by asserting
-        // the subcommand leaf emits the "Exit codes:" section (which
-        // only PrintSubcommandBlock emits, not group block).
-        for (const char *Sub : G.mExpectedSubcommands)
+    for (const auto &Verb : Catalog["verbs"])
+    {
+        const std::string VerbName = Verb.value("name", "");
+        ASSERT_TRUE(Verb.contains("subcommands")) << VerbName;
+        ASSERT_TRUE(Verb["subcommands"].is_array()) << VerbName;
+
+        for (const auto &Subcommand : Verb["subcommands"])
         {
-            std::ostringstream SOut;
-            UniPlan::PrintCommandUsage(SOut, G.mName, Sub);
-            const std::string S = SOut.str();
-            EXPECT_NE(S.find("Exit codes:"), std::string::npos)
-                << "missing leaf help: " << G.mName << " " << Sub;
-        }
-    }
+            const std::string SubName = Subcommand.value("name", "");
+            const std::string Schema =
+                Subcommand.value("output_schema_name", "");
 
-    // Single-command groups (no subcommands): still must print help.
-    const char *const SingleCmds[] = {"timeline", "blockers", "validate",
-                                      "legacy-gap"};
-    for (const char *Name : SingleCmds)
-    {
-        std::ostringstream Out;
-        UniPlan::PrintCommandUsage(Out, Name);
-        EXPECT_FALSE(Out.str().empty()) << "single-command: " << Name;
+            std::ostringstream Out;
+            UniPlan::PrintCommandUsage(Out, VerbName, SubName);
+
+            const std::string Help = Out.str();
+            EXPECT_NE(Help.find("Usage:"), std::string::npos)
+                << "missing usage help: " << VerbName << " " << SubName;
+            EXPECT_NE(Help.find("Exit codes:"), std::string::npos)
+                << "missing exit-code help: " << VerbName << " " << SubName;
+            if (!Schema.empty())
+            {
+                EXPECT_NE(Help.find(Schema), std::string::npos)
+                    << "missing schema help: " << VerbName << " " << SubName
+                    << " schema: " << Schema;
+            }
+        }
     }
 }
 
