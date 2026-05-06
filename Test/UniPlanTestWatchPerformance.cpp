@@ -5,6 +5,7 @@
 #include "UniPlanWatchSnapshot.h"
 
 #include <fstream>
+#include <utility>
 
 #if defined(UPLAN_WATCH)
 
@@ -27,6 +28,14 @@ void WriteTextFile(const fs::path &InPath, const std::string &InText)
 {
     fs::create_directories(InPath.parent_path());
     std::ofstream Stream(InPath);
+    ASSERT_TRUE(Stream.is_open()) << "Cannot write " << InPath.string();
+    Stream << InText;
+}
+
+void WriteBinaryFile(const fs::path &InPath, const std::string &InText)
+{
+    fs::create_directories(InPath.parent_path());
+    std::ofstream Stream(InPath, std::ios::binary);
     ASSERT_TRUE(Stream.is_open()) << "Cannot write " << InPath.string();
     Stream << InText;
 }
@@ -109,8 +118,159 @@ std::string RenderElementToString(ftxui::Element InElement)
     return Screen.ToString();
 }
 
+std::string RenderElementToString(ftxui::Element InElement, int InWidth,
+                                  int InHeight)
+{
+    ftxui::Screen Screen = ftxui::Screen::Create(
+        ftxui::Dimension::Fixed(InWidth), ftxui::Dimension::Fixed(InHeight));
+    ftxui::Render(Screen, InElement);
+    return Screen.ToString();
+}
+
+ftxui::Screen RenderElementToScreen(ftxui::Element InElement, int InWidth,
+                                    int InHeight)
+{
+    ftxui::Screen Screen = ftxui::Screen::Create(
+        ftxui::Dimension::Fixed(InWidth), ftxui::Dimension::Fixed(InHeight));
+    ftxui::Render(Screen, InElement);
+    return Screen;
+}
+
+bool TryFindTextDim(const ftxui::Screen &InScreen,
+                    const std::string &InNeedle, bool &OutDim)
+{
+    const int NeedleCells = static_cast<int>(InNeedle.size());
+    for (int Y = 0; Y < InScreen.dimy(); ++Y)
+    {
+        for (int X = 0; X + NeedleCells <= InScreen.dimx(); ++X)
+        {
+            bool bMatched = true;
+            for (int Index = 0; Index < NeedleCells; ++Index)
+            {
+                const std::string Expected(
+                    1, InNeedle[static_cast<size_t>(Index)]);
+                if (InScreen.PixelAt(X + Index, Y).character != Expected)
+                {
+                    bMatched = false;
+                    break;
+                }
+            }
+            if (bMatched)
+            {
+                OutDim = InScreen.PixelAt(X, Y).dim;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::vector<UniPlan::FWatchPlanSummary>
+MakeWatchPlanRows(const std::string &InPrefix, const std::string &InStatus,
+                  int InCount)
+{
+    std::vector<UniPlan::FWatchPlanSummary> Plans;
+    for (int Index = 0; Index < InCount; ++Index)
+    {
+        UniPlan::FWatchPlanSummary Plan;
+        const std::string Suffix =
+            Index < 10 ? "0" + std::to_string(Index) : std::to_string(Index);
+        Plan.mTopicKey = InPrefix + Suffix;
+        Plan.mPlanStatus = InStatus;
+        Plan.mPhaseCount = 1;
+        if (InStatus == "in_progress")
+        {
+            Plan.mPhaseInProgress = 1;
+        }
+        else
+        {
+            Plan.mPhaseCompleted = 1;
+        }
+        Plans.push_back(Plan);
+    }
+    return Plans;
+}
+
+UniPlan::FWatchPlanSummary MakePhaseDetailPlan(const int InPhaseCount)
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "PhaseScroll";
+    Plan.mPlanStatus = "in_progress";
+    Plan.mPhaseCount = InPhaseCount;
+
+    for (int Index = 0; Index < InPhaseCount; ++Index)
+    {
+        UniPlan::PhaseItem Phase;
+        const std::string Suffix =
+            Index < 10 ? "0" + std::to_string(Index) : std::to_string(Index);
+        Phase.mPhaseKey = std::to_string(Index);
+        Phase.mStatus = UniPlan::EExecutionStatus::NotStarted;
+        Phase.mScope = "Scope-" + Suffix;
+        Phase.mOutput = "Output-" + Suffix;
+        Phase.mV4DesignChars = static_cast<size_t>((Index + 1) * 100);
+        Plan.mPhases.push_back(Phase);
+    }
+
+    return Plan;
+}
+
+UniPlan::FWatchPlanSummary MakeLaneTaxonomyPlan(const int InLaneCount)
+{
+    UniPlan::FWatchPlanSummary Plan = MakePhaseDetailPlan(1);
+    Plan.mTopicKey = "LaneScroll";
+
+    UniPlan::FPhaseTaxonomy Taxonomy;
+    Taxonomy.mPhaseIndex = 0;
+    Taxonomy.mWaveCount = 1;
+    for (int Index = 0; Index < InLaneCount; ++Index)
+    {
+        UniPlan::FLaneRecord Lane;
+        Lane.mStatus = UniPlan::EExecutionStatus::NotStarted;
+        Lane.mScope = "LaneScope-" + std::to_string(Index);
+        Lane.mExitCriteria = "LaneExit-" + std::to_string(Index);
+        Taxonomy.mLanes.push_back(Lane);
+    }
+    Plan.mPhaseTaxonomies.push_back(Taxonomy);
+
+    return Plan;
+}
+
+UniPlan::FWatchPlanSummary MakeCodeSnippetPlan(const std::string &InSnippets)
+{
+    UniPlan::FWatchPlanSummary Plan;
+    Plan.mTopicKey = "CodePane";
+    Plan.mPlanStatus = "in_progress";
+    Plan.mPhaseCount = 1;
+
+    UniPlan::PhaseItem Phase;
+    Phase.mPhaseKey = "0";
+    Phase.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Phase.mStatusRaw = "in_progress";
+    Phase.mCodeSnippets = InSnippets;
+    Plan.mPhases.push_back(std::move(Phase));
+
+    return Plan;
+}
+
+UniPlan::FPhaseTaxonomy MakeFileManifestTaxonomy(const int InFileCount)
+{
+    UniPlan::FPhaseTaxonomy Taxonomy;
+    Taxonomy.mPhaseIndex = 1;
+    for (int Index = 0; Index < InFileCount; ++Index)
+    {
+        UniPlan::FFileManifestItem Item;
+        const std::string Suffix =
+            Index < 10 ? "0" + std::to_string(Index) : std::to_string(Index);
+        Item.mFilePath = "Source/File-" + Suffix + ".cpp";
+        Item.mAction = UniPlan::EFileAction::Modify;
+        Item.mDescription = "Manifest row " + Suffix;
+        Taxonomy.mFileManifest.push_back(std::move(Item));
+    }
+    return Taxonomy;
+}
+
 void ExpectSnapshotCoreEquivalent(const UniPlan::FDocWatchSnapshot &InLeft,
-                                  const UniPlan::FDocWatchSnapshot &InRight)
+                                   const UniPlan::FDocWatchSnapshot &InRight)
 {
     EXPECT_EQ(InLeft.mInventory.mPlanCount, InRight.mInventory.mPlanCount);
     EXPECT_EQ(InLeft.mInventory.mActivePlanCount,
@@ -151,12 +311,27 @@ void ExpectSnapshotCoreEquivalent(const UniPlan::FDocWatchSnapshot &InLeft,
                 EXPECT_EQ(
                     Left.mPhases[PhaseIndex].mMetrics.mRecursiveWordCount,
                     Right.mPhases[PhaseIndex].mMetrics.mRecursiveWordCount);
+                EXPECT_EQ(Left.mPhases[PhaseIndex].mCodeSnippets,
+                          Right.mPhases[PhaseIndex].mCodeSnippets);
             }
         }
     };
 
     ExpectPlansEquivalent(InLeft.mActivePlans, InRight.mActivePlans);
     ExpectPlansEquivalent(InLeft.mNonActivePlans, InRight.mNonActivePlans);
+}
+
+const UniPlan::FPhaseTaxonomy *FindTaxonomyForPhase(
+    const UniPlan::FWatchPlanSummary &InPlan, const int InPhaseIndex)
+{
+    for (const UniPlan::FPhaseTaxonomy &Taxonomy : InPlan.mPhaseTaxonomies)
+    {
+        if (Taxonomy.mPhaseIndex == InPhaseIndex)
+        {
+            return &Taxonomy;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -488,6 +663,364 @@ TEST_F(FBundleTestFixture, WatchCacheReportsMalformedBundleWarning)
     EXPECT_TRUE(HasWarningContaining(Snapshot, "Broken.Plan.json"));
 }
 
+TEST_F(FBundleTestFixture, PlanNavigatorPanelsUseEdgeScroll)
+{
+    const UniPlan::ActivePlansPanel ActivePanel;
+    const UniPlan::NonActivePlansPanel NonActivePanel;
+    const std::vector<UniPlan::FWatchPlanSummary> ActivePlans =
+        MakeWatchPlanRows("ActiveTopic", "in_progress", 20);
+    const std::vector<UniPlan::FWatchPlanSummary> NonActivePlans =
+        MakeWatchPlanRows("DoneTopic", "completed", 20);
+
+    UniPlan::FWatchScrollRegionState ActiveScroll;
+    const std::string ActiveBeforeEdge = StripAnsiCodes(RenderElementToString(
+        ActivePanel.Render(ActivePlans, 5, ActiveScroll), 80, 12));
+    EXPECT_EQ(ActiveScroll.mOffset, 0);
+    EXPECT_NE(ActiveBeforeEdge.find("ActiveTopic00"), std::string::npos);
+
+    int PreviousOffset = ActiveScroll.mOffset;
+    for (int Selected = 6; Selected < 15; ++Selected)
+    {
+        RenderElementToString(
+            ActivePanel.Render(ActivePlans, Selected, ActiveScroll), 80, 12);
+        EXPECT_LE(ActiveScroll.mOffset, PreviousOffset + 1);
+        PreviousOffset = ActiveScroll.mOffset;
+    }
+    EXPECT_GT(ActiveScroll.mOffset, 0);
+
+    UniPlan::FWatchScrollRegionState NonActiveScroll;
+    const std::string NonActiveBeforeEdge =
+        StripAnsiCodes(RenderElementToString(
+            NonActivePanel.Render(NonActivePlans, 5, NonActiveScroll), 80,
+            12));
+    EXPECT_EQ(NonActiveScroll.mOffset, 0);
+    EXPECT_NE(NonActiveBeforeEdge.find("DoneTopic00"), std::string::npos);
+
+    PreviousOffset = NonActiveScroll.mOffset;
+    for (int Selected = 6; Selected < 15; ++Selected)
+    {
+        RenderElementToString(NonActivePanel.Render(
+                                  NonActivePlans, Selected, NonActiveScroll),
+                              80, 12);
+        EXPECT_LE(NonActiveScroll.mOffset, PreviousOffset + 1);
+        PreviousOffset = NonActiveScroll.mOffset;
+    }
+    EXPECT_GT(NonActiveScroll.mOffset, 0);
+}
+
+TEST_F(FBundleTestFixture, SelectedRowPanelsUseEdgeScroll)
+{
+    const UniPlan::PhaseDetailPanel PhasePanel;
+    const UniPlan::ExecutionTaxonomyPanel TaxonomyPanel;
+
+    const UniPlan::FWatchPlanSummary PhasePlan = MakePhaseDetailPlan(30);
+    UniPlan::FWatchScrollRegionState PhaseScroll;
+    const std::string PhaseBeforeEdge =
+        StripAnsiCodes(RenderElementToString(
+            PhasePanel.Render(PhasePlan, 29, false, PhaseScroll), 100, 12));
+    EXPECT_EQ(PhaseScroll.mOffset, 0);
+    EXPECT_NE(PhaseBeforeEdge.find("Scope-29"), std::string::npos);
+    EXPECT_NE(PhaseBeforeEdge.find("Scope-28"), std::string::npos);
+    EXPECT_LT(PhaseBeforeEdge.find("Scope-29"),
+              PhaseBeforeEdge.find("Scope-28"));
+
+    int PreviousOffset = PhaseScroll.mOffset;
+    for (int Selected = 28; Selected >= 10; --Selected)
+    {
+        RenderElementToString(
+            PhasePanel.Render(PhasePlan, Selected, false, PhaseScroll), 100,
+            12);
+        EXPECT_LE(PhaseScroll.mOffset, PreviousOffset + 1);
+        PreviousOffset = PhaseScroll.mOffset;
+    }
+    EXPECT_GT(PhaseScroll.mOffset, 0);
+    const std::string PhaseAfterEdge =
+        StripAnsiCodes(RenderElementToString(
+            PhasePanel.Render(PhasePlan, 10, false, PhaseScroll), 100, 12));
+    EXPECT_NE(PhaseAfterEdge.find("above"), std::string::npos);
+
+    const UniPlan::FWatchPlanSummary LanePlan = MakeLaneTaxonomyPlan(24);
+    UniPlan::FWatchScrollRegionState LaneScroll;
+    const std::string LaneBeforeEdge =
+        StripAnsiCodes(RenderElementToString(
+            TaxonomyPanel.Render(LanePlan, 0, -1, 5, true, LaneScroll), 120,
+            20));
+    EXPECT_EQ(LaneScroll.mOffset, 0);
+    EXPECT_NE(LaneBeforeEdge.find("LaneScope-0"), std::string::npos);
+
+    PreviousOffset = LaneScroll.mOffset;
+    for (int Selected = 6; Selected < 18; ++Selected)
+    {
+        RenderElementToString(TaxonomyPanel.Render(LanePlan, 0, -1, Selected,
+                                                   true, LaneScroll),
+                              120, 20);
+        EXPECT_LE(LaneScroll.mOffset, PreviousOffset + 1);
+        PreviousOffset = LaneScroll.mOffset;
+    }
+    EXPECT_GT(LaneScroll.mOffset, 0);
+    const std::string LaneAfterEdge =
+        StripAnsiCodes(RenderElementToString(TaxonomyPanel.Render(
+                                                 LanePlan, 0, -1, 17, true,
+                                                 LaneScroll),
+                                             120, 20));
+    EXPECT_NE(LaneAfterEdge.find("above"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, FileManifestPanelScrollIndicatorsAreStable)
+{
+    const UniPlan::FileManifestPanel Panel;
+    const UniPlan::FPhaseTaxonomy Taxonomy = MakeFileManifestTaxonomy(12);
+    UniPlan::FWatchScrollRegionState ScrollState;
+
+    const std::string First = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Taxonomy, ScrollState), 80, 8));
+    EXPECT_EQ(ScrollState.mOffset, 0);
+    EXPECT_GT(ScrollState.mMaxOffset, 0);
+    EXPECT_NE(First.find("FILES: P1 (12)"), std::string::npos);
+    EXPECT_NE(First.find("File-00.cpp"), std::string::npos);
+    EXPECT_NE(First.find("below"), std::string::npos);
+
+    const std::string Second = StripAnsiCodes(RenderElementToString(
+        Panel.Render(Taxonomy, ScrollState), 80, 8));
+    EXPECT_EQ(Second, First);
+}
+
+TEST_F(FBundleTestFixture, WatchSnapshotKeepsManifestOnlyPhaseTaxonomy)
+{
+    CreateMinimalFixture("FilePane", UniPlan::ETopicStatus::InProgress, 2,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+
+    StartCapture();
+    const int Code = UniPlan::RunManifestAddCommand(
+        {"--topic", "FilePane", "--phase", "1", "--file",
+         "Source/FilePane.cpp", "--action", "modify", "--description",
+         "Phase one manifest-only file", "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0) << mCapturedStderr;
+
+    UniPlan::FWatchSnapshotCache Cache;
+    UniPlan::FWatchSnapshotBuildOptions FastOptions;
+    FastOptions.mbRunValidation = false;
+    FastOptions.mbRunLint = false;
+    FastOptions.mbMarkSkippedValidationRunning = true;
+    FastOptions.mbMarkSkippedLintRunning = true;
+
+    const UniPlan::FDocWatchSnapshot FastSnapshot =
+        UniPlan::BuildWatchSnapshotCached(mRepoRoot.string(), true, "", false,
+                                          Cache, true, FastOptions);
+    const UniPlan::FDocWatchSnapshot FullSnapshot =
+        UniPlan::BuildWatchSnapshotCached(mRepoRoot.string(), true, "", false,
+                                          Cache, false);
+
+    const UniPlan::FWatchPlanSummary *FastPlan =
+        FindPlan(FastSnapshot, "FilePane");
+    const UniPlan::FWatchPlanSummary *FullPlan =
+        FindPlan(FullSnapshot, "FilePane");
+    ASSERT_NE(FastPlan, nullptr);
+    ASSERT_NE(FullPlan, nullptr);
+
+    const UniPlan::FPhaseTaxonomy *FastTaxonomy =
+        FindTaxonomyForPhase(*FastPlan, 1);
+    const UniPlan::FPhaseTaxonomy *FullTaxonomy =
+        FindTaxonomyForPhase(*FullPlan, 1);
+    ASSERT_NE(FastTaxonomy, nullptr);
+    ASSERT_NE(FullTaxonomy, nullptr);
+    ASSERT_EQ(FastTaxonomy->mFileManifest.size(), 1u);
+    ASSERT_EQ(FullTaxonomy->mFileManifest.size(), 1u);
+    EXPECT_EQ(FastTaxonomy->mFileManifest[0].mFilePath,
+              "Source/FilePane.cpp");
+    EXPECT_EQ(FullTaxonomy->mFileManifest[0].mFilePath,
+              "Source/FilePane.cpp");
+}
+
+TEST_F(FBundleTestFixture, WatchSnapshotProjectsPhaseCodeSnippets)
+{
+    CreateMinimalFixture("CodePane", UniPlan::ETopicStatus::InProgress, 1,
+                         UniPlan::EExecutionStatus::NotStarted, true);
+
+    const std::string Snippets =
+        "void Tick()\n{\n    ApplyPhaseSelection();\n}\n";
+    const fs::path SnippetPath = mRepoRoot / "snippet.txt";
+    WriteBinaryFile(SnippetPath, Snippets);
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseSetCommand(
+        {"--topic", "CodePane", "--phase", "0", "--code-snippets-file",
+         SnippetPath.string(), "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0) << mCapturedStderr;
+
+    UniPlan::FWatchSnapshotCache Cache;
+    const UniPlan::FDocWatchSnapshot Snapshot =
+        UniPlan::BuildWatchSnapshotCached(mRepoRoot.string(), true, "", false,
+                                          Cache, true);
+    const UniPlan::FWatchPlanSummary *Plan = FindPlan(Snapshot, "CodePane");
+    ASSERT_NE(Plan, nullptr);
+    ASSERT_FALSE(Plan->mPhases.empty());
+    EXPECT_EQ(Plan->mPhases[0].mCodeSnippets, Snippets);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelRendersLineNumbersAndTitle)
+{
+    const UniPlan::FWatchPlanSummary Plan =
+        MakeCodeSnippetPlan("int main()\n{\n    return 0;\n}");
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const std::string Rendered = StripAnsiCodes(
+        RenderElementToString(Panel.Render(Plan, 0, ScrollState), 70, 10));
+
+    EXPECT_NE(Rendered.find("CODE SNIPPETS: CodePane P0 (4 lines)"),
+              std::string::npos);
+    EXPECT_NE(Rendered.find("1 int main()"), std::string::npos);
+    EXPECT_NE(Rendered.find("2 {"), std::string::npos);
+    EXPECT_NE(Rendered.find("3     return 0;"), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelDimsTextOutsideCppFence)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakeCodeSnippetPlan(
+        "intro prose\n```cpp\nint main()\n```\noutro prose");
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const ftxui::Screen Screen =
+        RenderElementToScreen(Panel.Render(Plan, 0, ScrollState), 80, 12);
+
+    bool bDim = false;
+    ASSERT_TRUE(TryFindTextDim(Screen, "intro prose", bDim));
+    EXPECT_TRUE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "```cpp", bDim));
+    EXPECT_TRUE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "int main()", bDim));
+    EXPECT_FALSE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "outro prose", bDim));
+    EXPECT_TRUE(bDim);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelKeepsPlainSnippetBright)
+{
+    const UniPlan::FWatchPlanSummary Plan =
+        MakeCodeSnippetPlan("int legacy_plain_code = 1;");
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const ftxui::Screen Screen =
+        RenderElementToScreen(Panel.Render(Plan, 0, ScrollState), 80, 8);
+
+    bool bDim = true;
+    ASSERT_TRUE(TryFindTextDim(Screen, "int legacy_plain_code = 1;", bDim));
+    EXPECT_FALSE(bDim);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelStylesMultipleCppFences)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakeCodeSnippetPlan(
+        "before\n```CPP\nint First;\n```\nbetween\n```c++\nint Second;\n```");
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const ftxui::Screen Screen =
+        RenderElementToScreen(Panel.Render(Plan, 0, ScrollState), 80, 14);
+
+    bool bDim = false;
+    ASSERT_TRUE(TryFindTextDim(Screen, "before", bDim));
+    EXPECT_TRUE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "int First;", bDim));
+    EXPECT_FALSE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "between", bDim));
+    EXPECT_TRUE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "int Second;", bDim));
+    EXPECT_FALSE(bDim);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelStylesUnclosedCppFenceToEnd)
+{
+    const UniPlan::FWatchPlanSummary Plan =
+        MakeCodeSnippetPlan("before\n```cpp\nint Tail;");
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const ftxui::Screen Screen =
+        RenderElementToScreen(Panel.Render(Plan, 0, ScrollState), 80, 10);
+
+    bool bDim = false;
+    ASSERT_TRUE(TryFindTextDim(Screen, "before", bDim));
+    EXPECT_TRUE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "```cpp", bDim));
+    EXPECT_TRUE(bDim);
+    ASSERT_TRUE(TryFindTextDim(Screen, "int Tail;", bDim));
+    EXPECT_FALSE(bDim);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelRendersEmptyState)
+{
+    const UniPlan::FWatchPlanSummary Plan = MakeCodeSnippetPlan("");
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    ScrollState.mOffset = 7;
+    ScrollState.mMaxOffset = 9;
+    const std::string Rendered = StripAnsiCodes(
+        RenderElementToString(Panel.Render(Plan, 0, ScrollState), 60, 7));
+
+    EXPECT_NE(Rendered.find("(no code snippets)"), std::string::npos);
+    EXPECT_EQ(ScrollState.mOffset, 0);
+    EXPECT_EQ(ScrollState.mMaxOffset, 0);
+}
+
+TEST_F(FBundleTestFixture, CodeSnippetPanelWrapsAndScrollsOneVisualLine)
+{
+    const std::string Snippet =
+        "first\n"
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n"
+        "final sentinel WRAPTAIL";
+    const UniPlan::FWatchPlanSummary Plan = MakeCodeSnippetPlan(Snippet);
+
+    const UniPlan::CodeSnippetPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
+    const std::string First = StripAnsiCodes(
+        RenderElementToString(Panel.Render(Plan, 0, ScrollState), 36, 7));
+    ASSERT_GT(ScrollState.mMaxOffset, 0);
+    EXPECT_EQ(ScrollState.mOffset, 0);
+    EXPECT_NE(First.find("below"), std::string::npos);
+
+    ++ScrollState.mOffset;
+    const std::string Second = StripAnsiCodes(
+        RenderElementToString(Panel.Render(Plan, 0, ScrollState), 36, 7));
+    EXPECT_EQ(ScrollState.mOffset, 1);
+    EXPECT_NE(Second.find("above"), std::string::npos);
+
+    ScrollState.mOffset = 999;
+    const std::string Last = StripAnsiCodes(
+        RenderElementToString(Panel.Render(Plan, 0, ScrollState), 36, 7));
+    EXPECT_EQ(ScrollState.mOffset, ScrollState.mMaxOffset);
+    EXPECT_NE(Last.find("WRAPTAIL"), std::string::npos);
+    EXPECT_EQ(Last.find("..."), std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, WatchStatusBarListsCodePaneKeys)
+{
+    const UniPlan::WatchStatusBar Panel;
+    UniPlan::FWatchInventoryCounters Counters;
+    UniPlan::FDocWatchSnapshot::FPerformance Performance;
+
+    const std::string Rendered =
+        StripAnsiCodes(RenderElementToString(Panel.Render(
+            "0.109.0", "now", 23, 150, Counters, Performance)));
+
+    EXPECT_EQ(Rendered.find("s=schema"), std::string::npos);
+    EXPECT_EQ(Rendered.find("i=impl"), std::string::npos);
+    EXPECT_NE(Rendered.find("F12=code"), std::string::npos);
+    EXPECT_NE(Rendered.find("[=up ]=down"), std::string::npos);
+}
+
 TEST_F(FBundleTestFixture, PhaseDetailPanelRendersDefaultAndMetricsViews)
 {
     CreateMinimalFixture("Alpha", UniPlan::ETopicStatus::InProgress, 1,
@@ -501,10 +1034,11 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelRendersDefaultAndMetricsViews)
     ASSERT_NE(Plan, nullptr);
 
     const UniPlan::PhaseDetailPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
     const std::string DefaultView =
-        RenderElementToString(Panel.Render(*Plan, 0, false));
+        RenderElementToString(Panel.Render(*Plan, 0, false, ScrollState));
     const std::string MetricsView =
-        RenderElementToString(Panel.Render(*Plan, 0, true));
+        RenderElementToString(Panel.Render(*Plan, 0, true, ScrollState));
     const std::string PlainMetricsView = StripAnsiCodes(MetricsView);
 
     EXPECT_NE(DefaultView.find("Design"), std::string::npos);
@@ -545,10 +1079,13 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsWideNumericLabelsVisible)
     Plan.mPhases.push_back(Phase);
 
     const UniPlan::PhaseDetailPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
     const std::string DefaultView =
-        StripAnsiCodes(RenderElementToString(Panel.Render(Plan, 0, false)));
+        StripAnsiCodes(
+            RenderElementToString(Panel.Render(Plan, 0, false, ScrollState)));
     const std::string MetricsView =
-        StripAnsiCodes(RenderElementToString(Panel.Render(Plan, 0, true)));
+        StripAnsiCodes(
+            RenderElementToString(Panel.Render(Plan, 0, true, ScrollState)));
 
     EXPECT_NE(DefaultView.find("199307"), std::string::npos);
     EXPECT_NE(DefaultView.find("1234"), std::string::npos);
@@ -591,8 +1128,9 @@ TEST_F(FBundleTestFixture, PhaseDetailPanelKeepsRichMetricsComparable)
     Plan.mPhases.push_back(High);
 
     const UniPlan::PhaseDetailPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
     const std::string MetricsView =
-        RenderElementToString(Panel.Render(Plan, 0, true));
+        RenderElementToString(Panel.Render(Plan, 0, true, ScrollState));
 
     EXPECT_NE(MetricsView.find("20000"), std::string::npos);
     EXPECT_NE(MetricsView.find("40000"), std::string::npos);
@@ -616,8 +1154,9 @@ TEST_F(FBundleTestFixture,
     Plan.mPhases.push_back(Phase);
 
     const UniPlan::PhaseDetailPanel Panel;
+    UniPlan::FWatchScrollRegionState ScrollState;
     const std::string MetricsView =
-        RenderElementToString(Panel.Render(Plan, 0, true));
+        RenderElementToString(Panel.Render(Plan, 0, true, ScrollState));
     const std::string PlainMetricsView = StripAnsiCodes(MetricsView);
     const std::string Full = "\xe2\x96\x88";
     const std::string Empty = "\xe2\x96\x91";
@@ -667,6 +1206,12 @@ TEST_F(FBundleTestFixture, WatchMetricsMatchPhaseMetricCommand)
               Plan->mPhases[0].mMetrics.mSolidWordCount);
     EXPECT_EQ(Json["phases"][0]["recursive_words"],
               Plan->mPhases[0].mMetrics.mRecursiveWordCount);
+    EXPECT_EQ(Json["phases"][0]["largest_design_field_chars"],
+              Plan->mPhases[0].mMetrics.mLargestDesignFieldChars);
+    EXPECT_EQ(Json["phases"][0]["repeated_design_block_count"],
+              Plan->mPhases[0].mMetrics.mRepeatedDesignBlockCount);
+    EXPECT_EQ(Json["phases"][0]["design_bloat_ratio"],
+              Plan->mPhases[0].mMetrics.mDesignBloatRatio);
 }
 
 TEST_F(FBundleTestFixture, WatchValidationSummaryMatchesValidateCommand)

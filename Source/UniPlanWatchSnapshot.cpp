@@ -56,6 +56,7 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
         Item.mOutput = Phase.mOutput;
         Item.mDone = Phase.mLifecycle.mDone;
         Item.mRemaining = Phase.mLifecycle.mRemaining;
+        Item.mCodeSnippets = Phase.mDesign.mCodeSnippets;
         Item.mMetrics = ComputePhaseDepthMetrics(InBundle, I);
         Item.mV4DesignChars = Item.mMetrics.mDesignChars;
         Summary.mPhases.push_back(std::move(Item));
@@ -87,7 +88,8 @@ BuildPlanSummaryFromBundle(const FTopicBundle &InBundle)
     for (size_t I = 0; I < InBundle.mPhases.size(); ++I)
     {
         const FPhaseRecord &Phase = InBundle.mPhases[I];
-        if (Phase.mJobs.empty() && Phase.mLanes.empty())
+        if (Phase.mJobs.empty() && Phase.mLanes.empty() &&
+            Phase.mFileManifest.empty())
         {
             continue;
         }

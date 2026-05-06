@@ -177,7 +177,9 @@ static void EmitPhaseMetricThresholdsJson()
                                  kPhaseMetricFileManifestRichEntries);
     EmitMetricThresholdRangeJson("evidence_items",
                                  kPhaseMetricEvidenceHollowItems,
-                                 kPhaseMetricEvidenceRichItems, false);
+                                 kPhaseMetricEvidenceRichItems);
+    EmitJsonFieldSizeT("design_bloat_reference_chars",
+                       kPhaseMetricDesignBloatReferenceChars, false);
     std::cout << "},";
 }
 
@@ -189,6 +191,11 @@ static void EmitPhaseMetricObjectJson(const size_t InIndex,
     EmitJsonFieldSizeT("index", InIndex);
     EmitJsonField("status", ToString(InPhase.mLifecycle.mStatus));
     EmitJsonFieldSizeT("design_chars", InMetrics.mDesignChars);
+    EmitJsonFieldSizeT("largest_design_field_chars",
+                       InMetrics.mLargestDesignFieldChars);
+    EmitJsonFieldSizeT("repeated_design_block_count",
+                       InMetrics.mRepeatedDesignBlockCount);
+    EmitJsonFieldSizeT("design_bloat_ratio", InMetrics.mDesignBloatRatio);
     EmitJsonFieldSizeT("solid_words", InMetrics.mSolidWordCount);
     EmitJsonFieldSizeT("recursive_words", InMetrics.mRecursiveWordCount);
     EmitJsonFieldSizeT("authored_fields", InMetrics.mAuthoredFieldCount);
@@ -360,8 +367,9 @@ static int RunBundlePhaseMetricHuman(const fs::path &InRepoRoot,
     std::cout << "\n\n";
 
     HumanTable Table;
-    Table.mHeaders = {"Index",  "Status", "Design", "SOLID", "Words",
-                      "Fields", "Work",   "Tests",  "Files", "Evidence"};
+    Table.mHeaders = {"Index",  "Status", "Design", "Bloat", "SOLID",
+                      "Words",  "Fields", "Work",   "Tests", "Files",
+                      "Evidence"};
     for (const size_t Index : Indices)
     {
         const FPhaseRecord &Phase = Bundle.mPhases[Index];
@@ -373,6 +381,9 @@ static int RunBundlePhaseMetricHuman(const fs::path &InRepoRoot,
             HumanMetricBar(Metrics.mDesignChars, kPhaseHollowChars,
                            kPhaseRichMinChars,
                            std::to_string(Metrics.mDesignChars)),
+            std::to_string(Metrics.mLargestDesignFieldChars) + " max / " +
+                std::to_string(Metrics.mRepeatedDesignBlockCount) + " rep / " +
+                std::to_string(Metrics.mDesignBloatRatio) + "%",
             HumanMetricBar(Metrics.mSolidWordCount,
                            kPhaseMetricSolidHollowWords,
                            kPhaseMetricSolidRichWords,
@@ -1101,6 +1112,11 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseNormalizeCommand(SubArgs, InRepoRoot);
     }
 
+    if (Sub == "board-replace")
+    {
+        return RunPhaseBoardReplaceCommand(SubArgs, InRepoRoot);
+    }
+
     // Semantic phase commands
     if (Sub == "start")
         return RunPhaseStartCommand(SubArgs, InRepoRoot);
@@ -1132,10 +1148,10 @@ int RunBundlePhaseCommand(const std::vector<std::string> &InArgs,
         return RunPhaseSyncExecutionCommand(SubArgs, InRepoRoot);
 
     throw UsageError("Unknown phase subcommand: " + Sub +
-                     ". Expected: list, get, set, add, remove, start, "
-                     "complete, block, unblock, cancel, progress, "
-                     "complete-jobs, log, verify, next, readiness, "
-                     "wave-status, drift, sync-execution");
+                     ". Expected: list, get, set, add, remove, normalize, "
+                     "board-replace, start, complete, block, unblock, "
+                     "cancel, progress, complete-jobs, log, verify, next, "
+                     "readiness, wave-status, drift, sync-execution");
 }
 
 } // namespace UniPlan

@@ -7,6 +7,7 @@
 
 #include <fstream>
 #include <regex>
+#include <system_error>
 
 // ---------------------------------------------------------------------------
 // SetUp / TearDown — temp directory lifecycle
@@ -162,6 +163,29 @@ void FBundleTestFixture::StopCapture()
 nlohmann::json FBundleTestFixture::ParseCapturedJSON()
 {
     return nlohmann::json::parse(mCapturedStdout);
+}
+
+std::string FBundleTestFixture::ExpectedJsonRepoRoot() const
+{
+    std::error_code Error;
+    const fs::path CanonicalRoot = fs::weakly_canonical(mRepoRoot, Error);
+    if (Error)
+    {
+        return mRepoRoot.lexically_normal().generic_string();
+    }
+    return CanonicalRoot.generic_string();
+}
+
+void FBundleTestFixture::ExpectJsonRepoRoot(
+    const nlohmann::json &InJson) const
+{
+    ASSERT_TRUE(InJson.contains("repo_root"));
+    ASSERT_TRUE(InJson["repo_root"].is_string());
+
+    const std::string RepoRoot = InJson["repo_root"].get<std::string>();
+    EXPECT_EQ(RepoRoot, ExpectedJsonRepoRoot());
+    EXPECT_EQ(RepoRoot.find('\\'), std::string::npos)
+        << "JSON repo_root must use generic separators";
 }
 
 std::string FBundleTestFixture::ReadBundleFile(const std::string &InTopicKey)

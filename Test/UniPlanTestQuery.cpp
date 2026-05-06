@@ -7,6 +7,44 @@
 
 #include <gtest/gtest.h>
 
+namespace
+{
+const nlohmann::json *FindCatalogSubcommand(const nlohmann::json &InCatalog,
+                                            const std::string &InVerb,
+                                            const std::string &InSubcommand)
+{
+    if (!InCatalog.contains("verbs") || !InCatalog["verbs"].is_array())
+        return nullptr;
+    for (const auto &Verb : InCatalog["verbs"])
+    {
+        if (Verb.value("name", "") != InVerb)
+            continue;
+        if (!Verb.contains("subcommands") ||
+            !Verb["subcommands"].is_array())
+            return nullptr;
+        for (const auto &Sub : Verb["subcommands"])
+        {
+            if (Sub.value("name", "") == InSubcommand)
+                return &Sub;
+        }
+    }
+    return nullptr;
+}
+
+bool JsonStringArrayContains(const nlohmann::json &InArray,
+                             const std::string &InValue)
+{
+    if (!InArray.is_array())
+        return false;
+    for (const auto &Item : InArray)
+    {
+        if (Item.is_string() && Item.get<std::string>() == InValue)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
 // ===================================================================
 // topic list
 // ===================================================================
@@ -195,7 +233,7 @@ TEST_F(FBundleTestFixture, TopicStatusJsonHasCounts)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["schema"], "uni-plan-topic-status-v1");
-    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
+    ExpectJsonRepoRoot(Json);
     EXPECT_EQ(Json["total"], 1);
     EXPECT_TRUE(Json.contains("counts"));
     EXPECT_EQ(Json["counts"]["in_progress"], 1);
@@ -268,6 +306,9 @@ TEST_F(FBundleTestFixture, PhaseMetricJsonReturnsMetrics)
     ASSERT_TRUE(Json["phases"][0].contains("solid_words"));
     ASSERT_TRUE(Json["phases"][0].contains("recursive_words"));
     ASSERT_TRUE(Json["phases"][0].contains("field_coverage_percent"));
+    ASSERT_TRUE(Json["phases"][0].contains("largest_design_field_chars"));
+    ASSERT_TRUE(Json["phases"][0].contains("repeated_design_block_count"));
+    ASSERT_TRUE(Json["phases"][0].contains("design_bloat_ratio"));
     ASSERT_TRUE(Json["phases"][0].contains("evidence_items"));
 }
 
@@ -329,6 +370,7 @@ TEST_F(FBundleTestFixture, PhaseMetricHumanRendersTable)
     StopCapture();
     EXPECT_EQ(Code, 0);
     EXPECT_NE(mCapturedStdout.find("Phase Metrics"), std::string::npos);
+    EXPECT_NE(mCapturedStdout.find("Bloat"), std::string::npos);
     EXPECT_NE(mCapturedStdout.find("SOLID"), std::string::npos);
     EXPECT_NE(mCapturedStdout.find("Evidence"), std::string::npos);
 }
@@ -369,6 +411,9 @@ TEST_F(FBundleTestFixture, PhaseMetricWatchSnapshotCarriesMetrics)
     EXPECT_EQ(Plan.mPhases[0].mV4DesignChars,
               Plan.mPhases[0].mMetrics.mDesignChars);
     EXPECT_GT(Plan.mPhases[0].mMetrics.mRecursiveWordCount, 0);
+    EXPECT_EQ(Plan.mPhases[0].mMetrics.mDesignBloatRatio,
+              (Plan.mPhases[0].mMetrics.mDesignChars * 100) /
+                  UniPlan::kPhaseMetricDesignBloatReferenceChars);
 }
 #endif
 
@@ -521,7 +566,7 @@ TEST_F(FBundleTestFixture, PhaseNextFindsNotStarted)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["schema"], "uni-plan-phase-next-v1");
-    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
+    ExpectJsonRepoRoot(Json);
     EXPECT_EQ(Json["phase_index"], 2);
 }
 
@@ -537,7 +582,7 @@ TEST_F(FBundleTestFixture, PhaseNextAllStartedReturnsNegative)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["schema"], "uni-plan-phase-next-v1");
-    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
+    ExpectJsonRepoRoot(Json);
     EXPECT_EQ(Json["phase_index"], -1);
 }
 
@@ -557,7 +602,7 @@ TEST_F(FBundleTestFixture, PhaseReadinessReportsGates)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["schema"], "uni-plan-phase-readiness-v1");
-    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
+    ExpectJsonRepoRoot(Json);
     EXPECT_TRUE(Json.contains("gates"));
     EXPECT_FALSE(Json["gates"].empty());
 }
@@ -578,7 +623,7 @@ TEST_F(FBundleTestFixture, PhaseWaveStatusReportsWaves)
     EXPECT_EQ(Code, 0);
     const auto Json = ParseCapturedJSON();
     EXPECT_EQ(Json["schema"], "uni-plan-phase-wave-status-v1");
-    EXPECT_EQ(Json["repo_root"], mRepoRoot.string());
+    ExpectJsonRepoRoot(Json);
     EXPECT_TRUE(Json.contains("waves"));
     EXPECT_TRUE(Json.contains("current_wave"));
 }
@@ -1932,4 +1977,122 @@ TEST_F(FBundleTestFixture, PhaseGetAllPhasesConflictsWithPhases)
                       "--phases", "0,1", "--repo-root", mRepoRoot.string()},
                      mRepoRoot.string()),
                  UniPlan::UsageError);
+}
+
+// ===================================================================
+// v0.108.1 — _catalog mirrors shipped parser/help surface
+// ===================================================================
+
+TEST_F(FBundleTestFixture, CatalogAdvertisesTypedArrayAndGraphCommands)
+{
+    StartCapture();
+    const int Code = UniPlan::RunCatalogCommand({"--json"},
+                                                mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"].get<std::string>(), "uni-plan-catalog-v1");
+    EXPECT_EQ(Json["cli_version"].get<std::string>(), "0.109.0");
+
+    ASSERT_NE(FindCatalogSubcommand(Json, "priority-grouping", "add"),
+              nullptr);
+    ASSERT_NE(FindCatalogSubcommand(Json, "priority-grouping", "list"),
+              nullptr);
+    ASSERT_NE(FindCatalogSubcommand(Json, "runbook", "add"), nullptr);
+    ASSERT_NE(FindCatalogSubcommand(Json, "runbook", "list"), nullptr);
+    ASSERT_NE(FindCatalogSubcommand(Json, "residual-risk", "add"), nullptr);
+    ASSERT_NE(FindCatalogSubcommand(Json, "residual-risk", "list"), nullptr);
+
+    const nlohmann::json *Graph =
+        FindCatalogSubcommand(Json, "graph", "query");
+    ASSERT_NE(Graph, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*Graph)["optional_flags"], "topic"));
+    EXPECT_TRUE(JsonStringArrayContains((*Graph)["optional_flags"], "depth"));
+}
+
+TEST_F(FBundleTestFixture, CatalogAdvertisesRecentMutationFlags)
+{
+    StartCapture();
+    const int Code = UniPlan::RunCatalogCommand({"--json"},
+                                                mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+
+    const nlohmann::json *PhaseSet =
+        FindCatalogSubcommand(Json, "phase", "set");
+    ASSERT_NE(PhaseSet, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseSet)["optional_flags"],
+                                        "validation-commands-json-file"));
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseSet)["optional_flags"],
+                                        "validation-add-json-file"));
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseSet)["optional_flags"],
+                                        "dependency-add-json-file"));
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseSet)["optional_flags"],
+                                        "investigation-append-file"));
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseSet)["optional_flags"],
+                                        "ack-only"));
+
+    const nlohmann::json *TopicSet =
+        FindCatalogSubcommand(Json, "topic", "set");
+    ASSERT_NE(TopicSet, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*TopicSet)["optional_flags"],
+                                        "validation-commands-json-file"));
+    EXPECT_TRUE(JsonStringArrayContains((*TopicSet)["optional_flags"],
+                                        "dependency-add-json-file"));
+    EXPECT_TRUE(JsonStringArrayContains((*TopicSet)["optional_flags"],
+                                        "ack-only"));
+
+    const nlohmann::json *TaskSet =
+        FindCatalogSubcommand(Json, "task", "set");
+    ASSERT_NE(TaskSet, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*TaskSet)["optional_flags"],
+                                        "description"));
+    EXPECT_TRUE(JsonStringArrayContains((*TaskSet)["optional_flags"],
+                                        "force"));
+    EXPECT_TRUE(JsonStringArrayContains((*TaskSet)["optional_flags"],
+                                        "reason"));
+}
+
+TEST_F(FBundleTestFixture, CatalogAdvertisesRecentPhaseAndLaneCommands)
+{
+    StartCapture();
+    const int Code = UniPlan::RunCatalogCommand({"--json"},
+                                                mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0);
+
+    const auto Json = ParseCapturedJSON();
+
+    const nlohmann::json *PhaseGet =
+        FindCatalogSubcommand(Json, "phase", "get");
+    ASSERT_NE(PhaseGet, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseGet)["optional_flags"],
+                                        "all-phases"));
+
+    const nlohmann::json *PhaseMetric =
+        FindCatalogSubcommand(Json, "phase", "metric");
+    ASSERT_NE(PhaseMetric, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseMetric)["optional_flags"],
+                                        "all-phases"));
+
+    const nlohmann::json *PhaseReadiness =
+        FindCatalogSubcommand(Json, "phase", "readiness");
+    ASSERT_NE(PhaseReadiness, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseReadiness)["optional_flags"],
+                                        "all-phases"));
+
+    const nlohmann::json *PhaseSync =
+        FindCatalogSubcommand(Json, "phase", "sync-execution");
+    ASSERT_NE(PhaseSync, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*PhaseSync)["optional_flags"],
+                                        "dry-run"));
+
+    const nlohmann::json *LaneComplete =
+        FindCatalogSubcommand(Json, "lane", "complete");
+    ASSERT_NE(LaneComplete, nullptr);
+    EXPECT_TRUE(JsonStringArrayContains((*LaneComplete)["optional_flags"],
+                                        "ack-only"));
 }

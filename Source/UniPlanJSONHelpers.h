@@ -1,5 +1,7 @@
 #pragma once
 
+#include "UniPlanPathHelpers.h"
+
 #include <cstdio>
 #include <iostream>
 #include <sstream>
@@ -78,7 +80,8 @@ inline void PrintJsonHeader(const char *InSchema, const std::string &InUtc,
 {
     std::cout << "{\"schema\":" << JSONQuote(InSchema)
               << ",\"generated_utc\":" << JSONQuote(InUtc)
-              << ",\"repo_root\":" << JSONQuote(InRoot) << ",";
+              << ",\"repo_root\":" << JSONQuote(FormatJSONRepoRoot(InRoot))
+              << ",";
 }
 
 inline void PrintJsonSep(const size_t InIndex)

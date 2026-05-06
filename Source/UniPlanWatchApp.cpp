@@ -8,15 +8,63 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/dom/node.hpp>
+#include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
+#include <ftxui/screen/screen.hpp>
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace UniPlan
 {
+
+namespace
+{
+static constexpr int kNavigatorPaneWidth = 50;
+static constexpr int kMiddlePaneWidthWithCode = 150;
+
+class EqualHeightFlexNode : public ftxui::Node
+{
+  public:
+    explicit EqualHeightFlexNode(ftxui::Element InChild)
+        : Node(ftxui::Elements{std::move(InChild)})
+    {
+    }
+
+    void ComputeRequirement() override
+    {
+        children_[0]->ComputeRequirement();
+        requirement_ = children_[0]->requirement();
+        requirement_.min_y = 0;
+        requirement_.flex_grow_y = 1;
+        requirement_.flex_shrink_y = 1;
+    }
+
+    void SetBox(ftxui::Box InBox) override
+    {
+        Node::SetBox(InBox);
+        children_[0]->SetBox(InBox);
+    }
+
+    void Render(ftxui::Screen &InScreen) override
+    {
+        children_[0]->Render(InScreen);
+    }
+};
+
+static ftxui::Decorator EqualHeightFlex()
+{
+    return [](ftxui::Element InChild) -> ftxui::Element
+    {
+        return std::make_shared<EqualHeightFlexNode>(std::move(InChild));
+    };
+}
+} // namespace
 
 DocWatchApp::DocWatchApp(const std::string &InRepoRoot,
                          const DocConfig &InConfig)
@@ -68,13 +116,7 @@ int DocWatchApp::Run()
     ValidationFailPanel PanelValidationFail;
     ExecutionTaxonomyPanel PanelTaxonomy;
     FileManifestPanel PanelFileManifest;
-    SchemaPanel PanelSchema;
-    PlaybookChangeLogPanel PanelPBChangeLog;
-    PlaybookVerificationPanel PanelPBVerification;
-    PlanChangeLogPanel PanelPlanChangeLog;
-    PlanVerificationPanel PanelPlanVerification;
-    ImplChangeLogPanel PanelImplChangeLog;
-    ImplVerificationPanel PanelImplVerification;
+    CodeSnippetPanel PanelCodeSnippet;
     PlanDetailPanel PanelPlanDetail;
     WatchStatusBar PanelStatusBar;
 
@@ -106,23 +148,26 @@ int DocWatchApp::Run()
                 PanelLint.Render(mSnapshot.mLint) | flex,
             });
             auto leftRow3 = PanelActivePlans.Render(mSnapshot.mActivePlans,
-                                                    mSelectedPlanIndex);
+                                                    mSelectedPlanIndex,
+                                                    mScrollState.mActivePlans);
             auto leftRow4 = PanelNonActive.Render(mSnapshot.mNonActivePlans,
-                                                  mSelectedNonActiveIndex);
+                                                  mSelectedNonActiveIndex,
+                                                  mScrollState.mNonActivePlans);
 
             auto leftPane = vbox({
                 leftRow1,
                 leftRow2,
-                leftRow3,
-                leftRow4,
+                leftRow3 | EqualHeightFlex(),
+                leftRow4 | EqualHeightFlex(),
             });
 
-            // Auto-select first in_progress phase if no phase is selected
+            // Auto-select the newest in_progress phase; otherwise select the
+            // newest phase so the descending detail panel opens at the top.
             if (mSelectedPhaseIndex < 0 && !SelectedPlan.mPhases.empty())
             {
-                for (int PhIdx = 0;
-                     PhIdx < static_cast<int>(SelectedPlan.mPhases.size());
-                     ++PhIdx)
+                for (int PhIdx =
+                         static_cast<int>(SelectedPlan.mPhases.size()) - 1;
+                     PhIdx >= 0; --PhIdx)
                 {
                     if (SelectedPlan.mPhases[static_cast<size_t>(PhIdx)]
                             .mStatus == EExecutionStatus::InProgress)
@@ -133,16 +178,18 @@ int DocWatchApp::Run()
                 }
                 if (mSelectedPhaseIndex < 0)
                 {
-                    mSelectedPhaseIndex = 0;
+                    mSelectedPhaseIndex =
+                        static_cast<int>(SelectedPlan.mPhases.size()) - 1;
                 }
             }
 
             // ── RIGHT PANE (detail for selected plan) ─────────────
             auto rightRow1 = PanelPhaseDetail.Render(
-                SelectedPlan, mSelectedPhaseIndex, mbShowPhaseMetricView);
+                SelectedPlan, mSelectedPhaseIndex, mbShowPhaseMetricView,
+                mScrollState.mPhaseDetail);
             auto rightRow2 = PanelTaxonomy.Render(
                 SelectedPlan, mSelectedPhaseIndex, mSelectedWaveIndex,
-                mSelectedLaneIndex, mbFocusMode);
+                mSelectedLaneIndex, mbFocusMode, mScrollState.mLanes);
 
             // Resolve selected phase taxonomy for file manifest
             FPhaseTaxonomy SelectedTaxonomy;
@@ -160,7 +207,8 @@ int DocWatchApp::Run()
                 }
             }
             auto rightRow3 =
-                PanelFileManifest.Render(SelectedTaxonomy, mFilePageIndex);
+                PanelFileManifest.Render(SelectedTaxonomy,
+                                         mScrollState.mFileManifest);
             auto rightRow4 = PanelBlockers.Render(mSnapshot.mAllBlockers);
             auto rightRow5 = PanelValidationFail.Render(mSnapshot.mValidation);
 
@@ -198,42 +246,31 @@ int DocWatchApp::Run()
                 "  \xe2\x97\x8f  " + mSnapshot.mRepoRoot + "  \xe2\x97\x8f  " +
                 mSnapshot.mSnapshotAtUTC + " ";
 
-            // ── Layout (2/3/4-pane with schema and/or impl) ─────
-            const bool bHasSchema = mbShowSchemaPane;
-            const bool bHasImpl = mbShowImplPane;
-            const int LeftWidth = (bHasSchema && bHasImpl) ? 50 : 80;
-
-            auto implPane = vbox({
-                PanelPlanChangeLog.Render(SelectedPlan),
-                PanelPlanVerification.Render(SelectedPlan),
-                PanelImplChangeLog.Render(SelectedPlan),
-                PanelImplVerification.Render(SelectedPlan),
-                PanelPBChangeLog.Render(SelectedPlan, mSelectedPhaseIndex),
-                PanelPBVerification.Render(SelectedPlan, mSelectedPhaseIndex),
-            });
-
+            // ── Layout ───────────────────────────────────────────
             // Compose horizontally. Focus mode drops the left overview pane;
-            // the schema / impl middle panes only appear when their own
-            // toggles (`s` / `i`) are on. Right pane is always present.
+            // the right pane is always present.
             Elements MainRow;
             if (!mbFocusMode)
             {
-                MainRow.push_back(leftPane | size(WIDTH, EQUAL, LeftWidth));
+                MainRow.push_back(leftPane |
+                                  size(WIDTH, EQUAL, kNavigatorPaneWidth));
                 MainRow.push_back(separator());
             }
-            if (bHasSchema)
+            if (mbShowCodePane)
             {
-                MainRow.push_back(
-                    PanelSchema.Render(SelectedPlan, mSelectedPhaseIndex) |
-                    size(WIDTH, EQUAL, 120));
+                auto codePane = PanelCodeSnippet.Render(
+                    SelectedPlan, mSelectedPhaseIndex,
+                    mScrollState.mCodeSnippets);
+                MainRow.push_back(rightPane |
+                                  size(WIDTH, EQUAL,
+                                       kMiddlePaneWidthWithCode));
                 MainRow.push_back(separator());
+                MainRow.push_back(codePane | flex);
             }
-            if (bHasImpl)
+            else
             {
-                MainRow.push_back(implPane | size(WIDTH, EQUAL, 60));
-                MainRow.push_back(separator());
+                MainRow.push_back(rightPane | flex);
             }
-            MainRow.push_back(rightPane | flex);
             Element MainContent = hbox(std::move(MainRow));
 
             return vbox({
@@ -264,6 +301,10 @@ int DocWatchApp::Run()
                 mSelectedPhaseIndex = -1;
                 mSelectedWaveIndex = -1;
                 mSelectedLaneIndex = -1;
+                mScrollState.mPhaseDetail.Reset();
+                mScrollState.mLanes.Reset();
+                mScrollState.mFileManifest.Reset();
+                mScrollState.mCodeSnippets.Reset();
                 if (!mSnapshot.mActivePlans.empty())
                 {
                     mSelectedPlanIndex =
@@ -279,6 +320,10 @@ int DocWatchApp::Run()
                 mSelectedPhaseIndex = -1;
                 mSelectedWaveIndex = -1;
                 mSelectedLaneIndex = -1;
+                mScrollState.mPhaseDetail.Reset();
+                mScrollState.mLanes.Reset();
+                mScrollState.mFileManifest.Reset();
+                mScrollState.mCodeSnippets.Reset();
                 if (!mSnapshot.mActivePlans.empty())
                 {
                     mSelectedPlanIndex =
@@ -295,6 +340,10 @@ int DocWatchApp::Run()
                 mSelectedPhaseIndex = -1;
                 mSelectedWaveIndex = -1;
                 mSelectedLaneIndex = -1;
+                mScrollState.mPhaseDetail.Reset();
+                mScrollState.mLanes.Reset();
+                mScrollState.mFileManifest.Reset();
+                mScrollState.mCodeSnippets.Reset();
                 if (!mSnapshot.mNonActivePlans.empty())
                 {
                     if (mSelectedNonActiveIndex < 0)
@@ -314,6 +363,10 @@ int DocWatchApp::Run()
                 mSelectedPhaseIndex = -1;
                 mSelectedWaveIndex = -1;
                 mSelectedLaneIndex = -1;
+                mScrollState.mPhaseDetail.Reset();
+                mScrollState.mLanes.Reset();
+                mScrollState.mFileManifest.Reset();
+                mScrollState.mCodeSnippets.Reset();
                 if (!mSnapshot.mNonActivePlans.empty())
                 {
                     if (mSelectedNonActiveIndex < 0)
@@ -356,7 +409,9 @@ int DocWatchApp::Run()
                         (mSelectedPhaseIndex + 1) % PhaseCount;
                     mSelectedWaveIndex = -1;
                     mSelectedLaneIndex = -1;
-                    mFilePageIndex = 0;
+                    mScrollState.mLanes.Reset();
+                    mScrollState.mFileManifest.Reset();
+                    mScrollState.mCodeSnippets.Reset();
                 }
                 return true;
             }
@@ -373,7 +428,9 @@ int DocWatchApp::Run()
                     mSelectedPhaseIndex =
                         (mSelectedPhaseIndex - 1 + PhaseCount) % PhaseCount;
                     mSelectedLaneIndex = -1;
-                    mFilePageIndex = 0;
+                    mScrollState.mLanes.Reset();
+                    mScrollState.mFileManifest.Reset();
+                    mScrollState.mCodeSnippets.Reset();
                 }
                 return true;
             }
@@ -501,10 +558,7 @@ int DocWatchApp::Run()
                 }
                 if (rpTax != nullptr && !rpTax->mFileManifest.empty())
                 {
-                    const int PageCount =
-                        (static_cast<int>(rpTax->mFileManifest.size()) + 9) /
-                        10;
-                    mFilePageIndex = (mFilePageIndex + 1) % PageCount;
+                    ++mScrollState.mFileManifest.mOffset;
                 }
                 return true;
             }
@@ -528,27 +582,38 @@ int DocWatchApp::Run()
                 }
                 if (rpTax != nullptr && !rpTax->mFileManifest.empty())
                 {
-                    const int PageCount =
-                        (static_cast<int>(rpTax->mFileManifest.size()) + 9) /
-                        10;
-                    mFilePageIndex =
-                        (mFilePageIndex - 1 + PageCount) % PageCount;
+                    if (mScrollState.mFileManifest.mOffset > 0)
+                    {
+                        --mScrollState.mFileManifest.mOffset;
+                    }
                 }
-                return true;
-            }
-            if (InEvent == Event::Character('s'))
-            {
-                mbShowSchemaPane = !mbShowSchemaPane;
-                return true;
-            }
-            if (InEvent == Event::Character('i'))
-            {
-                mbShowImplPane = !mbShowImplPane;
                 return true;
             }
             if (InEvent == Event::Character('d'))
             {
                 mbShowPhaseMetricView = !mbShowPhaseMetricView;
+                return true;
+            }
+            if (InEvent == Event::F12)
+            {
+                mbShowCodePane = !mbShowCodePane;
+                if (mbShowCodePane)
+                {
+                    mScrollState.mCodeSnippets.Reset();
+                }
+                return true;
+            }
+            if (mbShowCodePane && InEvent == Event::Character('['))
+            {
+                if (mScrollState.mCodeSnippets.mOffset > 0)
+                {
+                    --mScrollState.mCodeSnippets.mOffset;
+                }
+                return true;
+            }
+            if (mbShowCodePane && InEvent == Event::Character(']'))
+            {
+                ++mScrollState.mCodeSnippets.mOffset;
                 return true;
             }
             if (InEvent == Event::Character('`'))

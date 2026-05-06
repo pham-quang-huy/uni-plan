@@ -9,6 +9,14 @@
 
 #include <gtest/gtest.h>
 
+static void WriteTestTextFile(const fs::path &InPath,
+                              const std::string &InText)
+{
+    std::ofstream Stream(InPath, std::ios::binary);
+    ASSERT_TRUE(Stream.is_open()) << "failed to open " << InPath.string();
+    Stream << InText;
+}
+
 // ===================================================================
 // testing add
 // ===================================================================
@@ -1120,6 +1128,132 @@ TEST_F(FBundleTestFixture, TaskListFiltersByJob)
         EXPECT_EQ(E["phase_index"].get<int>(), 1);
         EXPECT_EQ(E["job_index"].get<int>(), 2);
     }
+}
+
+// ===================================================================
+// phase board-replace
+// ===================================================================
+
+TEST_F(FBundleTestFixture, PhaseBoardReplaceImportsManualBoardJSON)
+{
+    CreateMinimalFixture("BoardImport", UniPlan::ETopicStatus::NotStarted, 1);
+    const fs::path BoardPath = mRepoRoot / "manual-board.json";
+    WriteTestTextFile(
+        BoardPath,
+        R"({
+  "lanes": [
+    {
+      "scope": "Vendor intake owns archive provenance and license notes.",
+      "exit_criteria": "The plan names source URL, version, and approval gate."
+    },
+    {
+      "scope": "Build graph owns the static library target boundary.",
+      "exit_criteria": "Jobs map the target and consumer link contract."
+    }
+  ],
+  "jobs": [
+    {
+      "wave": 0,
+      "lane": 0,
+      "scope": "Record the exact upstream Jolt source and version policy.",
+      "output": "Vendor provenance note ready for phase execution.",
+      "exit_criteria": "A reviewer can identify the approved upstream tag.",
+      "tasks": [
+        {
+          "description": "Name the upstream Jolt tag and license files that the vendor phase must preserve."
+        },
+        {
+          "description": "Define the rejection path for unaudited local Jolt source edits."
+        }
+      ]
+    },
+    {
+      "wave": 1,
+      "lane": 1,
+      "scope": "Specify the FIE_Physics link surface for consumers.",
+      "output": "CMake handoff is scoped to one static target.",
+      "exit_criteria": "No consumer links Jolt directly.",
+      "tasks": [
+        {
+          "description": "Map the future CMake target dependencies without creating source files."
+        }
+      ]
+    }
+  ]
+})");
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseBoardReplaceCommand(
+        {"--topic", "BoardImport", "--phase", "0", "--board-json-file",
+         BoardPath.string(), "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    ASSERT_EQ(Code, 0) << mCapturedStderr;
+
+    const auto Json = ParseCapturedJSON();
+    EXPECT_EQ(Json["schema"], "uni-plan-mutation-v1");
+    EXPECT_EQ(Json["target"], "phases[0]");
+
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("BoardImport", Bundle));
+    ASSERT_EQ(Bundle.mPhases[0].mLanes.size(), 2u);
+    ASSERT_EQ(Bundle.mPhases[0].mJobs.size(), 2u);
+    EXPECT_EQ(Bundle.mPhases[0].mJobs[0].mTasks.size(), 2u);
+    EXPECT_EQ(Bundle.mPhases[0].mJobs[1].mTasks.size(), 1u);
+    EXPECT_EQ(Bundle.mPhases[0].mJobs[1].mLane, 1);
+    ASSERT_FALSE(Bundle.mChangeLogs.empty());
+    EXPECT_NE(Bundle.mChangeLogs.back().mChange.find("board replaced"),
+              std::string::npos);
+}
+
+TEST_F(FBundleTestFixture, PhaseBoardReplaceRejectsProgressedBoard)
+{
+    CreateMinimalFixture("BoardProgressed", UniPlan::ETopicStatus::NotStarted,
+                         1);
+    UniPlan::FTopicBundle Bundle;
+    ASSERT_TRUE(ReloadBundle("BoardProgressed", Bundle));
+    UniPlan::FLaneRecord Lane;
+    Lane.mScope = "Existing lane";
+    Bundle.mPhases[0].mLanes.push_back(std::move(Lane));
+    UniPlan::FJobRecord Job;
+    Job.mScope = "Existing job";
+    Job.mExitCriteria = "Already started";
+    Job.mStatus = UniPlan::EExecutionStatus::InProgress;
+    Bundle.mPhases[0].mJobs.push_back(std::move(Job));
+    std::string Error;
+    ASSERT_TRUE(UniPlan::TryWriteTopicBundle(
+        Bundle, mRepoRoot / "Docs" / "Plans" / "BoardProgressed.Plan.json",
+        Error))
+        << Error;
+
+    const fs::path BoardPath = mRepoRoot / "replacement-board.json";
+    WriteTestTextFile(
+        BoardPath,
+        R"({
+  "lanes": [{"scope": "Replacement lane", "exit_criteria": "Ready"}],
+  "jobs": [{
+    "wave": 0,
+    "lane": 0,
+    "scope": "Replacement job",
+    "exit_criteria": "Ready",
+    "tasks": [{"description": "Replacement task"}]
+  }]
+})");
+
+    StartCapture();
+    const int Code = UniPlan::RunPhaseBoardReplaceCommand(
+        {"--topic", "BoardProgressed", "--phase", "0", "--board-json-file",
+         BoardPath.string(), "--repo-root", mRepoRoot.string()},
+        mRepoRoot.string());
+    StopCapture();
+    EXPECT_EQ(Code, 1);
+    EXPECT_NE(mCapturedStderr.find("refuses to overwrite evidenced"),
+              std::string::npos);
+
+    UniPlan::FTopicBundle After;
+    ASSERT_TRUE(ReloadBundle("BoardProgressed", After));
+    ASSERT_EQ(After.mPhases[0].mJobs.size(), 1u);
+    EXPECT_EQ(After.mPhases[0].mJobs[0].mScope, "Existing job");
 }
 
 TEST_F(FBundleTestFixture, LaneRemoveRefusesWhenJobsReferenceIt)

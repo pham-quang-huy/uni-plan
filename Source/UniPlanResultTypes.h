@@ -155,6 +155,7 @@ struct PhaseItem
     std::string mOutput;
     std::string mDone;
     std::string mRemaining;
+    std::string mCodeSnippets;
     size_t mV4DesignChars = 0; // ComputePhaseDesignChars(FPhaseRecord)
     FPhaseRuntimeMetrics mMetrics;
 };

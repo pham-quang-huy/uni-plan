@@ -126,6 +126,8 @@ FPhaseSetOptions ParsePhaseSetOptions(const std::vector<std::string> &InTokens);
 FPhaseAddOptions ParsePhaseAddOptions(const std::vector<std::string> &InTokens);
 FPhaseNormalizeOptions
 ParsePhaseNormalizeOptions(const std::vector<std::string> &InTokens);
+FPhaseBoardReplaceOptions
+ParsePhaseBoardReplaceOptions(const std::vector<std::string> &InTokens);
 FJobSetOptions ParseJobSetOptions(const std::vector<std::string> &InTokens);
 FTaskSetOptions ParseTaskSetOptions(const std::vector<std::string> &InTokens);
 FChangelogAddOptions
@@ -411,6 +413,8 @@ int RunPhaseAddCommand(const std::vector<std::string> &InArgs,
                        const std::string &InRepoRoot);
 int RunPhaseNormalizeCommand(const std::vector<std::string> &InArgs,
                              const std::string &InRepoRoot);
+int RunPhaseBoardReplaceCommand(const std::vector<std::string> &InArgs,
+                                const std::string &InRepoRoot);
 int RunJobSetCommand(const std::vector<std::string> &InArgs,
                      const std::string &InRepoRoot);
 int RunTaskSetCommand(const std::vector<std::string> &InArgs,

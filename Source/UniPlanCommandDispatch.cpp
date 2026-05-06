@@ -290,6 +290,8 @@ void PrintUsage(std::ostream &Out)
     Out << "  uni-plan phase remove --topic <T> --phase <N>\n";
     Out << "  uni-plan phase normalize --topic <T> "
            "--phase <N> [--dry-run]\n";
+    Out << "  uni-plan phase board-replace --topic <T> "
+           "--phase <N> --board-json-file <path>\n";
     Out << "  uni-plan topic normalize --topic <T> [--dry-run]\n";
     Out << "  uni-plan job add|set|remove|list --topic <T> "
            "--phase <N> [--job <N>] ...\n";

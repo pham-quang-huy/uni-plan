@@ -24,10 +24,15 @@ static constexpr size_t kPhaseMetricFileManifestRichEntries = 5;
 static constexpr size_t kPhaseMetricEvidenceHollowItems = 1;
 static constexpr size_t kPhaseMetricEvidenceRichItems = 5;
 static constexpr size_t kPhaseMetricAuthoredFieldTotal = 22;
+static constexpr size_t kPhaseMetricDesignBloatReferenceChars = 40000;
+static constexpr size_t kPhaseMetricRepeatedDesignBlockMinWords = 24;
 
 struct FPhaseRuntimeMetrics
 {
     size_t mDesignChars = 0;
+    size_t mLargestDesignFieldChars = 0;
+    size_t mRepeatedDesignBlockCount = 0;
+    size_t mDesignBloatRatio = 0;
     size_t mSolidWordCount = 0;
     size_t mRecursiveWordCount = 0;
     size_t mAuthoredFieldCount = 0;

@@ -72,6 +72,7 @@ if(UPLAN_WATCH)
     target_sources(uni-plan-lib PRIVATE
         Source/UniPlanWatchApp.cpp
         Source/UniPlanWatchPanels.cpp
+        Source/UniPlanWatchScroll.cpp
         Source/UniPlanWatchSnapshot.cpp
     )
     target_link_libraries(uni-plan-lib PUBLIC
@@ -139,6 +140,7 @@ if(UPLAN_TESTS)
         Test/UniPlanTestEntity.cpp
         Test/UniPlanTestValidationContent.cpp
         Test/UniPlanTestHelp.cpp
+        Test/UniPlanTestPathHelpers.cpp
         Test/UniPlanTestPhaseKind.cpp
         Test/UniPlanTestPhaseMetrics.cpp
         Test/UniPlanTestWatchPerformance.cpp

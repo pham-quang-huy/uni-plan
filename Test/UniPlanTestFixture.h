@@ -49,6 +49,10 @@ class FBundleTestFixture : public ::testing::Test
     // Parse mCapturedStdout as JSON
     nlohmann::json ParseCapturedJSON();
 
+    // Expected canonical repo root emitted by JSON envelopes
+    std::string ExpectedJsonRepoRoot() const;
+    void ExpectJsonRepoRoot(const nlohmann::json &InJson) const;
+
     // Read a bundle file back from the temp repo
     std::string ReadBundleFile(const std::string &InTopicKey);
 

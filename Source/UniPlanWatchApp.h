@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UniPlanTypes.h"
+#include "UniPlanWatchScroll.h"
 #include "UniPlanWatchSnapshot.h"
 
 #include <atomic>
@@ -41,17 +42,16 @@ class DocWatchApp
     int mTickCount = 0;
     int mSelectedPlanIndex = 0;
     int mSelectedNonActiveIndex = -1;
+    FWatchScrollState mScrollState{};
     bool mbActiveBlockFocused = true;
     int mSelectedPhaseIndex = -1;
     int mSelectedWaveIndex = -1;
     int mSelectedLaneIndex = -1;
-    bool mbShowSchemaPane = false;
-    bool mbShowImplPane = false;
     bool mbShowPhaseMetricView = false;
     // Focus mode (toggled via `): hides the left overview pane and the plan
     // detail row of the right pane to give execution detail more space.
     bool mbFocusMode = false;
-    int mFilePageIndex = 0;
+    bool mbShowCodePane = false;
     std::atomic<bool> mbForceRefresh{false};
 };
 

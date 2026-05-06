@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UniPlanPathHelpers.h"
 #include "UniPlanStringHelpers.h" // for Trim, used by LegacyMdContentLineCount
 #include "UniPlanTypes.h"
 
@@ -27,11 +28,6 @@
 
 namespace UniPlan
 {
-
-inline std::string ToGenericPath(const fs::path &InPath)
-{
-    return InPath.generic_string();
-}
 
 // Resolve a repo-relative (or absolute) path against InRepoRoot.
 // Absolute InFilePath is returned unchanged; relative InFilePath is

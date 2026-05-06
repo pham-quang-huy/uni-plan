@@ -3138,6 +3138,41 @@ ParsePhaseNormalizeOptions(const std::vector<std::string> &InTokens)
     return Options;
 }
 
+FPhaseBoardReplaceOptions
+ParsePhaseBoardReplaceOptions(const std::vector<std::string> &InTokens)
+{
+    FPhaseBoardReplaceOptions Options;
+    const auto Remaining = ConsumeCommonOptions(InTokens, Options);
+    for (size_t Index = 0; Index < Remaining.size(); ++Index)
+    {
+        const std::string &Token = Remaining[Index];
+        if (Token == "--topic")
+        {
+            ParseRequiredTopic(Remaining, Index, Options.mTopic);
+            continue;
+        }
+        if (Token == "--phase")
+        {
+            ParseRequiredPhaseIndex(Remaining, Index, Options.mPhaseIndex);
+            continue;
+        }
+        if (Token == "--board-json-file")
+        {
+            Options.mBoardJSONFile =
+                ConsumeValuedOption(Remaining, Index, "--board-json-file");
+            continue;
+        }
+        throw UsageError("Unknown option for phase board-replace: " + Token);
+    }
+    if (Options.mTopic.empty())
+        throw UsageError("phase board-replace requires --topic");
+    if (Options.mPhaseIndex < 0)
+        throw UsageError("phase board-replace requires --phase");
+    if (Options.mBoardJSONFile.empty())
+        throw UsageError("phase board-replace requires --board-json-file");
+    return Options;
+}
+
 // ---------------------------------------------------------------------------
 // v0.93.0 CRUD symmetry — parsers for job / task / lane / testing
 // add/remove/list and topic normalize. Mirrors the existing lane add +

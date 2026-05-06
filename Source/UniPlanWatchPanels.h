@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UniPlanWatchScroll.h"
 #include "UniPlanWatchSnapshot.h"
 
 #include <ftxui/dom/elements.hpp>
@@ -33,14 +34,16 @@ class ActivePlansPanel
 {
   public:
     ftxui::Element Render(const std::vector<FWatchPlanSummary> &InPlans,
-                          int InSelectedIndex) const;
+                          int InSelectedIndex,
+                          FWatchScrollRegionState &InOutScrollState) const;
 };
 
 class PhaseDetailPanel
 {
   public:
     ftxui::Element Render(const FWatchPlanSummary &InPlan,
-                          int InSelectedPhaseIndex, bool InMetricView) const;
+                          int InSelectedPhaseIndex, bool InMetricView,
+                          FWatchScrollRegionState &InOutScrollState) const;
 };
 
 class BlockersPanel
@@ -53,7 +56,8 @@ class NonActivePlansPanel
 {
   public:
     ftxui::Element Render(const std::vector<FWatchPlanSummary> &InPlans,
-                          int InSelectedIndex) const;
+                          int InSelectedIndex,
+                          FWatchScrollRegionState &InOutScrollState) const;
 };
 
 class DeferredPlansPanel
@@ -80,59 +84,23 @@ class ExecutionTaxonomyPanel
     // while the board itself is hidden.
     ftxui::Element Render(const FWatchPlanSummary &InPlan,
                           int InSelectedPhaseIndex, int InSelectedWaveIndex,
-                          int InSelectedLaneIndex, bool InFocusMode) const;
-};
-
-class SchemaPanel
-{
-  public:
-    ftxui::Element Render(const FWatchPlanSummary &InPlan,
-                          int InSelectedPhaseIndex) const;
+                          int InSelectedLaneIndex, bool InFocusMode,
+                          FWatchScrollRegionState &InOutLaneScrollState) const;
 };
 
 class FileManifestPanel
 {
   public:
     ftxui::Element Render(const FPhaseTaxonomy &InTaxonomy,
-                          int InFilePageIndex) const;
+                          FWatchScrollRegionState &InOutScrollState) const;
 };
 
-class PlaybookChangeLogPanel
+class CodeSnippetPanel
 {
   public:
     ftxui::Element Render(const FWatchPlanSummary &InPlan,
-                          int InSelectedPhaseIndex) const;
-};
-
-class PlaybookVerificationPanel
-{
-  public:
-    ftxui::Element Render(const FWatchPlanSummary &InPlan,
-                          int InSelectedPhaseIndex) const;
-};
-
-class PlanChangeLogPanel
-{
-  public:
-    ftxui::Element Render(const FWatchPlanSummary &InPlan) const;
-};
-
-class PlanVerificationPanel
-{
-  public:
-    ftxui::Element Render(const FWatchPlanSummary &InPlan) const;
-};
-
-class ImplChangeLogPanel
-{
-  public:
-    ftxui::Element Render(const FWatchPlanSummary &InPlan) const;
-};
-
-class ImplVerificationPanel
-{
-  public:
-    ftxui::Element Render(const FWatchPlanSummary &InPlan) const;
+                          int InSelectedPhaseIndex,
+                          FWatchScrollRegionState &InOutScrollState) const;
 };
 
 class PlanDetailPanel

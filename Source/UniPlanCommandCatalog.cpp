@@ -4,6 +4,7 @@
 #include "UniPlanOptionTypes.h"
 #include "UniPlanStringHelpers.h"
 
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -126,8 +127,10 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {"topic"},
            {"status", "summary", "goals", "non-goals", "problem-statement",
             "validation-commands", "validation-clear", "validation-add",
+            "validation-commands-json-file", "validation-add-json-file",
             "baseline-audit", "execution-strategy", "locked-decisions",
-            "source-references", "dependency-clear", "dependency-add"},
+            "source-references", "dependency-clear", "dependency-add",
+            "dependency-add-json-file"},
            {"summary", "goals", "non-goals", "problem-statement",
             "validation-commands", "baseline-audit", "execution-strategy",
             "locked-decisions", "source-references"},
@@ -160,20 +163,21 @@ static std::vector<FCatalogVerb> BuildCatalog()
           {"get",
            kPhaseGetSchema,
            {"topic"},
-           {"phase", "phases", "brief", "design", "execution", "human"},
+           {"phase", "phases", "all-phases", "brief", "design", "execution",
+            "human"},
            {},
            {0, 2}},
           {"metric",
            kPhaseMetricSchema,
            {"topic"},
-           {"phase", "phases", "status", "human"},
+           {"phase", "phases", "all-phases", "status", "human"},
            {},
            {0, 1, 2}},
           {"next", kPhaseNextSchema, {"topic"}, {}, {}, {0, 2}},
           {"readiness",
            kPhaseReadinessSchema,
-           {"topic", "phase"},
-           {},
+           {"topic"},
+           {"phase", "all-phases", "human"},
            {},
            {0, 2}},
           {"wave-status",
@@ -206,14 +210,24 @@ static std::vector<FCatalogVerb> BuildCatalog()
             "validation-commands",
             "validation-clear",
             "validation-add",
+            "validation-commands-json-file",
+            "validation-add-json-file",
             "dependency-clear",
             "dependency-add",
+            "dependency-add-json-file",
             "started-at",
             "completed-at",
             "origin",
             "no-file-manifest",
             "no-file-manifest-reason",
-            "no-file-manifest-reason-clear"},
+            "no-file-manifest-reason-clear",
+            "investigation-append-file",
+            "code-entity-contract-append-file",
+            "code-snippets-append-file",
+            "best-practices-append-file",
+            "multi-platforming-append-file",
+            "readiness-gate-append-file",
+            "handoff-append-file"},
            {"context", "done", "remaining", "blockers", "scope", "output",
             "investigation", "code-entity-contract", "code-snippets",
             "best-practices", "multi-platforming", "readiness-gate", "handoff",
@@ -230,6 +244,12 @@ static std::vector<FCatalogVerb> BuildCatalog()
            kMutationSchema,
            {"topic", "phase"},
            {"dry-run"},
+           {},
+           {0, 1, 2}},
+          {"board-replace",
+           kMutationSchema,
+           {"topic", "phase", "board-json-file"},
+           {},
            {},
            {0, 1, 2}},
           {"start",
@@ -267,6 +287,12 @@ static std::vector<FCatalogVerb> BuildCatalog()
            kMutationSchema,
            {"topic", "phase"},
            {},
+           {},
+           {0, 1, 2}},
+          {"sync-execution",
+           kPhaseSyncExecutionSchema,
+           {"topic", "phase"},
+           {"dry-run"},
            {},
            {0, 1, 2}},
           {"log",
@@ -396,8 +422,8 @@ static std::vector<FCatalogVerb> BuildCatalog()
           {"set",
            kMutationSchema,
            {"topic", "phase", "job", "task"},
-           {"status", "evidence", "notes"},
-           {"evidence", "notes"},
+           {"status", "evidence", "notes", "description", "force", "reason"},
+           {"evidence", "notes", "description", "reason"},
            {0, 1, 2}},
           {"remove",
            kMutationSchema,
@@ -424,6 +450,12 @@ static std::vector<FCatalogVerb> BuildCatalog()
            {"scope", "exit-criteria"},
            {0, 1, 2}},
           {"remove",
+           kMutationSchema,
+           {"topic", "phase", "lane"},
+           {},
+           {},
+           {0, 1, 2}},
+          {"complete",
            kMutationSchema,
            {"topic", "phase", "lane"},
            {},
@@ -549,6 +581,67 @@ static std::vector<FCatalogVerb> BuildCatalog()
           {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}},
           {"list", kListSchema, {"topic"}, {"status"}, {}, {0, 2}}}});
 
+    // ---- priority-grouping / runbook / residual-risk / graph ----
+    Verbs.push_back(
+        {"priority-grouping",
+         "Manage typed priority_groupings[] entries.",
+         {{"add",
+           kMutationSchema,
+           {"topic", "id", "rule"},
+           {"phase-index", "phase-indices"},
+           {"id", "rule"},
+           {0, 1, 2}},
+          {"set",
+           kMutationSchema,
+           {"topic", "index"},
+           {"id", "phase-index", "phase-indices", "phase-indices-clear",
+            "rule"},
+           {"id", "rule"},
+           {0, 1, 2}},
+          {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}},
+          {"list", kListSchema, {"topic"}, {}, {}, {0, 2}}}});
+    Verbs.push_back(
+        {"runbook",
+         "Manage typed runbooks[] entries.",
+         {{"add",
+           kMutationSchema,
+           {"topic", "name", "trigger", "command"},
+           {"description"},
+           {"name", "trigger", "description"},
+           {0, 1, 2}},
+          {"set",
+           kMutationSchema,
+           {"topic", "index"},
+           {"name", "trigger", "command", "commands-clear", "description"},
+           {"name", "trigger", "description"},
+           {0, 1, 2}},
+          {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}},
+          {"list", kListSchema, {"topic"}, {}, {}, {0, 2}}}});
+    Verbs.push_back(
+        {"residual-risk",
+         "Manage typed residual_risks[] entries.",
+         {{"add",
+           kMutationSchema,
+           {"topic", "area", "observation", "why-deferred"},
+           {"target-phase", "recorded-date", "closure-sha"},
+           {"area", "observation", "why-deferred", "target-phase",
+            "recorded-date", "closure-sha"},
+           {0, 1, 2}},
+          {"set",
+           kMutationSchema,
+           {"topic", "index"},
+           {"area", "observation", "why-deferred", "target-phase",
+            "recorded-date", "closure-sha"},
+           {"area", "observation", "why-deferred", "target-phase",
+            "recorded-date", "closure-sha"},
+           {0, 1, 2}},
+          {"remove", kMutationSchema, {"topic", "index"}, {}, {}, {0, 1, 2}},
+          {"list", kListSchema, {"topic"}, {}, {}, {0, 2}}}});
+    Verbs.push_back(
+        {"graph",
+         "Walk typed topic + phase dependency edges.",
+         {{"query", kGraphSchema, {}, {"topic", "depth"}, {}, {0, 1, 2}}}});
+
     // ---- migrate / cache / watch / _catalog ----
     Verbs.push_back(
         {"migrate",
@@ -618,7 +711,15 @@ int RunCatalogCommand(const std::vector<std::string> &InArgs,
             std::cout << "\"required_flags\":";
             EmitStringArray(Sub.mRequiredFlags);
             std::cout << ",\"optional_flags\":";
-            EmitStringArray(Sub.mOptionalFlags);
+            std::vector<std::string> OptionalFlags = Sub.mOptionalFlags;
+            if (std::string(Sub.mOutputSchema ? Sub.mOutputSchema : "") ==
+                    kMutationSchema &&
+                std::find(OptionalFlags.begin(), OptionalFlags.end(),
+                          "ack-only") == OptionalFlags.end())
+            {
+                OptionalFlags.push_back("ack-only");
+            }
+            EmitStringArray(OptionalFlags);
             std::cout << ",\"prose_flags\":";
             EmitStringArray(Sub.mProseFlags);
             std::cout << ",\"exit_codes\":";

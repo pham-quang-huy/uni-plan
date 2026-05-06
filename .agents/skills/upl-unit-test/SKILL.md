@@ -10,13 +10,20 @@ Build and run the uni-plan test suite, add new tests, or debug failures.
 
 ## Mandatory: Coverage Audit After Every Run
 
-After building and running tests, you MUST perform a coverage audit. Use the coverage audit agent when the current runtime explicitly allows subagents; otherwise perform the audit manually from `Source/UniPlanForwardDecls.h` and the `Test/UniPlanTest*.cpp` inventory before reporting results.
+After building and running tests, you MUST perform a coverage audit. Use the coverage audit agent when the current runtime explicitly allows subagents; otherwise perform the audit manually from the command catalog/help registry plus the `Test/UniPlanTest*.cpp` inventory before reporting results.
+
+Build the command inventory from `Source/UniPlanCommandCatalog.cpp` and
+`Source/UniPlanCommandHelp.cpp`, using `Source/UniPlanForwardDecls.h` only to
+map registered leaf commands to implementation runners. Many leaves are tested
+through dispatch wrappers (`RunTopicCommand`, `RunBundlePhaseCommand`,
+`RunBundleChangelogCommand`, etc.) rather than by direct `Run*Command` calls;
+count those wrapper tests for the routed leaf they exercise.
 
 ```
 Agent({
   description: "Audit test coverage",
   subagent_type: "Explore",
-  prompt: "Read .claude/agents/upl-agent-senior-tester.md for your full instructions. Then execute the audit workflow: (1) Read Source/UniPlanForwardDecls.h to build the complete Run*Command inventory. (2) Read all Test/UniPlanTest*.cpp files to build the test inventory. (3) Produce a coverage matrix with columns: Command, Type, Happy, Negative, Bundle, Changelog, Gate Msg — marking Y or N for each. (4) Flag any N as a gap with the test file and test name that should be added."
+  prompt: "Read .claude/agents/upl-agent-senior-tester.md for your full instructions. Then execute the audit workflow: (1) Read Source/UniPlanCommandCatalog.cpp, Source/UniPlanCommandHelp.cpp, and Source/UniPlanForwardDecls.h to build the complete registered leaf-command inventory. (2) Read all Test/UniPlanTest*.cpp files to build the test inventory, mapping wrapper calls like RunTopicCommand({\"status\", ...}) to the routed leaf. (3) Produce a coverage matrix with columns: Command, Type, Happy, Negative, Bundle, Changelog, Gate Msg — marking Y or N for each. (4) Flag any N as a gap with the test file and test name that should be added."
 })
 ```
 
@@ -28,8 +35,11 @@ Do NOT report test results to the user until the coverage audit is complete and 
 # macOS/Linux: configure, build, install, and run all tests
 ./build.sh --tests
 
-# Windows PowerShell: builds Build\CMakeWin
+# Windows PowerShell from a VS 18 Developer Command Prompt
 .\build.ps1 -Tests
+
+# Windows from a plain PowerShell: invoke VS 18 DevCmd inline first
+cmd.exe /d /s /c '"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 && powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Tests'
 
 # macOS/Linux manual configure with tests enabled
 cmake --preset dev-tests
@@ -37,7 +47,7 @@ cmake --preset dev-tests
 # macOS/Linux manual build and run all tests
 cmake --build Build/CMake --parallel && ./Build/CMake/uni-plan-tests
 
-# Windows manual configure, build, and run all tests
+# Windows manual configure, build, and run all tests from VS 18 DevCmd
 cmake --preset dev-win-tests
 cmake --build Build\CMakeWin --parallel
 Build\CMakeWin\uni-plan-tests.exe
@@ -45,9 +55,12 @@ Build\CMakeWin\uni-plan-tests.exe
 # Run specific test suite
 ./Build/CMake/uni-plan-tests --gtest_filter="OptionParsing.*"
 ./Build/CMake/uni-plan-tests --gtest_filter="FBundleTestFixture.PhaseStart*"
+Build\CMakeWin\uni-plan-tests.exe --gtest_filter="OptionParsing.*"
+Build\CMakeWin\uni-plan-tests.exe --gtest_filter="FBundleTestFixture.PhaseStart*"
 
 # Run via CTest
 cd Build/CMake && ctest --output-on-failure
+cd Build\CMakeWin && ctest --output-on-failure
 ```
 
 ## Test Architecture
@@ -66,7 +79,7 @@ cd Build/CMake && ctest --output-on-failure
 
 ## Coverage Requirements (MANDATORY)
 
-**"All tests pass" is NOT the same as "all commands are covered."** After writing tests, verify this checklist for EVERY `Run*Command` in `Source/UniPlanForwardDecls.h`:
+**"All tests pass" is NOT the same as "all commands are covered."** After writing tests, verify this checklist for EVERY registered CLI leaf command in the command catalog/help registry. Do not mark a leaf missing just because there is no direct call to its implementation runner; wrapper-dispatch tests count when they route to that leaf.
 
 ### Per-command minimum coverage
 
@@ -84,7 +97,7 @@ cd Build/CMake && ctest --output-on-failure
 Run this BEFORE declaring tests complete:
 
 ```
-For EVERY Run*Command in UniPlanForwardDecls.h:
+For EVERY registered CLI leaf command:
 [ ] At least 1 TEST_F with exit code 0 (happy path)
 [ ] At least 1 TEST_F with exit code 1 (error path)
 [ ] For mutations: ReloadBundle verifies field changed on disk
@@ -115,7 +128,8 @@ This is the deliverable. "92 tests, 0 failures" alone is insufficient.
 - Shared CMake presets use `Build/CMake` on macOS/Linux and
   `Build/CMakeWin` on Windows
 - Option `UPLAN_TESTS=OFF` by default; use `./build.sh --tests`,
-  `.\build.ps1 -Tests`, or `cmake --preset dev-tests` to enable tests
+  `.\build.ps1 -Tests` from VS 18 DevCmd, or `cmake --preset dev-tests`
+  to enable tests
 
 ## Fixture: FBundleTestFixture
 

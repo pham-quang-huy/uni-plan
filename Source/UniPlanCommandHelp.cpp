@@ -353,7 +353,9 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "                             [--status <filter>] [--human]\n\n",
         "Compute runtime-only phase depth metrics for AI audits and the\n"
         "watch PHASE DETAIL metrics view. This command never writes metrics\n"
-        "into .Plan.json and does not require a plan schema migration.\n\n",
+        "into .Plan.json and does not require a plan schema migration. JSON\n"
+        "rows include advisory bloat counters: largest_design_field_chars,\n"
+        "repeated_design_block_count, and design_bloat_ratio.\n\n",
         "Required:\n"
         "  --topic <T>             Topic key\n\n",
         "  --phase <N>             Optional single-phase selector\n"
@@ -507,6 +509,33 @@ static const FSubcommandHelpEntry kPhaseSubs[] = {
         "Examples:\n"
         "  uni-plan phase normalize --topic X --phase 2 --dry-run\n"
         "  uni-plan phase normalize --topic X --phase 2\n",
+        false,
+        false,
+    },
+    {
+        "board-replace",
+        "Usage: uni-plan phase board-replace --topic <T> --phase <N>\n"
+        "                                    --board-json-file <path>\n\n",
+        "Replace one phase's execution board from a manually authored JSON\n"
+        "file. The command atomically replaces only lanes[] and jobs[];\n"
+        "phase prose, testing, file_manifest, lifecycle, dependencies, and\n"
+        "validation commands are unchanged. Both the existing board and the\n"
+        "incoming board must be not_started and unevidenced, so the command\n"
+        "cannot erase execution history.\n\n",
+        "Required:\n"
+        "  --topic <T>             Topic key\n"
+        "  --phase <N>             Phase index\n"
+        "  --board-json-file <p>   JSON object with lanes[] and jobs[]\n\n",
+        "Board JSON shape:\n"
+        "  {\"lanes\":[{\"scope\":\"...\",\"exit_criteria\":\"...\"}],\n"
+        "   \"jobs\":[{\"wave\":0,\"lane\":0,\"scope\":\"...\",\n"
+        "             \"output\":\"...\",\"exit_criteria\":\"...\",\n"
+        "             \"tasks\":[{\"description\":\"...\"}]}]}\n",
+        nullptr,
+        "uni-plan-mutation-v1",
+        "Examples:\n"
+        "  uni-plan phase board-replace --topic X --phase 2 \\\n"
+        "                               --board-json-file phase-2-board.json\n",
         false,
         false,
     },
@@ -2132,6 +2161,8 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  uni-plan phase add --topic <T> [--scope <t>] [--output <t>]\n"
         "  uni-plan phase remove --topic <T> --phase <N>\n"
         "  uni-plan phase normalize --topic <T> --phase <N> [--dry-run]\n"
+        "  uni-plan phase board-replace --topic <T> --phase <N>\n"
+        "                               --board-json-file <path>\n"
         "  uni-plan phase start --topic <T> --phase <N> [--context <t>]\n"
         "  uni-plan phase complete --topic <T> --phase <N> --done <t>\n"
         "  uni-plan phase block --topic <T> --phase <N> --reason <t>\n"
@@ -2156,6 +2187,7 @@ static const FCommandHelpEntry kCommandHelp[] = {
         "  add              Append a trailing phase\n"
         "  remove           Remove the trailing phase (gated)\n"
         "  normalize        Replace dashes/quotes/NBSP in prose fields\n"
+        "  board-replace    Atomically replace not_started lanes/jobs from JSON\n"
         "  start            Transition to in_progress + stamp started_at\n"
         "  complete         Transition to completed + stamp completed_at\n"
         "  block            Transition to blocked\n"

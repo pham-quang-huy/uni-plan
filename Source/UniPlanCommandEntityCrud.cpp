@@ -1,6 +1,8 @@
 #include "UniPlanCommandMutationCommon.h"
 #include "UniPlanEnums.h"
+#include "UniPlanFileHelpers.h"
 #include "UniPlanForwardDecls.h"
+#include "UniPlanJSON.h"
 #include "UniPlanJSONHelpers.h"
 #include "UniPlanStringHelpers.h"
 #include "UniPlanTopicTypes.h"
@@ -39,6 +41,424 @@ namespace UniPlan
 static std::string StatusOrDefault(const std::optional<EExecutionStatus> &InOp)
 {
     return ToString(InOp.value_or(EExecutionStatus::NotStarted));
+}
+
+static bool TryGetBoardString(const JSONValue &InObject, const char *InField,
+                              const std::string &InContext,
+                              const bool InRequired, std::string &OutValue,
+                              std::string &OutError)
+{
+    if (!InObject.contains(InField))
+    {
+        if (InRequired)
+        {
+            OutError = InContext + "." + InField + ": missing required string";
+            return false;
+        }
+        return true;
+    }
+    if (!InObject[InField].is_string())
+    {
+        OutError = InContext + "." + InField + ": expected string";
+        return false;
+    }
+    OutValue = InObject[InField].get<std::string>();
+    return true;
+}
+
+static bool TryGetBoardInt(const JSONValue &InObject, const char *InField,
+                           const std::string &InContext, int &OutValue,
+                           std::string &OutError)
+{
+    if (!InObject.contains(InField) || !InObject[InField].is_number_integer())
+    {
+        OutError = InContext + "." + InField + ": expected integer";
+        return false;
+    }
+    OutValue = InObject[InField].get<int>();
+    return true;
+}
+
+static bool TryGetBoardStatus(const JSONValue &InObject, const char *InField,
+                              const std::string &InContext,
+                              EExecutionStatus &OutStatus,
+                              std::string &OutError)
+{
+    OutStatus = EExecutionStatus::NotStarted;
+    if (!InObject.contains(InField))
+    {
+        return true;
+    }
+    if (!InObject[InField].is_string())
+    {
+        OutError = InContext + "." + InField + ": expected status string";
+        return false;
+    }
+    const std::string Raw = InObject[InField].get<std::string>();
+    if (!ExecutionStatusFromString(Raw, OutStatus))
+    {
+        OutError = InContext + "." + InField +
+                   ": invalid status '" + Raw + "'";
+        return false;
+    }
+    return true;
+}
+
+static bool IsBoardUnevidenced(const FPhaseRecord &InPhase,
+                               std::string &OutReason)
+{
+    for (size_t LaneIndex = 0; LaneIndex < InPhase.mLanes.size(); ++LaneIndex)
+    {
+        if (InPhase.mLanes[LaneIndex].mStatus !=
+            EExecutionStatus::NotStarted)
+        {
+            OutReason = "lanes[" + std::to_string(LaneIndex) +
+                        "] status is " +
+                        ToString(InPhase.mLanes[LaneIndex].mStatus);
+            return false;
+        }
+    }
+    for (size_t JobIndex = 0; JobIndex < InPhase.mJobs.size(); ++JobIndex)
+    {
+        const FJobRecord &Job = InPhase.mJobs[JobIndex];
+        if (Job.mStatus != EExecutionStatus::NotStarted)
+        {
+            OutReason = "jobs[" + std::to_string(JobIndex) +
+                        "] status is " + ToString(Job.mStatus);
+            return false;
+        }
+        if (!Job.mStartedAt.empty() || !Job.mCompletedAt.empty())
+        {
+            OutReason = "jobs[" + std::to_string(JobIndex) +
+                        "] carries lifecycle timestamps";
+            return false;
+        }
+        for (size_t TaskIndex = 0; TaskIndex < Job.mTasks.size(); ++TaskIndex)
+        {
+            const FTaskRecord &Task = Job.mTasks[TaskIndex];
+            if (Task.mStatus != EExecutionStatus::NotStarted)
+            {
+                OutReason = "jobs[" + std::to_string(JobIndex) +
+                            "].tasks[" + std::to_string(TaskIndex) +
+                            "] status is " + ToString(Task.mStatus);
+                return false;
+            }
+            if (!Task.mEvidence.empty() || !Task.mNotes.empty() ||
+                !Task.mCompletedAt.empty())
+            {
+                OutReason = "jobs[" + std::to_string(JobIndex) +
+                            "].tasks[" + std::to_string(TaskIndex) +
+                            "] carries evidence, notes, or completed_at";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool TryParseBoardLane(const JSONValue &InJSON,
+                              const std::string &InContext,
+                              FLaneRecord &OutLane, std::string &OutError)
+{
+    if (!InJSON.is_object())
+    {
+        OutError = InContext + ": expected object";
+        return false;
+    }
+    if (!TryGetBoardStatus(InJSON, "status", InContext, OutLane.mStatus,
+                           OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "scope", InContext, true, OutLane.mScope,
+                           OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "exit_criteria", InContext, true,
+                           OutLane.mExitCriteria, OutError))
+    {
+        return false;
+    }
+    return true;
+}
+
+static bool TryParseBoardTask(const JSONValue &InJSON,
+                              const std::string &InContext,
+                              FTaskRecord &OutTask, std::string &OutError)
+{
+    if (!InJSON.is_object())
+    {
+        OutError = InContext + ": expected object";
+        return false;
+    }
+    if (!TryGetBoardStatus(InJSON, "status", InContext, OutTask.mStatus,
+                           OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "description", InContext, true,
+                           OutTask.mDescription, OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "evidence", InContext, false,
+                           OutTask.mEvidence, OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "notes", InContext, false, OutTask.mNotes,
+                           OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "completed_at", InContext, false,
+                           OutTask.mCompletedAt, OutError))
+    {
+        return false;
+    }
+    return true;
+}
+
+static bool TryParseBoardJob(const JSONValue &InJSON,
+                             const std::string &InContext,
+                             FJobRecord &OutJob, std::string &OutError)
+{
+    if (!InJSON.is_object())
+    {
+        OutError = InContext + ": expected object";
+        return false;
+    }
+    if (!TryGetBoardInt(InJSON, "wave", InContext, OutJob.mWave, OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardInt(InJSON, "lane", InContext, OutJob.mLane, OutError))
+    {
+        return false;
+    }
+    if (OutJob.mWave < 0 || OutJob.mLane < 0)
+    {
+        OutError = InContext + ": wave and lane must be non-negative";
+        return false;
+    }
+    if (!TryGetBoardStatus(InJSON, "status", InContext, OutJob.mStatus,
+                           OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "scope", InContext, true, OutJob.mScope,
+                           OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "output", InContext, false, OutJob.mOutput,
+                           OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "exit_criteria", InContext, true,
+                           OutJob.mExitCriteria, OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "started_at", InContext, false,
+                           OutJob.mStartedAt, OutError))
+    {
+        return false;
+    }
+    if (!TryGetBoardString(InJSON, "completed_at", InContext, false,
+                           OutJob.mCompletedAt, OutError))
+    {
+        return false;
+    }
+    if (!InJSON.contains("tasks") || !InJSON["tasks"].is_array())
+    {
+        OutError = InContext + ".tasks: expected array";
+        return false;
+    }
+    const JSONValue &Tasks = InJSON["tasks"];
+    for (size_t TaskIndex = 0; TaskIndex < Tasks.size(); ++TaskIndex)
+    {
+        FTaskRecord Task;
+        const std::string TaskContext =
+            InContext + ".tasks[" + std::to_string(TaskIndex) + "]";
+        if (!TryParseBoardTask(Tasks[TaskIndex], TaskContext, Task, OutError))
+        {
+            return false;
+        }
+        OutJob.mTasks.push_back(std::move(Task));
+    }
+    return true;
+}
+
+static bool TryParsePhaseBoardJSON(const std::string &InBytes,
+                                   FPhaseRecord &OutBoard,
+                                   std::string &OutError)
+{
+    JSONValue Root;
+    try
+    {
+        Root = JSONValue::parse(InBytes);
+    }
+    catch (const std::exception &InError)
+    {
+        OutError = std::string("invalid board JSON: ") + InError.what();
+        return false;
+    }
+
+    if (!Root.is_object())
+    {
+        OutError = "board JSON root must be an object";
+        return false;
+    }
+    if (!Root.contains("lanes") || !Root["lanes"].is_array())
+    {
+        OutError = "board JSON requires lanes[]";
+        return false;
+    }
+    if (!Root.contains("jobs") || !Root["jobs"].is_array())
+    {
+        OutError = "board JSON requires jobs[]";
+        return false;
+    }
+
+    const JSONValue &Lanes = Root["lanes"];
+    for (size_t LaneIndex = 0; LaneIndex < Lanes.size(); ++LaneIndex)
+    {
+        FLaneRecord Lane;
+        const std::string LaneContext =
+            "lanes[" + std::to_string(LaneIndex) + "]";
+        if (!TryParseBoardLane(Lanes[LaneIndex], LaneContext, Lane, OutError))
+        {
+            return false;
+        }
+        OutBoard.mLanes.push_back(std::move(Lane));
+    }
+
+    const JSONValue &Jobs = Root["jobs"];
+    for (size_t JobIndex = 0; JobIndex < Jobs.size(); ++JobIndex)
+    {
+        FJobRecord Job;
+        const std::string JobContext =
+            "jobs[" + std::to_string(JobIndex) + "]";
+        if (!TryParseBoardJob(Jobs[JobIndex], JobContext, Job, OutError))
+        {
+            return false;
+        }
+        if (static_cast<size_t>(Job.mLane) >= OutBoard.mLanes.size())
+        {
+            OutError = JobContext + ".lane: index " +
+                       std::to_string(Job.mLane) +
+                       " out of range for lanes_count=" +
+                       std::to_string(OutBoard.mLanes.size());
+            return false;
+        }
+        OutBoard.mJobs.push_back(std::move(Job));
+    }
+
+    std::string Reason;
+    if (!IsBoardUnevidenced(OutBoard, Reason))
+    {
+        OutError = "phase board-replace accepts only not_started, "
+                   "unevidenced board input; " +
+                   Reason;
+        return false;
+    }
+    return true;
+}
+
+int RunPhaseBoardReplaceCommand(const std::vector<std::string> &InArgs,
+                                const std::string &InRepoRoot)
+{
+    const FPhaseBoardReplaceOptions Options =
+        ParsePhaseBoardReplaceOptions(InArgs);
+    const fs::path RepoRoot = NormalizeRepoRootPath(
+        Options.mRepoRoot.empty() ? InRepoRoot : Options.mRepoRoot);
+
+    std::string BoardJSONBytes;
+    std::string Error;
+    if (!TryReadFileToString(Options.mBoardJSONFile, BoardJSONBytes, Error))
+    {
+        std::cerr << "phase board-replace: " << Error << "\n";
+        return 1;
+    }
+
+    FPhaseRecord ParsedBoard;
+    if (!TryParsePhaseBoardJSON(BoardJSONBytes, ParsedBoard, Error))
+    {
+        std::cerr << "phase board-replace: " << Error << "\n";
+        return 1;
+    }
+
+    FTopicBundle Bundle;
+    if (!TryLoadBundleByTopic(RepoRoot, Options.mTopic, Bundle, Error))
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+    if (static_cast<size_t>(Options.mPhaseIndex) >= Bundle.mPhases.size())
+    {
+        std::cerr << "Phase index out of range\n";
+        return 1;
+    }
+
+    FPhaseRecord &Phase =
+        Bundle.mPhases[static_cast<size_t>(Options.mPhaseIndex)];
+    std::string Reason;
+    if (!IsBoardUnevidenced(Phase, Reason))
+    {
+        std::cerr << "phase board-replace refuses to overwrite evidenced or "
+                     "progressed board: "
+                  << Reason << "\n";
+        return 1;
+    }
+
+    const size_t OldLaneCount = Phase.mLanes.size();
+    const size_t OldJobCount = Phase.mJobs.size();
+    size_t OldTaskCount = 0;
+    for (const FJobRecord &Job : Phase.mJobs)
+    {
+        OldTaskCount += Job.mTasks.size();
+    }
+
+    size_t NewTaskCount = 0;
+    for (const FJobRecord &Job : ParsedBoard.mJobs)
+    {
+        NewTaskCount += Job.mTasks.size();
+    }
+
+    Phase.mLanes = std::move(ParsedBoard.mLanes);
+    Phase.mJobs = std::move(ParsedBoard.mJobs);
+
+    const std::string Target = MakePhaseTarget(Options.mPhaseIndex);
+    AppendAutoChangelog(
+        Bundle, Target,
+        Target + " execution board replaced from JSON file: lanes " +
+            std::to_string(OldLaneCount) + "->" +
+            std::to_string(Phase.mLanes.size()) + ", jobs " +
+            std::to_string(OldJobCount) + "->" +
+            std::to_string(Phase.mJobs.size()) + ", tasks " +
+            std::to_string(OldTaskCount) + "->" +
+            std::to_string(NewTaskCount));
+
+    if (WriteBundleBack(Bundle, RepoRoot, Error) != 0)
+    {
+        std::cerr << Error << "\n";
+        return 1;
+    }
+
+    using Change = std::pair<std::string, std::pair<std::string, std::string>>;
+    const std::vector<Change> Changes = {
+        {"lanes", {std::to_string(OldLaneCount),
+                   std::to_string(Phase.mLanes.size())}},
+        {"jobs",
+         {std::to_string(OldJobCount), std::to_string(Phase.mJobs.size())}},
+        {"tasks", {std::to_string(OldTaskCount),
+                   std::to_string(NewTaskCount)}}};
+    EmitMutationJson(Options.mTopic, Target, Changes, true,
+                     Options.mbAckOnly);
+    return 0;
 }
 
 // ===================================================================

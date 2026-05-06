@@ -1298,7 +1298,7 @@ TEST_F(FBundleTestFixture, TypedArrayListCommandsHonorExplicitRepoRoot)
         StopCapture();
         EXPECT_EQ(Code, 0);
         const auto Json = ParseCapturedJSON();
-        EXPECT_EQ(Json["repo_root"].get<std::string>(), mRepoRoot.string());
+        ExpectJsonRepoRoot(Json);
     };
 
     ExpectRepoRoot(UniPlan::RunRiskListCommand,

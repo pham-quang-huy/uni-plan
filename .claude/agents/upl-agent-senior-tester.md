@@ -34,12 +34,17 @@ list. Categorize each leaf as:
 ### Step 2: Build test inventory
 
 Read all `Test/UniPlanTest*.cpp` files. For each `TEST_F` or `TEST`:
-- Which `Run*Command` does it call?
+- Which registered CLI leaf does it exercise?
+- Which runner or dispatch wrapper does it call?
 - Does it assert exit code 0 (happy path) or 1 (negative)?
 - Does it call `ReloadBundle` to verify file mutations?
 - Does it check `mChangeLogs.size()` grew?
 - Does it check `mCapturedStderr` for gate messages?
 - Does it verify JSON field names from `ParseCapturedJSON()`?
+
+Wrapper-dispatch tests count for the routed leaf. Examples:
+`RunTopicCommand({"status", ...})` covers `topic status`, and
+`RunBundlePhaseCommand({"next", ...})` covers `phase next`.
 
 ### Step 3: Cross-reference JSON fields
 
@@ -78,4 +83,8 @@ For each gap (N in the matrix):
 - Do NOT modify any files — read-only analysis
 - Report EVERY command, not just ones with problems
 - Flag JSON field mismatches as CRITICAL (tests pass but assert wrong things)
-- Run `./Build/CMake/uni-plan-tests` once to confirm current pass count before reporting
+- Confirm the current pass count with the platform-appropriate command before
+  reporting: `./Build/CMake/uni-plan-tests` on macOS/Linux, or
+  `Build\CMakeWin\uni-plan-tests.exe` from VS 18 DevCmd on Windows. The
+  project build scripts (`./build.sh --tests`, `.\build.ps1 -Tests`) are also
+  valid when a full rebuild is needed.

@@ -2,14 +2,17 @@
 #include "UniPlanHelpers.h"
 #include "UniPlanTopicTypes.h" // kPhaseHollowChars, ComputePhaseDesignChars
 #include "UniPlanTypes.h"
+#include "UniPlanWatchScroll.h"
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/dom/requirement.hpp>
 #include <ftxui/dom/table.hpp>
 #include <ftxui/screen/color.hpp>
+#include <ftxui/screen/string.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <memory>
 #include <string>
 #include <utility>
@@ -72,6 +75,7 @@ class WeightedFlexNode : public Node
   private:
     int mWeight;
 };
+
 } // namespace
 
 static Decorator FlexWithWeight(int InWeight)
@@ -351,6 +355,28 @@ static Element MetricGaugeBar(const size_t InValue,
                           InCellWidth);
 }
 
+static std::string BuildBloatMetricLabel(const FPhaseRuntimeMetrics &InMetrics)
+{
+    return "m" + std::to_string(InMetrics.mLargestDesignFieldChars) + " r" +
+           std::to_string(InMetrics.mRepeatedDesignBlockCount) + " " +
+           std::to_string(InMetrics.mDesignBloatRatio) + "%";
+}
+
+static Element BloatMetricText(const FPhaseRuntimeMetrics &InMetrics)
+{
+    const std::string Label = BuildBloatMetricLabel(InMetrics);
+    if (InMetrics.mRepeatedDesignBlockCount > 0 ||
+        InMetrics.mDesignBloatRatio > 150)
+    {
+        return text(Label) | color(Color::Red);
+    }
+    if (InMetrics.mDesignBloatRatio > 100)
+    {
+        return text(Label) | color(Color::Yellow);
+    }
+    return text(Label) | color(Color::Green);
+}
+
 // Truncate helper removed in v0.97.0 — FTXUI renders panel content
 // verbatim; frame overflow is handled by the layout engine. Consumers
 // that need a preview trim on their end.
@@ -473,6 +499,403 @@ static std::string BuildPhaseTaxonomySummary(
 
     return "-";
 }
+
+struct FCodeSnippetLogicalLine
+{
+    std::string mText;
+    bool mbCode = true;
+};
+
+struct FCodeSnippetVisualRow
+{
+    int mLineNumber = 0;
+    bool mbContinuation = false;
+    bool mbCode = true;
+    std::string mText;
+};
+
+static int DecimalDigitCount(const int InValue)
+{
+    int Value = std::max(1, InValue);
+    int Count = 0;
+    do
+    {
+        ++Count;
+        Value /= 10;
+    } while (Value > 0);
+    return Count;
+}
+
+static std::string ExpandTabsForDisplay(const std::string &InLine)
+{
+    std::string Result;
+    int Column = 0;
+    for (const char Character : InLine)
+    {
+        if (Character == '\t')
+        {
+            const int Spaces = 4 - (Column % 4);
+            Result.append(static_cast<size_t>(Spaces), ' ');
+            Column += Spaces;
+            continue;
+        }
+        Result.push_back(Character);
+        ++Column;
+    }
+    return Result;
+}
+
+static std::vector<std::string>
+SplitCodeSnippetLines(const std::string &InSnippets)
+{
+    std::vector<std::string> Lines;
+    std::string Current;
+    for (const char Character : InSnippets)
+    {
+        if (Character == '\r')
+        {
+            continue;
+        }
+        if (Character == '\n')
+        {
+            Lines.push_back(Current);
+            Current.clear();
+            continue;
+        }
+        Current.push_back(Character);
+    }
+    Lines.push_back(Current);
+    return Lines;
+}
+
+static std::string TrimASCIIWhitespace(const std::string &InText)
+{
+    size_t Begin = 0;
+    while (Begin < InText.size() &&
+           std::isspace(static_cast<unsigned char>(InText[Begin])) != 0)
+    {
+        ++Begin;
+    }
+
+    size_t End = InText.size();
+    while (End > Begin &&
+           std::isspace(static_cast<unsigned char>(InText[End - 1])) != 0)
+    {
+        --End;
+    }
+
+    return InText.substr(Begin, End - Begin);
+}
+
+static std::string ToLowerASCII(std::string InText)
+{
+    std::transform(
+        InText.begin(), InText.end(), InText.begin(),
+        [](const unsigned char InCharacter)
+        { return static_cast<char>(std::tolower(InCharacter)); });
+    return InText;
+}
+
+static bool IsFenceLine(const std::string &InLine)
+{
+    const std::string Trimmed = TrimASCIIWhitespace(InLine);
+    return Trimmed.size() >= 3 && Trimmed.compare(0, 3, "```") == 0;
+}
+
+static bool IsCppFenceOpeningLine(const std::string &InLine)
+{
+    const std::string Trimmed = TrimASCIIWhitespace(InLine);
+    if (Trimmed.size() < 6 || Trimmed.compare(0, 3, "```") != 0)
+    {
+        return false;
+    }
+
+    std::string Info = TrimASCIIWhitespace(Trimmed.substr(3));
+    const size_t FirstSpace = Info.find_first_of(" \t");
+    if (FirstSpace != std::string::npos)
+    {
+        Info = Info.substr(0, FirstSpace);
+    }
+    Info = ToLowerASCII(Info);
+    return Info == "cpp" || Info == "c++";
+}
+
+static std::vector<FCodeSnippetLogicalLine>
+StyleCodeSnippetLines(const std::vector<std::string> &InLines)
+{
+    bool bHasCppFence = false;
+    for (const std::string &Line : InLines)
+    {
+        if (IsCppFenceOpeningLine(Line))
+        {
+            bHasCppFence = true;
+            break;
+        }
+    }
+
+    std::vector<FCodeSnippetLogicalLine> Styled;
+    bool bInsideCppFence = false;
+    for (const std::string &Line : InLines)
+    {
+        FCodeSnippetLogicalLine StyledLine;
+        StyledLine.mText = Line;
+
+        if (!bHasCppFence)
+        {
+            StyledLine.mbCode = true;
+            Styled.push_back(std::move(StyledLine));
+            continue;
+        }
+
+        if (!bInsideCppFence && IsCppFenceOpeningLine(Line))
+        {
+            StyledLine.mbCode = false;
+            bInsideCppFence = true;
+            Styled.push_back(std::move(StyledLine));
+            continue;
+        }
+
+        if (bInsideCppFence && IsFenceLine(Line))
+        {
+            StyledLine.mbCode = false;
+            bInsideCppFence = false;
+            Styled.push_back(std::move(StyledLine));
+            continue;
+        }
+
+        StyledLine.mbCode = bInsideCppFence;
+        Styled.push_back(std::move(StyledLine));
+    }
+
+    return Styled;
+}
+
+static std::vector<std::string> WrapCodeLineForDisplay(
+    const std::string &InLine, const int InAvailableCells)
+{
+    std::vector<std::string> Wrapped;
+    if (InAvailableCells <= 0)
+    {
+        Wrapped.push_back("");
+        return Wrapped;
+    }
+
+    const std::string Expanded = ExpandTabsForDisplay(InLine);
+    std::vector<std::string> Cells = Utf8ToGlyphs(Expanded);
+    if (Cells.empty())
+    {
+        Wrapped.push_back("");
+        return Wrapped;
+    }
+
+    int Start = 0;
+    const int CellCount = static_cast<int>(Cells.size());
+    while (Start < CellCount)
+    {
+        int End = std::min(Start + InAvailableCells, CellCount);
+        if (End < CellCount && End > Start && Cells[static_cast<size_t>(End)]
+                                                  .empty())
+        {
+            --End;
+        }
+        if (End <= Start)
+        {
+            End = std::min(Start + 1, CellCount);
+        }
+
+        std::string Segment;
+        for (int Index = Start; Index < End; ++Index)
+        {
+            Segment += Cells[static_cast<size_t>(Index)];
+        }
+        Wrapped.push_back(Segment);
+
+        Start = End;
+        while (Start < CellCount && Cells[static_cast<size_t>(Start)].empty())
+        {
+            ++Start;
+        }
+    }
+
+    return Wrapped;
+}
+
+static std::vector<FCodeSnippetVisualRow> BuildCodeSnippetVisualRows(
+    const std::vector<FCodeSnippetLogicalLine> &InLines,
+    const int InAvailableCells)
+{
+    std::vector<FCodeSnippetVisualRow> Rows;
+    for (size_t LineIndex = 0; LineIndex < InLines.size(); ++LineIndex)
+    {
+        const std::vector<std::string> Wrapped =
+            WrapCodeLineForDisplay(InLines[LineIndex].mText, InAvailableCells);
+        for (size_t WrapIndex = 0; WrapIndex < Wrapped.size(); ++WrapIndex)
+        {
+            FCodeSnippetVisualRow Row;
+            Row.mLineNumber = static_cast<int>(LineIndex) + 1;
+            Row.mbContinuation = WrapIndex > 0;
+            Row.mbCode = InLines[LineIndex].mbCode;
+            Row.mText = Wrapped[WrapIndex];
+            Rows.push_back(std::move(Row));
+        }
+    }
+    return Rows;
+}
+
+static bool IsDrawableCell(const Screen &InScreen, const int InX,
+                           const int InY)
+{
+    return InX >= 0 && InX < InScreen.dimx() && InY >= 0 &&
+           InY < InScreen.dimy() && InX >= InScreen.stencil.x_min &&
+           InX <= InScreen.stencil.x_max && InY >= InScreen.stencil.y_min &&
+           InY <= InScreen.stencil.y_max;
+}
+
+static void DrawScreenText(Screen &InScreen, const int InX, const int InY,
+                           const std::string &InText,
+                           const Color InForeground, const bool bDim,
+                           const bool bBold = false)
+{
+    int X = InX;
+    for (const std::string &Glyph : Utf8ToGlyphs(InText))
+    {
+        if (IsDrawableCell(InScreen, X, InY))
+        {
+            Pixel &Cell = InScreen.PixelAt(X, InY);
+            Cell.character = Glyph;
+            Cell.foreground_color = InForeground;
+            Cell.dim = bDim;
+            Cell.bold = bBold;
+        }
+        ++X;
+    }
+}
+
+class CodeSnippetViewportNode : public Node
+{
+  public:
+    CodeSnippetViewportNode(std::vector<FCodeSnippetLogicalLine> InLines,
+                            FWatchScrollRegionState &InOutScrollState)
+        : mLines(std::move(InLines)), rpScrollState(&InOutScrollState)
+    {
+    }
+
+    void ComputeRequirement() override
+    {
+        requirement_.min_x = 0;
+        requirement_.min_y = 0;
+        requirement_.flex_grow_x = 1;
+        requirement_.flex_shrink_x = 1;
+        requirement_.flex_grow_y = 1;
+        requirement_.flex_shrink_y = 1;
+    }
+
+    void SetBox(Box InBox) override
+    {
+        Node::SetBox(InBox);
+
+        const int Width = std::max(0, InBox.x_max - InBox.x_min + 1);
+        mHeight = std::max(0, InBox.y_max - InBox.y_min + 1);
+        mGutterWidth =
+            DecimalDigitCount(static_cast<int>(mLines.size())) + 1;
+        mCodeX = InBox.x_min + mGutterWidth;
+        const int CodeWidth = std::max(1, Width - mGutterWidth);
+
+        mRows = BuildCodeSnippetVisualRows(mLines, CodeWidth);
+        const int ContentHeight = static_cast<int>(mRows.size());
+        mHasScrollIndicators = ContentHeight > mHeight;
+        mViewportHeight =
+            mHasScrollIndicators ? std::max(0, mHeight - 2) : mHeight;
+
+        const int MaxOffset = mViewportHeight > 0
+                                  ? std::max(0, ContentHeight - mViewportHeight)
+                                  : 0;
+        rpScrollState->mOffset =
+            std::clamp(rpScrollState->mOffset, 0, MaxOffset);
+        rpScrollState->mMaxOffset = MaxOffset;
+    }
+
+    void Render(Screen &InScreen) override
+    {
+        if (mHeight <= 0)
+        {
+            return;
+        }
+
+        int Y = box_.y_min;
+        if (mHasScrollIndicators)
+        {
+            if (rpScrollState->mOffset > 0)
+            {
+                DrawScreenText(InScreen, box_.x_min, Y,
+                               "  \xe2\x86\x91 " +
+                                   std::to_string(rpScrollState->mOffset) +
+                                   " above",
+                               Color::GrayDark, true);
+            }
+            ++Y;
+        }
+
+        const int EndRow = std::min(
+            static_cast<int>(mRows.size()),
+            rpScrollState->mOffset + std::max(0, mViewportHeight));
+        for (int RowIndex = rpScrollState->mOffset; RowIndex < EndRow;
+             ++RowIndex)
+        {
+            DrawCodeRow(InScreen, mRows[static_cast<size_t>(RowIndex)], Y);
+            ++Y;
+        }
+
+        if (mHasScrollIndicators)
+        {
+            const int Below =
+                std::max(0,
+                         rpScrollState->mMaxOffset - rpScrollState->mOffset);
+            if (Below > 0)
+            {
+                DrawScreenText(InScreen, box_.x_min, box_.y_max,
+                               "  \xe2\x86\x93 " + std::to_string(Below) +
+                                   " below",
+                               Color::GrayDark, true);
+            }
+        }
+    }
+
+  private:
+    void DrawCodeRow(Screen &InScreen, const FCodeSnippetVisualRow &InRow,
+                     const int InY) const
+    {
+        if (InY < box_.y_min || InY > box_.y_max)
+        {
+            return;
+        }
+
+        std::string Gutter(static_cast<size_t>(mGutterWidth), ' ');
+        if (!InRow.mbContinuation)
+        {
+            const std::string Number = std::to_string(InRow.mLineNumber);
+            const int Padding =
+                std::max(0, mGutterWidth - 1 -
+                                static_cast<int>(Number.size()));
+            Gutter = std::string(static_cast<size_t>(Padding), ' ') + Number +
+                     " ";
+        }
+
+        DrawScreenText(InScreen, box_.x_min, InY, Gutter, Color::GrayDark,
+                       true);
+        DrawScreenText(InScreen, mCodeX, InY, InRow.mText, Color::Default,
+                       !InRow.mbCode);
+    }
+
+    std::vector<FCodeSnippetLogicalLine> mLines;
+    std::vector<FCodeSnippetVisualRow> mRows;
+    FWatchScrollRegionState *rpScrollState;
+    int mGutterWidth = 0;
+    int mCodeX = 0;
+    int mHeight = 0;
+    int mViewportHeight = 0;
+    bool mHasScrollIndicators = false;
+};
 
 // ---------------------------------------------------------------------------
 // InventoryPanel
@@ -647,26 +1070,10 @@ Element LintPanel::Render(const FWatchLintSummary &InLint) const
 // ---------------------------------------------------------------------------
 
 Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
-                                 int InSelectedIndex) const
+                                 int InSelectedIndex,
+                                 FWatchScrollRegionState &InOutScrollState) const
 {
-    const int MaxVisible = 30;
     const int Count = static_cast<int>(InPlans.size());
-
-    // Compute scroll window so selected index is always visible
-    int ScrollOffset = 0;
-    if (Count > MaxVisible)
-    {
-        ScrollOffset = InSelectedIndex - MaxVisible / 2;
-        if (ScrollOffset < 0)
-        {
-            ScrollOffset = 0;
-        }
-        if (ScrollOffset > Count - MaxVisible)
-        {
-            ScrollOffset = Count - MaxVisible;
-        }
-    }
-    const int VisibleEnd = std::min(ScrollOffset + MaxVisible, Count);
 
     std::vector<std::vector<Element>> ActiveTableData;
     ActiveTableData.push_back({text("Topic") | bold | flex,
@@ -674,7 +1081,7 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
                                text("BLK") | bold});
     int SelectedActiveRow = -1;
 
-    for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
+    for (int Index = 0; Index < Count; ++Index)
     {
         const FWatchPlanSummary &Plan = InPlans[static_cast<size_t>(Index)];
         const bool Selected = (Index == InSelectedIndex);
@@ -701,8 +1108,15 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
                                color(Color::Cyan));
         }
 
+        Element TopicCell =
+            text(Marker + Plan.mTopicKey) | flex | (Selected ? bold : nothing);
+        if (Selected)
+        {
+            TopicCell = TopicCell | focus;
+        }
+
         ActiveTableData.push_back({
-            text(Marker + Plan.mTopicKey) | flex | (Selected ? bold : nothing),
+            TopicCell,
             ColorStatus(Plan.mPlanStatus) | (Selected ? bold : nothing),
             hbox(std::move(PhaseCol)) | (Selected ? bold : nothing),
             text(std::to_string(Plan.mBlockers.size())) |
@@ -724,26 +1138,17 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
     }
 
     Elements FinalRows;
-    if (ScrollOffset > 0)
-    {
-        FinalRows.push_back(
-            text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") |
-            dim);
-    }
     FinalRows.push_back(ActiveTable.Render() | flex);
-    if (VisibleEnd < Count)
+    if (Count == 0)
     {
-        FinalRows.push_back(text("  \xe2\x86\x93 " +
-                                 std::to_string(Count - VisibleEnd) +
-                                 " below") |
-                            dim);
+        FinalRows.push_back(text("(none)") | dim);
     }
 
     const std::string Title =
         " [A]CTIVE PLANS (" + std::to_string(Count) + ") ";
     return window(text(Title) | bold | color(Color::Green),
-                  vbox(std::move(FinalRows))) |
-           size(HEIGHT, EQUAL, 35);
+                  ScrollFrame(vbox(std::move(FinalRows)),
+                              InOutScrollState));
 }
 
 // ---------------------------------------------------------------------------
@@ -752,7 +1157,8 @@ Element ActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
 
 Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
                                  int InSelectedPhaseIndex,
-                                 bool InMetricView) const
+                                 bool InMetricView,
+                                 FWatchScrollRegionState &InOutScrollState) const
 {
     if (InPlan.mTopicKey.empty())
     {
@@ -760,28 +1166,13 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
                       text("No plan selected") | dim);
     }
 
-    const int MaxPhases = 20;
     const int Count = static_cast<int>(InPlan.mPhases.size());
-
-    int ScrollOffset = 0;
-    if (Count > MaxPhases && InSelectedPhaseIndex >= 0)
-    {
-        ScrollOffset = InSelectedPhaseIndex - MaxPhases / 2;
-        if (ScrollOffset < 0)
-        {
-            ScrollOffset = 0;
-        }
-        if (ScrollOffset > Count - MaxPhases)
-        {
-            ScrollOffset = Count - MaxPhases;
-        }
-    }
-    const int VisibleEnd = std::min(ScrollOffset + MaxPhases, Count);
 
     std::vector<std::string> PhaseLabels;
     std::vector<std::string> DefaultDesignLabels;
     std::vector<std::string> TaxonomyLabels;
     std::vector<std::string> MetricDesignLabels;
+    std::vector<std::string> BloatLabels;
     std::vector<std::string> SolidLabels;
     std::vector<std::string> WordsLabels;
     std::vector<std::string> FieldsLabels;
@@ -789,7 +1180,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
     std::vector<std::string> TestsLabels;
     std::vector<std::string> FilesLabels;
     std::vector<std::string> EvidenceLabels;
-    for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
+    for (int Index = 0; Index < Count; ++Index)
     {
         const PhaseItem &Phase = InPlan.mPhases[static_cast<size_t>(Index)];
         const FPhaseRuntimeMetrics &Metrics = Phase.mMetrics;
@@ -801,6 +1192,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         TaxonomyLabels.push_back(BuildPhaseTaxonomySummary(
             InPlan.mPhaseTaxonomies, Index));
         MetricDesignLabels.push_back(std::to_string(Metrics.mDesignChars));
+        BloatLabels.push_back(BuildBloatMetricLabel(Metrics));
         SolidLabels.push_back(std::to_string(Metrics.mSolidWordCount));
         WordsLabels.push_back(std::to_string(Metrics.mRecursiveWordCount));
         FieldsLabels.push_back(
@@ -819,6 +1211,8 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         ComputeTextColumnWidth("Taxonomy", TaxonomyLabels, 30);
     const int MetricDesignColumnWidth = ComputeGaugeColumnWidth(
         "Design", MetricDesignLabels, 14, kMetricBarPreferredWidth);
+    const int BloatColumnWidth =
+        ComputeTextColumnWidth("Bloat", BloatLabels, 16);
     const int SolidColumnWidth = ComputeGaugeColumnWidth(
         "SOLID", SolidLabels, 14, kMetricBarPreferredWidth);
     const int WordsColumnWidth = ComputeGaugeColumnWidth(
@@ -843,6 +1237,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
             text("Status") | bold | size(WIDTH, EQUAL, 12),
             text("Design") | bold | size(WIDTH, EQUAL,
                                           MetricDesignColumnWidth),
+            text("Bloat") | bold | size(WIDTH, EQUAL, BloatColumnWidth),
             text("SOLID") | bold | size(WIDTH, EQUAL, SolidColumnWidth),
             text("Words") | bold | size(WIDTH, EQUAL, WordsColumnWidth),
             text("Fields") | bold | size(WIDTH, EQUAL, FieldsColumnWidth),
@@ -918,8 +1313,11 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
             { return InMetrics.mEvidenceItemCount; });
     }
 
-    for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
+    // Newest phase first. The selected index and taxonomy lookups still use
+    // the source phase index; only the visual order is reversed.
+    for (int DisplayIndex = 0; DisplayIndex < Count; ++DisplayIndex)
     {
+        const int Index = Count - DisplayIndex - 1;
         const PhaseItem &Phase = InPlan.mPhases[static_cast<size_t>(Index)];
         const bool Selected = (Index == InSelectedPhaseIndex);
         const std::string Marker;
@@ -932,17 +1330,25 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
             BuildPhaseTaxonomySummary(InPlan.mPhaseTaxonomies, Index);
 
         Elements RowCells;
+        Element PhaseKeyCell =
+            text(Marker + Phase.mPhaseKey) |
+            size(WIDTH, EQUAL, PhaseColumnWidth);
+        if (Selected)
+        {
+            PhaseKeyCell = PhaseKeyCell | focus;
+        }
         if (InMetricView)
         {
             const FPhaseRuntimeMetrics &Metrics = Phase.mMetrics;
             RowCells = PadGridRow({
-                text(Marker + Phase.mPhaseKey) |
-                    size(WIDTH, EQUAL, PhaseColumnWidth),
+                PhaseKeyCell,
                 ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 12),
                 MetricGaugeBar(Metrics.mDesignChars, DesignScale,
                                std::to_string(Metrics.mDesignChars),
                                MetricDesignColumnWidth) |
                     size(WIDTH, EQUAL, MetricDesignColumnWidth),
+                BloatMetricText(Metrics) |
+                    size(WIDTH, EQUAL, BloatColumnWidth),
                 MetricGaugeBar(Metrics.mSolidWordCount, SolidScale,
                                std::to_string(Metrics.mSolidWordCount),
                                SolidColumnWidth) |
@@ -978,8 +1384,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         else
         {
             RowCells = PadGridRow({
-                text(Marker + Phase.mPhaseKey) |
-                    size(WIDTH, EQUAL, PhaseColumnWidth),
+                PhaseKeyCell,
                 ColorStatus(ToString(Phase.mStatus)) | size(WIDTH, EQUAL, 14),
                 DesignCharsBar(Phase.mV4DesignChars,
                                DefaultDesignColumnWidth) |
@@ -1001,20 +1406,7 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
     }
 
     Elements FinalRows;
-    if (ScrollOffset > 0)
-    {
-        FinalRows.push_back(
-            text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") |
-            dim);
-    }
     FinalRows.push_back(gridbox(std::move(GridRows)) | flex);
-    if (VisibleEnd < Count)
-    {
-        FinalRows.push_back(text("  \xe2\x86\x93 " +
-                                 std::to_string(Count - VisibleEnd) +
-                                 " below") |
-                            dim);
-    }
 
     // v0.97.0 no-truncation contract applies here too — FTXUI's frame
     // handles overflow at the terminal boundary; the CLI layer emits
@@ -1023,7 +1415,8 @@ Element PhaseDetailPanel::Render(const FWatchPlanSummary &InPlan,
         std::string(" [P]HASE DETAIL") + (InMetricView ? " METRICS: " : ": ") +
         InPlan.mTopicKey + " (" + std::to_string(Count) + ") ";
     return window(text(Title) | bold | color(Color::Cyan),
-                  vbox(std::move(FinalRows))) |
+                  ScrollFrame(vbox(std::move(FinalRows)),
+                              InOutScrollState)) |
            size(HEIGHT, EQUAL, 25);
 }
 
@@ -1076,40 +1469,31 @@ Element BlockersPanel::Render(const std::vector<BlockerItem> &InBlockers) const
 
 Element
 NonActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
-                            int InSelectedIndex) const
+                            int InSelectedIndex,
+                            FWatchScrollRegionState &InOutScrollState) const
 {
-    const int MaxVisible = 30;
     const int Count = static_cast<int>(InPlans.size());
-
-    // Compute scroll window
-    int ScrollOffset = 0;
-    if (Count > MaxVisible)
-    {
-        ScrollOffset = InSelectedIndex - MaxVisible / 2;
-        if (ScrollOffset < 0)
-        {
-            ScrollOffset = 0;
-        }
-        if (ScrollOffset > Count - MaxVisible)
-        {
-            ScrollOffset = Count - MaxVisible;
-        }
-    }
-    const int VisibleEnd = std::min(ScrollOffset + MaxVisible, Count);
 
     std::vector<std::vector<Element>> NonActiveTableData;
     NonActiveTableData.push_back(
         {text("Topic") | bold | flex, text("Status") | bold});
     int SelectedNonActiveRow = -1;
 
-    for (int Index = ScrollOffset; Index < VisibleEnd; ++Index)
+    for (int Index = 0; Index < Count; ++Index)
     {
         const FWatchPlanSummary &Plan = InPlans[static_cast<size_t>(Index)];
         const bool Selected = (Index == InSelectedIndex);
         const std::string Marker;
 
+        Element TopicCell =
+            text(Marker + Plan.mTopicKey) | flex | (Selected ? bold : nothing);
+        if (Selected)
+        {
+            TopicCell = TopicCell | focus;
+        }
+
         NonActiveTableData.push_back({
-            text(Marker + Plan.mTopicKey) | flex | (Selected ? bold : nothing),
+            TopicCell,
             ColorStatus(Plan.mPlanStatus) | (Selected ? bold : nothing),
         });
         if (Selected)
@@ -1128,21 +1512,7 @@ NonActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
     }
 
     Elements NonActiveFinal;
-    if (ScrollOffset > 0)
-    {
-        NonActiveFinal.push_back(
-            text("  \xe2\x86\x91 " + std::to_string(ScrollOffset) + " above") |
-            dim);
-    }
     NonActiveFinal.push_back(NonActiveTable.Render() | flex);
-    if (VisibleEnd < Count)
-    {
-        NonActiveFinal.push_back(text("  \xe2\x86\x93 " +
-                                      std::to_string(Count - VisibleEnd) +
-                                      " below") |
-                                 dim);
-    }
-
     if (Count == 0)
     {
         NonActiveFinal.push_back(text("(none)") | dim);
@@ -1150,8 +1520,8 @@ NonActivePlansPanel::Render(const std::vector<FWatchPlanSummary> &InPlans,
 
     return window(text(" [N]ON-ACTIVE (" + std::to_string(Count) + ") ") |
                       bold | dim,
-                  vbox(std::move(NonActiveFinal))) |
-           size(HEIGHT, EQUAL, 35);
+                  ScrollFrame(vbox(std::move(NonActiveFinal)),
+                              InOutScrollState));
 }
 
 // ---------------------------------------------------------------------------
@@ -1248,7 +1618,9 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
                                        int InSelectedPhaseIndex,
                                        int InSelectedWaveIndex,
                                        int InSelectedLaneIndex,
-                                       bool InFocusMode) const
+                                       bool InFocusMode,
+                                       FWatchScrollRegionState
+                                           &InOutLaneScrollState) const
 {
     // Find the taxonomy for the selected phase
     const FPhaseTaxonomy *rpTax = nullptr;
@@ -1288,27 +1660,7 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         }
     }
 
-    // Scroll window: keep InSelectedLaneIndex centered when Count exceeds the
-    // on-screen cap. Without this, pressing 'l'/'L' moves the selection past
-    // the visible cut line and the highlight disappears.
     const int LaneCount = static_cast<int>(Tax.mLanes.size());
-    const int MaxVisibleLanes = 8;
-    int LaneScrollOffset = 0;
-    if (LaneCount > MaxVisibleLanes && InSelectedLaneIndex >= 0)
-    {
-        LaneScrollOffset = InSelectedLaneIndex - MaxVisibleLanes / 2;
-        if (LaneScrollOffset < 0)
-        {
-            LaneScrollOffset = 0;
-        }
-        if (LaneScrollOffset > LaneCount - MaxVisibleLanes)
-        {
-            LaneScrollOffset = LaneCount - MaxVisibleLanes;
-        }
-    }
-    const int LaneVisibleEnd =
-        std::min(LaneScrollOffset + MaxVisibleLanes, LaneCount);
-
     std::vector<Elements> LaneGridRows;
     LaneGridRows.push_back(PadGridRow({
         text("Lane") | bold,
@@ -1317,14 +1669,19 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
         text("Exit Criteria") | bold | flex,
     }));
 
-    for (int Index = LaneScrollOffset; Index < LaneVisibleEnd; ++Index)
+    for (int Index = 0; Index < LaneCount; ++Index)
     {
         const FLaneRecord &Lane = Tax.mLanes[static_cast<size_t>(Index)];
         const bool LaneSel = (Index == InSelectedLaneIndex);
         const std::string Marker;
 
+        Element LaneKeyCell = text(Marker + "L" + std::to_string(Index));
+        if (LaneSel)
+        {
+            LaneKeyCell = LaneKeyCell | focus;
+        }
         Elements RowCells = PadGridRow({
-            text(Marker + "L" + std::to_string(Index)),
+            LaneKeyCell,
             ColorStatus(ToString(Lane.mStatus)) | size(WIDTH, EQUAL, 14),
             text(Lane.mScope) | dim | flex,
             text(Lane.mExitCriteria) | dim | flex,
@@ -1340,27 +1697,14 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
     }
 
     Elements LaneFinalRows;
-    if (LaneScrollOffset > 0)
-    {
-        LaneFinalRows.push_back(text("  \xe2\x86\x91 " +
-                                     std::to_string(LaneScrollOffset) +
-                                     " above") |
-                                dim);
-    }
     LaneFinalRows.push_back(gridbox(std::move(LaneGridRows)) | flex);
-    if (LaneVisibleEnd < LaneCount)
-    {
-        LaneFinalRows.push_back(
-            text("  \xe2\x86\x93 " +
-                 std::to_string(LaneCount - LaneVisibleEnd) + " below") |
-            dim);
-    }
 
     auto LanesPanel =
         window(text(" [L]ANES: " + ("P" + std::to_string(Tax.mPhaseIndex)) +
                     " (" + std::to_string(LaneCount) + ") ") |
                    bold,
-               vbox(std::move(LaneFinalRows))) |
+               ScrollFrame(vbox(std::move(LaneFinalRows)),
+                           InOutLaneScrollState)) |
         size(HEIGHT, EQUAL, 13);
 
     // --- JOB BOARD sub-panel (using ftxui::Table) ---
@@ -1561,374 +1905,13 @@ Element ExecutionTaxonomyPanel::Render(const FWatchPlanSummary &InPlan,
     return vbox(std::move(TaxonomyRows));
 }
 
-// ---------------------------------------------------------------------------
-// SchemaPanel — merged heading list with color coding
-// ---------------------------------------------------------------------------
-
-static Element RenderSchemaBlock(const std::string &InTitle,
-                                 const FWatchDocSchemaResult &InResult)
-{
-    if (InResult.mDocPath.empty())
-    {
-        return window(text(" " + InTitle + " ") | bold | dim,
-                      text("  (no document)") | dim);
-    }
-
-    Elements Rows;
-    for (const FWatchHeadingCheck &Check : InResult.mHeadings)
-    {
-        const std::string Indent = (Check.mLevel == 3) ? " " : "";
-        Element Row;
-
-        if (Check.mbPresent && Check.mbCanonical && Check.mbRequired)
-        {
-            Row = text(Indent + Check.mSectionID) | color(Color::Green);
-        }
-        else if (Check.mbPresent && Check.mbCanonical && !Check.mbRequired)
-        {
-            Row = text(Indent + Check.mSectionID) | color(Color::Blue);
-        }
-        else if (!Check.mbPresent && Check.mbCanonical && !Check.mbRequired)
-        {
-            Row = text(Indent + Check.mSectionID) | dim;
-        }
-        else if (Check.mbPresent && !Check.mbCanonical)
-        {
-            Row = text(Indent + Check.mSectionID) | color(Color::Orange1);
-        }
-        else if (!Check.mbPresent && Check.mbRequired)
-        {
-            Row = text(Indent + Check.mSectionID + " (MISSING)") |
-                  color(Color::Red);
-        }
-        else
-        {
-            continue;
-        }
-
-        Rows.push_back(Row);
-    }
-
-    std::string Summary = std::to_string(InResult.mRequiredPresent) + "/" +
-                          std::to_string(InResult.mRequiredCount) + " required";
-    if (InResult.mExtraCount > 0)
-    {
-        Summary += ", " + std::to_string(InResult.mExtraCount) + " extra";
-    }
-
-    return window(text(" " + InTitle + " (" + Summary + ") ") | bold,
-                  vbox(std::move(Rows)));
-}
-
-Element SchemaPanel::Render(const FWatchPlanSummary &InPlan,
-                            int InSelectedPhaseIndex) const
-{
-    if (InPlan.mTopicKey.empty())
-    {
-        return window(text(" SCHEMA ") | bold | dim,
-                      text("  No plan selected") | dim);
-    }
-
-    const FWatchTopicSchemaResult &Schema = InPlan.mSchemaResult;
-
-    // Block 1: Plan schema
-    auto PlanBlock = RenderSchemaBlock("PLAN", Schema.mPlan);
-
-    // Block 2: Impl schema
-    auto ImplBlock = RenderSchemaBlock("IMPL", Schema.mImpl);
-
-    // Block 3: Playbook schema for selected phase
-    Element PlaybookBlock;
-    if (InSelectedPhaseIndex >= 0 &&
-        InSelectedPhaseIndex < static_cast<int>(Schema.mPlaybooks.size()))
-    {
-        const FWatchDocSchemaResult &PB =
-            Schema.mPlaybooks[static_cast<size_t>(InSelectedPhaseIndex)];
-        PlaybookBlock = RenderSchemaBlock("PLAYBOOK " + PB.mPhaseKey, PB);
-    }
-    else if (!Schema.mPlaybooks.empty())
-    {
-        // Find playbook matching selected phase by key
-        const FWatchDocSchemaResult *rpMatch = nullptr;
-        if (InSelectedPhaseIndex >= 0 &&
-            InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
-        {
-            const std::string &PhaseKey =
-                InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)]
-                    .mPhaseKey;
-            for (const FWatchDocSchemaResult &PB : Schema.mPlaybooks)
-            {
-                if (PB.mPhaseKey == PhaseKey)
-                {
-                    rpMatch = &PB;
-                    break;
-                }
-            }
-        }
-        if (rpMatch != nullptr)
-        {
-            PlaybookBlock =
-                RenderSchemaBlock("PLAYBOOK " + rpMatch->mPhaseKey, *rpMatch);
-        }
-        else
-        {
-            PlaybookBlock =
-                window(text(" PLAYBOOK ") | bold | dim,
-                       text("  No playbook for selected phase") | dim);
-        }
-    }
-    else
-    {
-        PlaybookBlock = window(text(" PLAYBOOK ") | bold | dim,
-                               text("  No playbooks") | dim);
-    }
-
-    // Plan sidecar schemas
-    auto PlanCLBlock =
-        RenderSchemaBlock("PLAN CHANGELOG", Schema.mPlanChangeLog);
-    auto PlanVerifBlock =
-        RenderSchemaBlock("PLAN VERIFICATION", Schema.mPlanVerification);
-
-    // Impl sidecar schemas
-    auto ImplCLBlock =
-        RenderSchemaBlock("IMPL CHANGELOG", Schema.mImplChangeLog);
-    auto ImplVerifBlock =
-        RenderSchemaBlock("IMPL VERIFICATION", Schema.mImplVerification);
-
-    // Playbook sidecar schemas for selected phase
-    std::string SelectedPhaseKey;
-    if (InSelectedPhaseIndex >= 0 &&
-        InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
-    {
-        SelectedPhaseKey =
-            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
-    }
-
-    Element PBCLBlock;
-    const FWatchDocSchemaResult *rpPBCL = nullptr;
-    for (const FWatchDocSchemaResult &PBCL : Schema.mPlaybookChangeLogs)
-    {
-        if (PBCL.mPhaseKey == SelectedPhaseKey)
-        {
-            rpPBCL = &PBCL;
-            break;
-        }
-    }
-    if (rpPBCL != nullptr)
-    {
-        PBCLBlock =
-            RenderSchemaBlock("PB CHANGELOG " + rpPBCL->mPhaseKey, *rpPBCL);
-    }
-    else
-    {
-        PBCLBlock = window(text(" PB CHANGELOG ") | bold | dim,
-                           text("  No sidecar for phase") | dim);
-    }
-
-    Element PBVerifBlock;
-    const FWatchDocSchemaResult *rpPBVerif = nullptr;
-    for (const FWatchDocSchemaResult &PBV : Schema.mPlaybookVerifications)
-    {
-        if (PBV.mPhaseKey == SelectedPhaseKey)
-        {
-            rpPBVerif = &PBV;
-            break;
-        }
-    }
-    if (rpPBVerif != nullptr)
-    {
-        PBVerifBlock = RenderSchemaBlock(
-            "PB VERIFICATION " + rpPBVerif->mPhaseKey, *rpPBVerif);
-    }
-    else
-    {
-        PBVerifBlock = window(text(" PB VERIFICATION ") | bold | dim,
-                              text("  No sidecar for phase") | dim);
-    }
-
-    static constexpr int kSchemaColumnWidth = 60;
-
-    auto LeftColumn = vbox({PlanBlock, PlanCLBlock, PlanVerifBlock, ImplBlock,
-                            ImplCLBlock, ImplVerifBlock});
-    auto RightColumn = vbox({PlaybookBlock, PBCLBlock, PBVerifBlock});
-
-    return hbox({
-        LeftColumn | size(WIDTH, EQUAL, kSchemaColumnWidth),
-        RightColumn | size(WIDTH, EQUAL, kSchemaColumnWidth),
-    });
-}
-
-// ---------------------------------------------------------------------------
-// Sidecar lookup helper
-// ---------------------------------------------------------------------------
-
-static const FWatchSidecarSummary *
-FindSidecar(const FWatchPlanSummary &InPlan, const std::string &InOwnerKind,
-            const std::string &InDocKind, const std::string &InPhaseKey = "")
-{
-    for (const FWatchSidecarSummary &Sidecar : InPlan.mSidecarSummaries)
-    {
-        if (Sidecar.mOwnerKind == InOwnerKind && Sidecar.mDocKind == InDocKind)
-        {
-            if (InPhaseKey.empty() || Sidecar.mPhaseKey == InPhaseKey)
-            {
-                return &Sidecar;
-            }
-        }
-    }
-    return nullptr;
-}
-
-static Element RenderSidecarPanel(const std::string &InTitle,
-                                  const FWatchSidecarSummary *InRpSidecar)
-{
-    if (InRpSidecar == nullptr)
-    {
-        return window(text(" " + InTitle + " ") | bold | dim,
-                      text("  (not found)") | dim);
-    }
-
-    Elements Rows;
-    Rows.push_back(text(" Path: " + InRpSidecar->mPath) | dim);
-    Rows.push_back(
-        text(" Entries: " + std::to_string(InRpSidecar->mEntryCount)) |
-        color(InRpSidecar->mEntryCount > 0 ? Color::Green : Color::Yellow));
-    if (!InRpSidecar->mLatestDate.empty())
-    {
-        Rows.push_back(text(" Latest: " + InRpSidecar->mLatestDate) | dim);
-    }
-    return window(text(" " + InTitle + " ") | bold, vbox(std::move(Rows)));
-}
-
-// ---------------------------------------------------------------------------
-// PlaybookChangeLogPanel
-// ---------------------------------------------------------------------------
-
-Element PlaybookChangeLogPanel::Render(const FWatchPlanSummary &InPlan,
-                                       int InSelectedPhaseIndex) const
-{
-    if (InPlan.mTopicKey.empty())
-    {
-        return window(text(" PB CHANGELOG ") | bold | dim,
-                      text("  No plan selected") | dim);
-    }
-
-    std::string PhaseKey;
-    if (InSelectedPhaseIndex >= 0 &&
-        InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
-    {
-        PhaseKey =
-            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
-    }
-
-    const FWatchSidecarSummary *rpSidecar =
-        FindSidecar(InPlan, "Playbook", "ChangeLog", PhaseKey);
-    return RenderSidecarPanel("PB CHANGELOG " + PhaseKey, rpSidecar);
-}
-
-// ---------------------------------------------------------------------------
-// PlaybookVerificationPanel
-// ---------------------------------------------------------------------------
-
-Element PlaybookVerificationPanel::Render(const FWatchPlanSummary &InPlan,
-                                          int InSelectedPhaseIndex) const
-{
-    if (InPlan.mTopicKey.empty())
-    {
-        return window(text(" PB VERIFICATION ") | bold | dim,
-                      text("  No plan selected") | dim);
-    }
-
-    std::string PhaseKey;
-    if (InSelectedPhaseIndex >= 0 &&
-        InSelectedPhaseIndex < static_cast<int>(InPlan.mPhases.size()))
-    {
-        PhaseKey =
-            InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)].mPhaseKey;
-    }
-
-    const FWatchSidecarSummary *rpSidecar =
-        FindSidecar(InPlan, "Playbook", "Verification", PhaseKey);
-    return RenderSidecarPanel("PB VERIFICATION " + PhaseKey, rpSidecar);
-}
-
-// ---------------------------------------------------------------------------
-// PlanChangeLogPanel
-// ---------------------------------------------------------------------------
-
-Element PlanChangeLogPanel::Render(const FWatchPlanSummary &InPlan) const
-{
-    if (InPlan.mTopicKey.empty())
-    {
-        return window(text(" PLAN CHANGELOG ") | bold | dim,
-                      text("  No plan selected") | dim);
-    }
-
-    const FWatchSidecarSummary *rpSidecar =
-        FindSidecar(InPlan, "Plan", "ChangeLog");
-    return RenderSidecarPanel("PLAN CHANGELOG", rpSidecar);
-}
-
-// ---------------------------------------------------------------------------
-// PlanVerificationPanel
-// ---------------------------------------------------------------------------
-
-Element PlanVerificationPanel::Render(const FWatchPlanSummary &InPlan) const
-{
-    if (InPlan.mTopicKey.empty())
-    {
-        return window(text(" PLAN VERIFICATION ") | bold | dim,
-                      text("  No plan selected") | dim);
-    }
-
-    const FWatchSidecarSummary *rpSidecar =
-        FindSidecar(InPlan, "Plan", "Verification");
-    return RenderSidecarPanel("PLAN VERIFICATION", rpSidecar);
-}
-
-// ---------------------------------------------------------------------------
-// ImplChangeLogPanel
-// ---------------------------------------------------------------------------
-
-Element ImplChangeLogPanel::Render(const FWatchPlanSummary &InPlan) const
-{
-    if (InPlan.mTopicKey.empty())
-    {
-        return window(text(" IMPL CHANGELOG ") | bold | dim,
-                      text("  No plan selected") | dim);
-    }
-
-    const FWatchSidecarSummary *rpSidecar =
-        FindSidecar(InPlan, "Impl", "ChangeLog");
-    return RenderSidecarPanel("IMPL CHANGELOG", rpSidecar);
-}
-
-// ---------------------------------------------------------------------------
-// ImplVerificationPanel
-// ---------------------------------------------------------------------------
-
-Element ImplVerificationPanel::Render(const FWatchPlanSummary &InPlan) const
-{
-    if (InPlan.mTopicKey.empty())
-    {
-        return window(text(" IMPL VERIFICATION ") | bold | dim,
-                      text("  No plan selected") | dim);
-    }
-
-    const FWatchSidecarSummary *rpSidecar =
-        FindSidecar(InPlan, "Impl", "Verification");
-    return RenderSidecarPanel("IMPL VERIFICATION", rpSidecar);
-}
-
-// ---------------------------------------------------------------------------
-// FileManifestPanel
-// ---------------------------------------------------------------------------
-
 Element FileManifestPanel::Render(const FPhaseTaxonomy &InTaxonomy,
-                                  int InFilePageIndex) const
+                                  FWatchScrollRegionState
+                                      &InOutScrollState) const
 {
     if (InTaxonomy.mFileManifest.empty())
     {
+        InOutScrollState.Reset();
         return window(
             text(" FILES: " + ("P" + std::to_string(InTaxonomy.mPhaseIndex)) +
                  " (0) ") |
@@ -1936,16 +1919,13 @@ Element FileManifestPanel::Render(const FPhaseTaxonomy &InTaxonomy,
             text("  (no file changes planned)") | dim);
     }
 
-    static constexpr int kPageSize = 10;
     const int TotalFiles = static_cast<int>(InTaxonomy.mFileManifest.size());
-    const int PageStart = InFilePageIndex * kPageSize;
-    const int PageEnd = std::min(PageStart + kPageSize, TotalFiles);
 
     std::vector<std::vector<Element>> TableData;
     TableData.push_back({text("File") | bold | flex, text("Action") | bold,
                          text("Description") | bold | flex});
 
-    for (int Index = PageStart; Index < PageEnd; ++Index)
+    for (int Index = 0; Index < TotalFiles; ++Index)
     {
         const FFileManifestItem &Item =
             InTaxonomy.mFileManifest[static_cast<size_t>(Index)];
@@ -1975,16 +1955,62 @@ Element FileManifestPanel::Render(const FPhaseTaxonomy &InTaxonomy,
 
     std::string Title =
         " FILES: " + ("P" + std::to_string(InTaxonomy.mPhaseIndex)) + " (" +
-        std::to_string(TotalFiles) + ")";
-    if (TotalFiles > kPageSize)
-    {
-        const int PageCount = (TotalFiles + kPageSize - 1) / kPageSize;
-        Title += " [" + std::to_string(InFilePageIndex + 1) + "/" +
-                 std::to_string(PageCount) + "]";
-    }
-    Title += " ";
+        std::to_string(TotalFiles) + ") ";
 
-    return window(text(Title) | bold, FileTable.Render() | flex);
+    return window(text(Title) | bold,
+                  ScrollFrame(FileTable.Render() | flex,
+                              InOutScrollState));
+}
+
+// ---------------------------------------------------------------------------
+// CodeSnippetPanel
+// ---------------------------------------------------------------------------
+
+Element CodeSnippetPanel::Render(const FWatchPlanSummary &InPlan,
+                                 int InSelectedPhaseIndex,
+                                 FWatchScrollRegionState
+                                     &InOutScrollState) const
+{
+    if (InPlan.mTopicKey.empty())
+    {
+        InOutScrollState.Reset();
+        return window(text(" CODE SNIPPETS ") | bold | dim,
+                      text("  No plan selected") | dim);
+    }
+
+    if (InSelectedPhaseIndex < 0 ||
+        InSelectedPhaseIndex >= static_cast<int>(InPlan.mPhases.size()))
+    {
+        InOutScrollState.Reset();
+        return window(text(" CODE SNIPPETS: " + InPlan.mTopicKey + " ") |
+                          bold | dim,
+                      text("  No phase selected") | dim);
+    }
+
+    const PhaseItem &Phase =
+        InPlan.mPhases[static_cast<size_t>(InSelectedPhaseIndex)];
+    if (Phase.mCodeSnippets.empty())
+    {
+        InOutScrollState.Reset();
+        return window(text(" CODE SNIPPETS: " + InPlan.mTopicKey + " P" +
+                           std::to_string(InSelectedPhaseIndex) +
+                           " (0 lines) ") |
+                          bold | dim,
+                      text("  (no code snippets)") | dim);
+    }
+
+    const std::vector<std::string> RawLines =
+        SplitCodeSnippetLines(Phase.mCodeSnippets);
+    std::vector<FCodeSnippetLogicalLine> Lines =
+        StyleCodeSnippetLines(RawLines);
+    const std::string Title = " CODE SNIPPETS: " + InPlan.mTopicKey + " P" +
+                              std::to_string(InSelectedPhaseIndex) + " (" +
+                              std::to_string(Lines.size()) + " lines) ";
+
+    return window(
+        text(Title) | bold | color(Color::Cyan),
+        std::make_shared<CodeSnippetViewportNode>(std::move(Lines),
+                                                  InOutScrollState));
 }
 
 // ---------------------------------------------------------------------------
@@ -2214,7 +2240,8 @@ Element WatchStatusBar::Render(
         text("  |  Lint: " + Lint) | dim,
         filler(),
         text("q=quit  a/A=plan  n/N=non-active  p/P=phase  d=metrics  "
-             "w/W=wave  l/L=lane  f/F=files  s=schema  i=impl  r=refresh") |
+             "F12=code  [=up ]=down  w/W=wave  l/L=lane  f/F=files  "
+             "r=refresh") |
             dim,
         text("  "),
     });

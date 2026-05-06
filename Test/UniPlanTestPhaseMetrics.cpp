@@ -84,6 +84,11 @@ TEST(PhaseMetrics, ComputesRecursiveRuntimeSignals)
     EXPECT_EQ(Metrics.mVerificationCount, 1);
     EXPECT_EQ(Metrics.mChangelogCount, 1);
     EXPECT_EQ(Metrics.mEvidenceItemCount, 4);
+    EXPECT_GT(Metrics.mLargestDesignFieldChars, 0);
+    EXPECT_EQ(Metrics.mRepeatedDesignBlockCount, 0);
+    EXPECT_EQ(Metrics.mDesignBloatRatio,
+              (Metrics.mDesignChars * 100) /
+                  UniPlan::kPhaseMetricDesignBloatReferenceChars);
     EXPECT_EQ(Metrics.mAuthoredFieldTotal,
               UniPlan::kPhaseMetricAuthoredFieldTotal);
     EXPECT_GT(Metrics.mRecursiveWordCount, 60);
@@ -98,8 +103,40 @@ TEST(PhaseMetrics, OutOfRangeReturnsEmptyRuntimeMetrics)
         UniPlan::ComputePhaseDepthMetrics(Bundle, 4);
 
     EXPECT_EQ(Metrics.mDesignChars, 0);
+    EXPECT_EQ(Metrics.mLargestDesignFieldChars, 0);
+    EXPECT_EQ(Metrics.mRepeatedDesignBlockCount, 0);
+    EXPECT_EQ(Metrics.mDesignBloatRatio, 0);
     EXPECT_EQ(Metrics.mSolidWordCount, 0);
     EXPECT_EQ(Metrics.mRecursiveWordCount, 0);
     EXPECT_EQ(Metrics.mAuthoredFieldTotal,
               UniPlan::kPhaseMetricAuthoredFieldTotal);
+}
+
+TEST(PhaseMetrics, DetectsRepeatedDesignBlocks)
+{
+    UniPlan::FTopicBundle Bundle;
+    Bundle.mTopicKey = "MetricTopic";
+
+    const std::string Repeated =
+        "The authoring board must not rely on a generated numbered paragraph "
+        "whose only variable is an index value 7, because that shape hides "
+        "whether the phase has a concrete owner, target file, consumer, and "
+        "validation handoff.";
+
+    UniPlan::FPhaseRecord Phase;
+    Phase.mDesign.mInvestigation = Repeated + "\n\nUnique audit detail.";
+    Phase.mDesign.mCodeEntityContract =
+        "The authoring board must not rely on a generated numbered paragraph "
+        "whose only variable is an index value 12, because that shape hides "
+        "whether the phase has a concrete owner, target file, consumer, and "
+        "validation handoff.";
+    Phase.mDesign.mHandoff = "Distinct handoff guidance.";
+    Bundle.mPhases.push_back(Phase);
+
+    const UniPlan::FPhaseRuntimeMetrics Metrics =
+        UniPlan::ComputePhaseDepthMetrics(Bundle, 0);
+
+    EXPECT_EQ(Metrics.mRepeatedDesignBlockCount, 1);
+    EXPECT_GT(Metrics.mLargestDesignFieldChars,
+              Phase.mDesign.mCodeEntityContract.size());
 }

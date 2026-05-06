@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -273,6 +275,137 @@ static void AddPhaseTextCorpus(const FTopicBundle &InBundle,
     }
 }
 
+static std::vector<std::string>
+CollectDesignFields(const FPhaseRecord &InPhase)
+{
+    return {InPhase.mDesign.mInvestigation,
+            InPhase.mDesign.mCodeEntityContract,
+            InPhase.mDesign.mCodeSnippets,
+            InPhase.mDesign.mBestPractices,
+            InPhase.mDesign.mMultiPlatforming,
+            InPhase.mDesign.mReadinessGate,
+            InPhase.mDesign.mHandoff};
+}
+
+static std::vector<std::string>
+SplitDesignBlocks(const std::vector<std::string> &InFields)
+{
+    std::vector<std::string> Blocks;
+    for (const std::string &Field : InFields)
+    {
+        std::istringstream Stream(Field);
+        std::string Line;
+        std::string Current;
+        while (std::getline(Stream, Line))
+        {
+            if (!Line.empty() && Line.back() == '\r')
+            {
+                Line.pop_back();
+            }
+            const std::vector<std::string> Tokens = TokenizeLower(Line);
+            if (Tokens.empty())
+            {
+                if (!Current.empty())
+                {
+                    Blocks.push_back(Current);
+                    Current.clear();
+                }
+                continue;
+            }
+            if (!Current.empty())
+            {
+                Current.push_back(' ');
+            }
+            Current += Line;
+        }
+        if (!Current.empty())
+        {
+            Blocks.push_back(Current);
+        }
+    }
+    return Blocks;
+}
+
+static bool IsNumericToken(const std::string &InToken)
+{
+    if (InToken.empty())
+    {
+        return false;
+    }
+    for (const char Character : InToken)
+    {
+        if (!std::isdigit(static_cast<unsigned char>(Character)))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static std::string NormalizeDesignBlockSignature(const std::string &InBlock)
+{
+    const std::vector<std::string> Tokens = TokenizeLower(InBlock);
+    if (Tokens.size() < kPhaseMetricRepeatedDesignBlockMinWords)
+    {
+        return "";
+    }
+
+    std::string Signature;
+    for (const std::string &Token : Tokens)
+    {
+        if (!Signature.empty())
+        {
+            Signature.push_back(' ');
+        }
+        Signature += IsNumericToken(Token) ? "#" : Token;
+    }
+    return Signature;
+}
+
+static size_t
+CountRepeatedDesignBlocks(const std::vector<std::string> &InFields)
+{
+    std::unordered_map<std::string, size_t> Counts;
+    for (const std::string &Block : SplitDesignBlocks(InFields))
+    {
+        const std::string Signature = NormalizeDesignBlockSignature(Block);
+        if (!Signature.empty())
+        {
+            Counts[Signature]++;
+        }
+    }
+
+    size_t Repeated = 0;
+    for (const auto &Entry : Counts)
+    {
+        if (Entry.second > 1)
+        {
+            Repeated += Entry.second - 1;
+        }
+    }
+    return Repeated;
+}
+
+static size_t
+ComputeLargestDesignFieldChars(const std::vector<std::string> &InFields)
+{
+    size_t Largest = 0;
+    for (const std::string &Field : InFields)
+    {
+        Largest = std::max(Largest, Field.size());
+    }
+    return Largest;
+}
+
+static size_t ComputeDesignBloatRatio(const size_t InDesignChars)
+{
+    if (kPhaseMetricDesignBloatReferenceChars == 0)
+    {
+        return 0;
+    }
+    return (InDesignChars * 100) / kPhaseMetricDesignBloatReferenceChars;
+}
+
 static bool
 HasValidationCommandText(const std::vector<FValidationCommand> &InCommands)
 {
@@ -354,6 +487,12 @@ FPhaseRuntimeMetrics ComputePhaseDepthMetrics(const FTopicBundle &InBundle,
 
     const FPhaseRecord &Phase = InBundle.mPhases[InPhaseIndex];
     Metrics.mDesignChars = ComputePhaseDesignChars(Phase);
+    const std::vector<std::string> DesignFields = CollectDesignFields(Phase);
+    Metrics.mLargestDesignFieldChars =
+        ComputeLargestDesignFieldChars(DesignFields);
+    Metrics.mRepeatedDesignBlockCount =
+        CountRepeatedDesignBlocks(DesignFields);
+    Metrics.mDesignBloatRatio = ComputeDesignBloatRatio(Metrics.mDesignChars);
     Metrics.mLaneCount = Phase.mLanes.size();
     Metrics.mJobCount = Phase.mJobs.size();
     Metrics.mTestingRecordCount = Phase.mTesting.size();

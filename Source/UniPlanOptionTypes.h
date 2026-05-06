@@ -232,6 +232,13 @@ struct FPhaseNormalizeOptions : BaseOptions
     bool mbDryRun = false;
 };
 
+struct FPhaseBoardReplaceOptions : BaseOptions
+{
+    std::string mTopic;
+    int mPhaseIndex = -1;
+    std::string mBoardJSONFile;
+};
+
 struct FPhaseSetOptions : BaseOptions
 {
     std::string mTopic;
